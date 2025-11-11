@@ -10,6 +10,42 @@ This is a **Nebula mesh VPN management platform** with three main components:
 
 The server is a pure JSON API backend that orchestrates CA/certificate lifecycle, IP allocation, firewall rules, and group membership. The Angular frontend provides the web UI, and client agents authenticate with tokens to download configs.
 
+## Git Workflow and Branching Strategy
+
+**CRITICAL: Always follow this branching strategy when working on issues:**
+
+### Branch Creation
+1. **Always create feature branches from `dev` branch** (not `main`)
+2. If `dev` branch doesn't exist:
+   - First create `dev` branch from `main`: `git checkout -b dev main`
+   - Then create your feature branch from `dev`: `git checkout -b feature/your-branch dev`
+3. Feature branch naming conventions:
+   - Use descriptive names: `feature/add-user-auth`, `bugfix/fix-login-error`, `docs/update-readme`
+   - Branch names created by Copilot should follow: `copilot/issue-description`
+
+### Pull Request Target
+- **All pull requests should target the `dev` branch** (not `main`)
+- Only merge from `dev` to `main` for releases
+- Use pull request templates from `.github/PULL_REQUEST_TEMPLATE/`
+
+### Workflow Summary
+```
+main (production)
+  ↑
+  └── dev (development/integration)
+        ↑
+        ├── feature/new-feature
+        ├── bugfix/fix-issue
+        └── copilot/assigned-task
+```
+
+### When Assigned an Issue
+1. Check if `dev` branch exists: `git branch -r | grep origin/dev`
+2. If `dev` doesn't exist: `git checkout -b dev origin/main && git push -u origin dev`
+3. Create feature branch: `git checkout -b copilot/issue-name origin/dev`
+4. Make changes and commit
+5. Create PR targeting `dev` branch
+
 ## Database & Migrations
 
 - **Database-agnostic** via SQLAlchemy async: supports SQLite (default), PostgreSQL, MySQL
