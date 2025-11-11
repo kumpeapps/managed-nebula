@@ -73,6 +73,16 @@ When assigned a task (via issue, PR comment, or chat):
 3. Applies relevant patterns and conventions in code generation
 4. Follows testing, linting, and deployment practices
 
+### Git Workflow
+
+**Important:** Always follow the project's branching strategy:
+- Create feature branches from `dev` (not `main`)
+- If `dev` doesn't exist, create it from `main` first
+- Target all pull requests to `dev` branch
+- Only `dev` merges to `main` for releases
+
+See the "Git Workflow and Branching Strategy" section in `.github/copilot-instructions.md` for complete details.
+
 ## Maintaining Instructions
 
 ### When to Update
