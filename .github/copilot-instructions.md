@@ -44,7 +44,8 @@ main (production)
 2. If `dev` doesn't exist: `git checkout -b dev origin/main && git push -u origin dev`
 3. Create feature branch: `git checkout -b copilot/issue-name origin/dev`
 4. Make changes and commit
-5. Create PR targeting `dev` branch
+5. **Rebase branch against `dev` before requesting review**: `git fetch origin dev && git rebase origin/dev`
+6. Create PR targeting `dev` branch
 
 ## Database & Migrations
 
