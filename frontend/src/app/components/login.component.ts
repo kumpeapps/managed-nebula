@@ -66,6 +66,7 @@ import { AuthService } from '../services/auth.service';
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
       width: 100%;
       max-width: 400px;
+      margin: 1rem;
     }
     
     h1 {
@@ -139,6 +140,20 @@ import { AuthService } from '../services/auth.service';
     .btn:disabled {
       opacity: 0.6;
       cursor: not-allowed;
+    }
+    
+    @media (max-width: 768px) {
+      .login-card {
+        padding: 1.5rem;
+      }
+      
+      h1 {
+        font-size: 1.5rem;
+      }
+      
+      h2 {
+        font-size: 1rem;
+      }
     }
   `]
 })

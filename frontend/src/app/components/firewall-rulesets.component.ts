@@ -196,6 +196,33 @@ import { FirewallRuleset, FirewallRule, Group, GroupRef } from '../models';
     .btn-danger:hover { background: #c82333; }
     .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.85rem; }
     .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    
+    @media (max-width: 768px) {
+      .resource-page {
+        padding: 1rem;
+      }
+      
+      .modal-content {
+        padding: 1rem;
+        width: 95%;
+      }
+      
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+      
+      .form-actions {
+        flex-direction: column;
+      }
+      
+      .form-actions button {
+        width: 100%;
+      }
+      
+      .table-responsive {
+        overflow-x: auto;
+      }
+    }
   `]
 })
 export class FirewallRulesComponent implements OnInit {
