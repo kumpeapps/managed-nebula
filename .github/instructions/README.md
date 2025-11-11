@@ -78,6 +78,7 @@ When assigned a task (via issue, PR comment, or chat):
 **Important:** Always follow the project's branching strategy:
 - Create feature branches from `dev` (not `main`)
 - If `dev` doesn't exist, create it from `main` first
+- **Rebase against `dev` before requesting review**
 - Target all pull requests to `dev` branch
 - Only `dev` merges to `main` for releases
 
