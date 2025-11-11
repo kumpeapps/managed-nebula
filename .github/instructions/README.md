@@ -77,6 +77,8 @@ When assigned a task (via issue, PR comment, or chat):
 
 **Important:** Always follow the project's branching strategy:
 - Create feature branches from `dev` (not `main`)
+- **Branch naming**: `<type>/<service>-<issue-number>` (e.g., `feature/server-5`, `bugfix/frontend-12`)
+- **PR title format**: `[<branch-name>] Description` (e.g., `[feature/server-5] Add authentication`)
 - If `dev` doesn't exist, create it from `main` first
 - **Rebase against `dev` before requesting review**
 - Target all pull requests to `dev` branch
