@@ -622,6 +622,74 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
       font-size: 1.2rem;
       vertical-align: middle;
     }
+    
+    @media (max-width: 768px) {
+      .container {
+        padding: 1rem;
+      }
+      
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+      }
+      
+      .header-actions {
+        width: 100%;
+        flex-direction: column;
+      }
+      
+      .header-actions button {
+        width: 100%;
+      }
+      
+      .tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap;
+      }
+      
+      .tabs button {
+        white-space: nowrap;
+      }
+      
+      .info-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .info-section {
+        overflow-x: auto;
+      }
+      
+      .form-actions {
+        flex-direction: column;
+      }
+      
+      .form-actions button {
+        width: 100%;
+      }
+      
+      .checkbox-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .modal {
+        padding: 0.5rem;
+      }
+      
+      .modal-content {
+        padding: 1rem;
+        width: 95%;
+      }
+      
+      table {
+        font-size: 0.85rem;
+      }
+      
+      th, td {
+        padding: 0.5rem 0.25rem;
+      }
+    }
   `]
 })
 export class ClientDetailComponent implements OnInit {

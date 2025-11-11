@@ -429,6 +429,55 @@ import { UserGroup } from '../models';
       color: #999;
       font-style: italic;
     }
+    
+    @media (max-width: 768px) {
+      .container {
+        padding: 1rem;
+      }
+      
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+      }
+      
+      .header button {
+        width: 100%;
+      }
+      
+      .groups-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .group-actions {
+        flex-direction: column;
+      }
+      
+      .group-actions button {
+        width: 100%;
+      }
+      
+      .modal {
+        padding: 0.5rem;
+      }
+      
+      .modal-content {
+        padding: 1rem;
+        width: 95%;
+      }
+      
+      .large-modal {
+        max-width: 95%;
+      }
+      
+      .form-actions {
+        flex-direction: column;
+      }
+      
+      .form-actions button {
+        width: 100%;
+      }
+    }
   `]
 })
 export class UserGroupsComponent implements OnInit {

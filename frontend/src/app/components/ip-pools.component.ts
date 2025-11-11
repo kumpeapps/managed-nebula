@@ -97,10 +97,20 @@ import { Router } from '@angular/router';
     .table { width: 100%; border-collapse: collapse; }
     th, td { padding: 0.5rem; border-bottom: 1px solid #eee; vertical-align: top; }
     .form-control { width: 100%; }
-    .modal { position: fixed; inset:0; background: rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; }
-    .modal-content { background:#fff; padding:1.5rem; width:600px; max-width:95%; border-radius:8px; }
+    .modal { position: fixed; inset:0; background: rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; overflow-y: auto; padding: 1rem; }
+    .modal-content { background:#fff; padding:1.5rem; width:600px; max-width:95%; border-radius:8px; max-height: 90vh; overflow-y: auto; margin: auto; }
     .form-group { margin-bottom: 1rem; }
     .form-actions { display:flex; gap:.75rem; justify-content:flex-end; }
+    
+    @media (max-width: 768px) {
+      .page { padding: 1rem; }
+      .modal-content { padding: 1rem; width: 95%; }
+      .form-actions { flex-direction: column; }
+      .form-actions button { width: 100%; }
+      table { font-size: 0.9rem; }
+      th, td { padding: 0.5rem 0.25rem; }
+      .table-responsive { overflow-x: auto; }
+    }
   `]
 })
 export class IPPoolsComponent implements OnInit {
