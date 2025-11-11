@@ -205,6 +205,24 @@ import { Settings } from '../models';
       outline: none;
       border-color: #4CAF50;
     }
+    
+    @media (max-width: 768px) {
+      .container {
+        padding: 1rem;
+      }
+      
+      .settings-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .form-actions {
+        flex-direction: column;
+      }
+      
+      .form-actions button {
+        width: 100%;
+      }
+    }
   `]
 })
 export class SettingsComponent implements OnInit {

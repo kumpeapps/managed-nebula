@@ -18,6 +18,12 @@ body {
   padding: 20px;
 }
 
+@media (max-width: 768px) {
+  .container {
+    padding: 10px;
+  }
+}
+
 /* Navigation */
 nav {
   background-color: #2c3e50;
@@ -141,6 +147,24 @@ tr:hover {
   background-color: #f8f9fa;
 }
 
+/* Responsive table wrapper for horizontal scrolling on mobile */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+  th, td {
+    padding: 8px;
+    font-size: 0.9rem;
+  }
+  
+  /* Hide less important columns on mobile */
+  .hide-mobile {
+    display: none;
+  }
+}
+
 /* Loading */
 .loading {
   text-align: center;
@@ -165,4 +189,31 @@ tr:hover {
   padding: 1rem;
   border-radius: 4px;
   margin-bottom: 1rem;
+}
+
+/* Responsive Utilities */
+@media (max-width: 768px) {
+  .mobile-hidden {
+    display: none !important;
+  }
+  
+  .mobile-full-width {
+    width: 100% !important;
+  }
+  
+  /* Stack elements vertically on mobile */
+  .mobile-stack {
+    flex-direction: column !important;
+  }
+  
+  .mobile-stack > * {
+    width: 100% !important;
+    margin-bottom: 0.5rem;
+  }
+}
+
+@media (min-width: 769px) {
+  .desktop-hidden {
+    display: none !important;
+  }
 }

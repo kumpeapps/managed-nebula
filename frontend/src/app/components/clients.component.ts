@@ -22,63 +22,65 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
         </div>
         
         <div class="clients-list">
-          <table *ngIf="clients.length > 0">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Owner</th>
-                <th>IP Address</th>
-                <th>Status</th>
-                <th>Groups</th>
-                <th>Rulesets</th>
-                <th>Last Config Download</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let client of clients">
-                <td>{{ client.id }}</td>
-                <td>
-                  <strong>{{ client.name }}</strong>
-                </td>
-                <td>
-                  <span *ngIf="client.owner" class="text-muted">{{ client.owner.email }}</span>
-                  <span *ngIf="!client.owner" class="text-muted">—</span>
-                </td>
-                <td>{{ client.ip_address || 'Not assigned' }}</td>
-                <td>
-                  <div class="status-badges">
-                    <span *ngIf="client.is_lighthouse" class="badge badge-info">Lighthouse</span>
-                    <span *ngIf="client.is_blocked" class="badge badge-danger">Blocked</span>
-                    <span *ngIf="!client.is_lighthouse && !client.is_blocked" class="badge badge-success">Active</span>
-                  </div>
-                </td>
-                <td>
-                  <div class="group-tags">
-                    <span *ngFor="let group of client.groups" class="tag">{{ group.name }}</span>
-                    <span *ngIf="client.groups.length === 0" class="text-muted">—</span>
-                  </div>
-                </td>
-                <td>
-                  <div class="group-tags">
-                    <span *ngFor="let rs of client.firewall_rulesets" class="tag">{{ rs.name }}</span>
-                    <span *ngIf="client.firewall_rulesets?.length === 0" class="text-muted">—</span>
-                  </div>
-                </td>
-                <td>
-                  <span *ngIf="client.last_config_download_at">{{ client.last_config_download_at | date:'short' }}</span>
-                  <span *ngIf="!client.last_config_download_at" class="text-muted">Never</span>
-                </td>
-                <td>
-                  <div class="action-buttons">
-                    <button (click)="viewClient(client.id)" class="btn btn-sm btn-primary">View</button>
-                    <button *ngIf="isAdmin" (click)="deleteClient(client.id)" class="btn btn-sm btn-danger">Delete</button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="table-responsive">
+            <table *ngIf="clients.length > 0">
+              <thead>
+                <tr>
+                  <th class="hide-mobile">ID</th>
+                  <th>Name</th>
+                  <th class="hide-mobile">Owner</th>
+                  <th>IP Address</th>
+                  <th>Status</th>
+                  <th class="hide-mobile">Groups</th>
+                  <th class="hide-mobile">Rulesets</th>
+                  <th class="hide-mobile">Last Config Download</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let client of clients">
+                  <td class="hide-mobile">{{ client.id }}</td>
+                  <td>
+                    <strong>{{ client.name }}</strong>
+                  </td>
+                  <td class="hide-mobile">
+                    <span *ngIf="client.owner" class="text-muted">{{ client.owner.email }}</span>
+                    <span *ngIf="!client.owner" class="text-muted">—</span>
+                  </td>
+                  <td>{{ client.ip_address || 'Not assigned' }}</td>
+                  <td>
+                    <div class="status-badges">
+                      <span *ngIf="client.is_lighthouse" class="badge badge-info">Lighthouse</span>
+                      <span *ngIf="client.is_blocked" class="badge badge-danger">Blocked</span>
+                      <span *ngIf="!client.is_lighthouse && !client.is_blocked" class="badge badge-success">Active</span>
+                    </div>
+                  </td>
+                  <td class="hide-mobile">
+                    <div class="group-tags">
+                      <span *ngFor="let group of client.groups" class="tag">{{ group.name }}</span>
+                      <span *ngIf="client.groups.length === 0" class="text-muted">—</span>
+                    </div>
+                  </td>
+                  <td class="hide-mobile">
+                    <div class="group-tags">
+                      <span *ngFor="let rs of client.firewall_rulesets" class="tag">{{ rs.name }}</span>
+                      <span *ngIf="client.firewall_rulesets?.length === 0" class="text-muted">—</span>
+                    </div>
+                  </td>
+                  <td class="hide-mobile">
+                    <span *ngIf="client.last_config_download_at">{{ client.last_config_download_at | date:'short' }}</span>
+                    <span *ngIf="!client.last_config_download_at" class="text-muted">Never</span>
+                  </td>
+                  <td>
+                    <div class="action-buttons">
+                      <button (click)="viewClient(client.id)" class="btn btn-sm btn-primary">View</button>
+                      <button *ngIf="isAdmin" (click)="deleteClient(client.id)" class="btn btn-sm btn-danger">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <p *ngIf="clients.length === 0">No clients found.</p>
         </div>
       </div>
@@ -387,6 +389,8 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
       justify-content: center;
       align-items: center;
       z-index: 1000;
+      overflow-y: auto;
+      padding: 1rem;
     }
     
     .modal-content {
@@ -395,6 +399,9 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
       border-radius: 8px;
       width: 90%;
       max-width: 500px;
+      max-height: 90vh;
+      overflow-y: auto;
+      margin: auto;
     }
     
     .modal-content h3 {
@@ -425,6 +432,60 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
       gap: 1rem;
       justify-content: flex-end;
       margin-top: 1.5rem;
+    }
+    
+    .checkbox-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 0.5rem;
+    }
+    
+    @media (max-width: 768px) {
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+      }
+      
+      .header-actions {
+        width: 100%;
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      
+      .header-actions .btn {
+        width: 100%;
+      }
+      
+      .modal {
+        padding: 0.5rem;
+      }
+      
+      .modal-content {
+        padding: 1rem;
+        width: 95%;
+      }
+      
+      .form-actions {
+        flex-direction: column;
+      }
+      
+      .form-actions button {
+        width: 100%;
+      }
+      
+      .action-buttons {
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+      
+      .action-buttons button {
+        width: 100%;
+      }
+      
+      .checkbox-grid {
+        grid-template-columns: 1fr;
+      }
     }
   `]
 })

@@ -31,27 +31,29 @@ import { User, Client } from '../models';
         
         <div class="recent-clients">
           <h3>Recent Clients</h3>
-          <table *ngIf="recentClients.length > 0">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>IP Address</th>
-                <th>Status</th>
-                <th>Last Config</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let client of recentClients">
-                <td>{{ client.name }}</td>
-                <td>{{ client.ip_address || 'N/A' }}</td>
-                <td>
-                  <span *ngIf="client.is_blocked" class="badge badge-danger">Blocked</span>
-                  <span *ngIf="!client.is_blocked" class="badge badge-success">OK</span>
-                </td>
-                <td>{{ client.last_config_download_at ? (client.last_config_download_at | date:'short') : 'Never' }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="table-responsive">
+            <table *ngIf="recentClients.length > 0">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th class="hide-mobile">IP Address</th>
+                  <th>Status</th>
+                  <th class="hide-mobile">Last Config</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let client of recentClients">
+                  <td>{{ client.name }}</td>
+                  <td class="hide-mobile">{{ client.ip_address || 'N/A' }}</td>
+                  <td>
+                    <span *ngIf="client.is_blocked" class="badge badge-danger">Blocked</span>
+                    <span *ngIf="!client.is_blocked" class="badge badge-success">OK</span>
+                  </td>
+                  <td class="hide-mobile">{{ client.last_config_download_at ? (client.last_config_download_at | date:'short') : 'Never' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
           <p *ngIf="recentClients.length === 0">No clients found.</p>
         </div>
       </div>

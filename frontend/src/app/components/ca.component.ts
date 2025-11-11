@@ -99,6 +99,16 @@ import { CACertificate } from '../models';
     .form-group { margin-bottom:1rem; }
     .form-actions { display:flex; gap:.75rem; justify-content:flex-end; }
     .monospace { font-family:monospace; }
+    
+    @media (max-width: 768px) {
+      .resource-page { padding: 1rem; }
+      .modal-content { padding: 1rem; width: 95%; }
+      .form-actions { flex-direction: column; }
+      .form-actions button { width: 100%; }
+      table { font-size: 0.9rem; }
+      th, td { padding: 0.5rem 0.25rem; }
+      .table-responsive { overflow-x: auto; }
+    }
   `]
 })
 export class CAComponent implements OnInit {
