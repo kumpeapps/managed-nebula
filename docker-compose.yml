@@ -1,0 +1,70 @@
+services:
+  server:
+    build: ./server
+    image: managed-nebula-server:local
+    environment:
+      - DB_URL=${DB_URL:-sqlite+aiosqlite:///./data/app.db}
+      - SECRET_KEY=${SECRET_KEY:-change-me}
+      # Admin bootstrap (only used on first startup when no admin user exists)
+      # If this doesn't work, use: docker-compose exec server python manage.py create-admin <email>
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - DEBUG_AUTH=${DEBUG_AUTH:-true}
+      - ENABLE_SCHEMA_AUTOSYNC=true
+    ports:
+      - "8080:8080"
+    volumes:
+      - server_data:/app/data
+    restart: unless-stopped
+    networks:
+      - nebula-net
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/api/v1/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  # Angular Frontend (Modern UI)
+  # Built-in Jinja2 UI still available at server:8080
+  # Frontend provides modern SPA interface at port 4200
+  frontend:
+    build: ./frontend
+    image: managed-nebula-frontend:local
+    ports:
+      - "4200:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+    networks:
+      - nebula-net
+
+  # client:
+  #   build: ./client
+  #   image: managed-nebula-client
+  #   profiles: ["client"]
+  #   depends_on:
+  #     - server
+  #   environment:
+  #     - CLIENT_TOKEN=${CLIENT_TOKEN:?Set CLIENT_TOKEN for client to start}
+  #     - SERVER_URL=${SERVER_URL:-http://server:8080}
+  #     - POLL_INTERVAL_HOURS=${POLL_INTERVAL_HOURS:-24}
+  #     - START_NEBULA=${START_NEBULA:-true}
+  #   cap_add:
+  #     - NET_ADMIN
+  #   devices:
+  #     - "/dev/net/tun:/dev/net/tun"
+  #   privileged: false
+  #   network_mode: host
+  #   volumes:
+  #     - nebula_etc:/etc/nebula
+  #     - nebula_var:/var/lib/nebula
+  #   restart: unless-stopped
+
+networks:
+  nebula-net:
+    driver: bridge
+
+volumes:
+  server_data:
+  nebula_etc:
+  nebula_var:
