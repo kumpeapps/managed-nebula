@@ -1,0 +1,87 @@
+name: Push Frontend Image to Harbor
+
+on:
+  push:
+    branches: [ dev, main ]
+    tags: [ 'v*' ]
+    paths:
+      - 'frontend/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/push-frontend.yml'
+  workflow_dispatch:
+
+env:
+  DOCKER_CLIENT_TIMEOUT: 300
+  COMPOSE_HTTP_TIMEOUT: 300
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-push:
+    timeout-minutes: 120
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Preflight - Harbor DNS and TLS reachability
+        run: |
+          set -x
+          getent hosts harbor.vm.kumpeapps.com || true
+          nslookup harbor.vm.kumpeapps.com || true
+          curl -vkI --max-time 15 https://harbor.vm.kumpeapps.com/v2/ || true
+
+      - name: Set up QEMU (multi-arch emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
+
+      - name: Login to Harbor (with retry)
+        run: |
+          for i in 1 2 3; do
+            echo "${{ secrets.HARBOR_SECRET }}" | docker login harbor.vm.kumpeapps.com -u "robot_github" --password-stdin && exit 0
+            echo "Login failed (attempt $i), retrying in 5s...";
+            sleep 5;
+          done
+          echo "Failed to login to Harbor after 3 attempts" >&2
+          exit 1
+
+      - name: Build and Push Image (dev-latest)
+        if: github.ref == 'refs/heads/dev'
+        run: |
+          docker buildx build --push \
+            --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:dev-latest \
+            --cache-from type=gha,scope=frontend-dev \
+            --cache-to type=gha,mode=max,scope=frontend-dev \
+            --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:dev-latest \
+            --provenance=false \
+            --platform linux/amd64,linux/arm64 ./frontend
+
+      - name: Build and Push Image (latest)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker buildx build --push \
+            --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
+            --cache-from type=gha,scope=frontend-main \
+            --cache-to type=gha,mode=max,scope=frontend-main \
+            --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
+            --provenance=false \
+            --platform linux/amd64,linux/arm64 ./frontend
+
+      - name: Build and Push Image (tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          docker buildx build --push \
+            --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:${GITHUB_REF#refs/tags/} \
+            --cache-from type=gha,scope=frontend-main \
+            --cache-to type=gha,mode=max,scope=frontend-tag \
+            --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
+            --provenance=false \
+            --platform linux/amd64,linux/arm64 ./frontend
