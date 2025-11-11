@@ -20,11 +20,22 @@ The server is a pure JSON API backend that orchestrates CA/certificate lifecycle
    - First create `dev` branch from `main`: `git checkout -b dev main`
    - Then create your feature branch from `dev`: `git checkout -b feature/your-branch dev`
 3. Feature branch naming conventions:
-   - Use descriptive names: `feature/add-user-auth`, `bugfix/fix-login-error`, `docs/update-readme`
-   - Branch names created by Copilot should follow: `copilot/issue-description`
+   - **Format**: `<type>/<service>-<issue-number>` where:
+     - `<type>`: `feature`, `bugfix`, `hotfix`, `docs`, `refactor`, etc.
+     - `<service>`: `server`, `frontend`, `client`, or `all` (for changes affecting multiple services)
+     - `<issue-number>`: GitHub issue number
+   - **Examples**:
+     - `feature/server-5` - Feature for server (issue #5)
+     - `bugfix/frontend-12` - Bug fix for frontend (issue #12)
+     - `feature/client-8` - Feature for client agent (issue #8)
+     - `hotfix/all-23` - Hotfix affecting all services (issue #23)
+   - Branch names created by Copilot should follow this convention
 
 ### Pull Request Target
 - **All pull requests should target the `dev` branch** (not `main`)
+- **PR title format**: `[<branch-name>] Description`
+  - Example: `[feature/server-5] Add user authentication endpoint`
+  - Example: `[bugfix/frontend-12] Fix login form validation`
 - Only merge from `dev` to `main` for releases
 - Use pull request templates from `.github/PULL_REQUEST_TEMPLATE/`
 
@@ -34,18 +45,24 @@ main (production)
   ↑
   └── dev (development/integration)
         ↑
-        ├── feature/new-feature
-        ├── bugfix/fix-issue
-        └── copilot/assigned-task
+        ├── feature/server-5
+        ├── bugfix/frontend-12
+        └── feature/client-8
 ```
 
 ### When Assigned an Issue
 1. Check if `dev` branch exists: `git branch -r | grep origin/dev`
 2. If `dev` doesn't exist: `git checkout -b dev origin/main && git push -u origin dev`
-3. Create feature branch: `git checkout -b copilot/issue-name origin/dev`
-4. Make changes and commit
-5. **Rebase branch against `dev` before requesting review**: `git fetch origin dev && git rebase origin/dev`
-6. Create PR targeting `dev` branch
+3. **Determine the primary service affected** by analyzing the issue:
+   - Changes primarily in `server/` → use `server`
+   - Changes primarily in `frontend/` → use `frontend`
+   - Changes primarily in `client/` → use `client`
+   - Changes across multiple services → use `all`
+4. Create feature branch using format `<type>/<service>-<issue-number>`:
+   - Example: `git checkout -b feature/server-5 origin/dev` (for issue #5 affecting server)
+5. Make changes and commit
+6. **Rebase branch against `dev` before requesting review**: `git fetch origin dev && git rebase origin/dev`
+7. Create PR with title format `[<branch-name>] Description` targeting `dev` branch
 
 ## Database & Migrations
 
