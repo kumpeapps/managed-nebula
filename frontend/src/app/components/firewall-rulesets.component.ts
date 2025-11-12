@@ -147,7 +147,7 @@ import { FirewallRuleset, FirewallRule, Group, GroupRef } from '../models';
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
+      z-index: 9999;
       overflow-y: auto;
     }
     .modal-content {
