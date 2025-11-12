@@ -448,6 +448,14 @@ import { Group } from '../models';
     }
     
     .permissions-table {
+    }
+    
+    .permissions-table tbody,
+    .permissions-table tr {
+      position: static;
+      z-index: auto;
+      position: relative;
+      z-index: auto;
       width: 100%;
       border-collapse: collapse;
       margin-top: 1rem;
@@ -583,6 +591,14 @@ import { Group } from '../models';
       }
       
       .permissions-table {
+    }
+    
+    .permissions-table tbody,
+    .permissions-table tr {
+      position: static;
+      z-index: auto;
+      position: relative;
+      z-index: auto;
         font-size: 0.85rem;
       }
       
