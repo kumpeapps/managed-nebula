@@ -126,6 +126,23 @@ docker-compose up -d
 docker-compose up -d server
 ```
 
+### Alternative Compose Examples
+
+Additional deployment examples are provided:
+
+```bash
+# HTTPS reverse proxy + server + frontend
+docker compose -f docker-compose-server.yml up -d --build
+
+# Standalone client example (requires CLIENT_TOKEN and SERVER_URL)
+CLIENT_TOKEN=your-token SERVER_URL=https://your-domain \ 
+  docker compose -f docker-compose-client.yml up -d --build
+```
+
+The `docker-compose-server.yml` file includes an Nginx reverse proxy terminating TLS on port 443. You must supply your own certificate and key in the `./certs` directory on the host. By default, the proxy expects `tls.crt` and `tls.key`, but you can override just the filenames using the `SSL_CERT_NAME` and `SSL_KEY_NAME` environment variables (e.g., for `.pem` or custom-named files). No self-signed certificates are generated automatically.
+
+The `docker-compose-client.yml` file demonstrates a single Nebula client container using host networking and required TUN capabilities.
+
 **Note:** By default, `docker-compose.yml` builds images locally. To use pre-built images from GitHub Container Registry, update the `image:` lines in `docker-compose.yml`:
 ```yaml
 services:

@@ -1,0 +1,37 @@
+# Example: Standalone Nebula client container connecting to Managed Nebula server
+# - Requires NET_ADMIN and /dev/net/tun
+# - Generates or persists keypair under mounted volumes
+# - Fetches config and certs from the server using CLIENT_TOKEN
+#
+# Usage (Linux host):
+#   export CLIENT_TOKEN=REPLACE_ME
+#   export SERVER_URL=https://your-domain.example.com  # or http://host.docker.internal:8080
+#   docker compose -f docker-compose-client.yml up -d --build
+#
+# Notes:
+# - network_mode: host is recommended for client so Nebula can create TUN properly and expose port 4242 if lighthouse.
+# - Remove network_mode: host and configure ports if needed on other platforms.
+
+services:
+  client:
+    image: ghcr.io/kumpeapps/managed-nebula/client:latest
+    environment:
+      - CLIENT_TOKEN=${CLIENT_TOKEN:?Set CLIENT_TOKEN to your client token}
+      - SERVER_URL=${SERVER_URL:?Set SERVER_URL to your Managed Nebula server URL}
+      - POLL_INTERVAL_HOURS=${POLL_INTERVAL_HOURS:-24}
+      - START_NEBULA=${START_NEBULA:-true}
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - "/dev/net/tun:/dev/net/tun"
+    privileged: false
+    # Host networking simplifies routing for VPN clients on Linux
+    network_mode: host
+    volumes:
+      - nebula_etc:/etc/nebula
+      - nebula_var:/var/lib/nebula
+    restart: unless-stopped
+
+volumes:
+  nebula_etc:
+  nebula_var:
