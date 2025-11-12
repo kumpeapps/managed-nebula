@@ -1,0 +1,134 @@
+# Example: Production-like deployment serving API and SPA over HTTPS via Nginx
+# - Reverse proxy terminates TLS on 443 and routes:
+#     /api/  -> FastAPI server service
+#     /      -> Angular frontend service
+# - TLS certificates are provided by the HOST system (no auto-generation here)
+# - All configuration is embedded in this compose file
+#
+# Requirements:
+#   - Provide your certificate and key on the host at ./certs/tls.crt and ./certs/tls.key
+#     (You can change the host path by editing the bind mount below.)
+#
+# Usage:
+#   DOMAIN=nebula.local docker compose -f docker-compose-server.yml up -d --build
+
+services:
+  server:
+    image: ghcr.io/kumpeapps/managed-nebula/server:latest
+    environment:
+      - DB_URL=${DB_URL:-sqlite+aiosqlite:///./data/app.db}
+      - SECRET_KEY=${SECRET_KEY:-change-me}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - ENABLE_SCHEMA_AUTOSYNC=${ENABLE_SCHEMA_AUTOSYNC:-true}
+    expose:
+      - "8080"
+    volumes:
+      - server_data:/app/data
+    restart: unless-stopped
+    networks:
+      - nebula
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/api/v1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  frontend:
+    image: ghcr.io/kumpeapps/managed-nebula/frontend:latest
+    expose:
+      - "80"
+    depends_on:
+      - server
+    restart: unless-stopped
+    networks:
+      - nebula
+
+  # Public-facing reverse proxy handling HTTPS and routing to internal services
+  proxy:
+    image: nginx:1.25-alpine
+    depends_on:
+      - server
+      - frontend
+    ports:
+      - "80:80"   # HTTP (redirects to HTTPS)
+      - "443:443" # HTTPS
+    volumes:
+      # Host-provided certs: ensure ./certs contains your cert and key (can be .crt, .pem, etc)
+      - ./certs:/etc/nginx/certs:ro
+    environment:
+      - SSL_CERT_NAME=${SSL_CERT_NAME:-tls.crt}
+      - SSL_KEY_NAME=${SSL_KEY_NAME:-tls.key}
+    command: >-
+      /bin/sh -c '
+        set -e;
+        CERT_NAME="${SSL_CERT_NAME:-tls.crt}";
+        KEY_NAME="${SSL_KEY_NAME:-tls.key}";
+        cat > /etc/nginx/nginx.conf <<NGINXCONF;
+        user  nginx; worker_processes  auto;
+        error_log  /var/log/nginx/error.log warn; pid /var/run/nginx.pid;
+        events { worker_connections 1024; }
+        http {
+          include       /etc/nginx/mime.types; default_type  application/octet-stream;
+          sendfile on; keepalive_timeout 65; gzip on;
+
+          upstream api_upstream { server server:8080; }
+          upstream spa_upstream { server frontend:80; }
+
+          # Redirect all HTTP to HTTPS
+          server {
+            listen 80; listen [::]:80; server_name _;
+            return 301 https://$host$request_uri;
+          }
+
+          server {
+            listen 443 ssl http2; listen [::]:443 ssl http2;
+            server_name _;
+
+            ssl_certificate     /etc/nginx/certs/$CERT_NAME;
+            ssl_certificate_key /etc/nginx/certs/$KEY_NAME;
+            ssl_protocols       TLSv1.2 TLSv1.3;
+            ssl_ciphers         HIGH:!aNULL:!MD5;
+            ssl_prefer_server_ciphers on;
+
+            # Security headers
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header X-XSS-Protection "1; mode=block" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+            # Proxy API to FastAPI backend
+            location /api/ {
+              proxy_pass http://api_upstream;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_set_header Cookie $http_cookie;
+              proxy_pass_header Set-Cookie;
+              proxy_cookie_path / /;
+            }
+
+            # Serve Angular SPA
+            location / {
+              proxy_pass http://spa_upstream;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+            }
+          }
+        }
+      NGINXCONF
+        nginx -g "daemon off;";
+      '
+    restart: unless-stopped
+    networks:
+      - nebula
+
+networks:
+  nebula:
+    driver: bridge
+
+volumes:
+  server_data:
