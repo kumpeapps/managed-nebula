@@ -248,6 +248,8 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
       padding: 1.5rem;
       border-radius: 8px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      position: relative;
+      z-index: 1;
     }
     
     table {
@@ -391,6 +393,9 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
       z-index: 9999;
       overflow-y: auto;
       padding: 1rem;
+      -webkit-transform: translateZ(0);
+      transform: translateZ(0);
+      isolation: isolate;
     }
     
     .modal-content {
@@ -402,6 +407,10 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
       max-height: 90vh;
       overflow-y: auto;
       margin: auto;
+      position: relative;
+      z-index: 10000;
+      -webkit-transform: translateZ(0);
+      transform: translateZ(0);
     }
     
     .modal-content h3 {
