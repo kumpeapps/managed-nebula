@@ -248,8 +248,6 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
       padding: 1.5rem;
       border-radius: 8px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      position: relative;
-      z-index: 1;
     }
     
     table {
@@ -390,12 +388,16 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
       display: flex;
       justify-content: center;
       align-items: center;
-      z-index: 9999;
+      z-index: 999999;
       overflow-y: auto;
       padding: 1rem;
-      -webkit-transform: translateZ(0);
-      transform: translateZ(0);
-      isolation: isolate;
+      -webkit-transform: translate3d(0, 0, 0);
+      transform: translate3d(0, 0, 0);
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
+      -webkit-perspective: 1000;
+      perspective: 1000;
+      will-change: transform;
     }
     
     .modal-content {
@@ -408,9 +410,11 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
       overflow-y: auto;
       margin: auto;
       position: relative;
-      z-index: 10000;
-      -webkit-transform: translateZ(0);
-      transform: translateZ(0);
+      z-index: 1000000;
+      -webkit-transform: translate3d(0, 0, 0);
+      transform: translate3d(0, 0, 0);
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
     }
     
     .modal-content h3 {

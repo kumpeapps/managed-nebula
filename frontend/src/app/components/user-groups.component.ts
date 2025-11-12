@@ -301,10 +301,15 @@ import { UserGroup } from '../models';
       display: flex;
       justify-content: center;
       align-items: center;
-      z-index: 9999;
-      -webkit-transform: translateZ(0);
-      transform: translateZ(0);
+      z-index: 999999;
+      -webkit-transform: translate3d(0, 0, 0);
+      transform: translate3d(0, 0, 0);
       isolation: isolate;
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
+      -webkit-perspective: 1000;
+      perspective: 1000;
+      will-change: transform;
     }
     
     .modal-content {
