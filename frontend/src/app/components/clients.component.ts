@@ -250,15 +250,29 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     
+    .table-responsive {
+      position: static;
+      z-index: auto;
+    }
+    
     table {
       width: 100%;
       border-collapse: collapse;
+      position: static;
+      z-index: auto;
+    }
+    
+    tbody, tr {
+      position: static;
+      z-index: auto;
     }
     
     th, td {
       text-align: left;
       padding: 0.75rem;
       border-bottom: 1px solid #eee;
+      position: static;
+      z-index: auto;
     }
     
     th {
