@@ -388,7 +388,7 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
       display: flex;
       justify-content: center;
       align-items: center;
-      z-index: 1000;
+      z-index: 9999;
       overflow-y: auto;
       padding: 1rem;
     }
