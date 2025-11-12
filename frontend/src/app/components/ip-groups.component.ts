@@ -286,6 +286,9 @@ import { IPGroup, IPPool } from '../models';
       align-items: center;
       justify-content: center;
       z-index: 9999;
+      -webkit-transform: translateZ(0);
+      transform: translateZ(0);
+      isolation: isolate;
     }
     
     .modal-content {
