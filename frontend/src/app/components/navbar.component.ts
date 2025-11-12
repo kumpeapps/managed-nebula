@@ -155,6 +155,7 @@ import { AuthService } from '../services/auth.service';
         transition: right 0.3s ease;
         overflow-y: auto;
         gap: 0;
+        z-index: 1000;
       }
       
       .nav-links.mobile-open {
