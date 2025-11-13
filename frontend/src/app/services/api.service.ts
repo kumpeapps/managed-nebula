@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { Client, Group, FirewallRule, FirewallRuleset, IPPool, IPGroup, AvailableIP, CACertificate, User, ClientUpdateRequest, ClientCreateRequest, ClientCertificate, ClientConfigDownload, Settings, SettingsUpdate } from '../models';
+import { Client, Group, FirewallRule, FirewallRuleset, IPPool, IPGroup, AvailableIP, CACertificate, User, ClientUpdateRequest, ClientCreateRequest, ClientCertificate, ClientConfigDownload, Settings, SettingsUpdate, DockerComposeTemplate, PlaceholdersResponse } from '../models';
 
 @Injectable({
   providedIn: 'root'
@@ -269,5 +269,18 @@ export class ApiService {
 
   updateSettings(settings: SettingsUpdate): Observable<Settings> {
     return this.http.put<Settings>(`${this.apiUrl}/settings`, settings, { withCredentials: true });
+  }
+
+  // Docker compose template endpoints
+  getDockerComposeTemplate(): Observable<DockerComposeTemplate> {
+    return this.http.get<DockerComposeTemplate>(`${this.apiUrl}/settings/docker-compose-template`, { withCredentials: true });
+  }
+
+  updateDockerComposeTemplate(template: string): Observable<DockerComposeTemplate> {
+    return this.http.put<DockerComposeTemplate>(`${this.apiUrl}/settings/docker-compose-template`, { template }, { withCredentials: true });
+  }
+
+  getPlaceholders(): Observable<PlaceholdersResponse> {
+    return this.http.get<PlaceholdersResponse>(`${this.apiUrl}/settings/placeholders`, { withCredentials: true });
   }
 }
