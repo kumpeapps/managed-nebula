@@ -6,8 +6,8 @@ import { NotificationService } from '../services/notification.service';
 import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload } from '../models';
 
 @Component({
-  selector: 'app-client-detail',
-  template: `
+    selector: 'app-client-detail',
+    template: `
     <div class="dashboard">
       <app-navbar></app-navbar>
       
@@ -330,7 +330,7 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .dashboard {
       min-height: 100vh;
       background: #f5f5f5;
@@ -690,7 +690,8 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
         padding: 0.5rem 0.25rem;
       }
     }
-  `]
+  `],
+    standalone: false
 })
 export class ClientDetailComponent implements OnInit {
   clientId: number = 0;
