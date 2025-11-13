@@ -1,4 +1,6 @@
 name: Push Server Image to Harbor
+permissions:
+  contents: read
 
 on:
   push:
