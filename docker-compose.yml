@@ -31,7 +31,7 @@ services:
     build: ./frontend
     image: managed-nebula-frontend:local
     ports:
-      - "4200:80"
+      - "8443:443"  # Map container port 443 to host port 8443 for development
     depends_on:
       - server
     restart: unless-stopped
