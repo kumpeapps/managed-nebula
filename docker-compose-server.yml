@@ -36,95 +36,114 @@ services:
 
   frontend:
     image: ghcr.io/kumpeapps/managed-nebula/frontend:latest
-    expose:
-      - "80"
     depends_on:
       - server
     restart: unless-stopped
     networks:
       - nebula
 
-  # Public-facing reverse proxy handling HTTPS and routing to internal services
   proxy:
     image: nginx:1.25-alpine
     depends_on:
       - server
       - frontend
-    ports:
-      - "80:80"   # HTTP (redirects to HTTPS)
-      - "443:443" # HTTPS
-    volumes:
-      # Host-provided certs: ensure ./certs contains your cert and key (can be .crt, .pem, etc)
-      - ./certs:/etc/nginx/certs:ro
     environment:
       - SSL_CERT_NAME=${SSL_CERT_NAME:-tls.crt}
       - SSL_KEY_NAME=${SSL_KEY_NAME:-tls.key}
+      - DOMAIN=${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    # Optional: mount host-provided certs; if omitted, container generates self-signed
+    # volumes:
+    #   - ./certs:/etc/nginx/certs:ro
     command: >-
       /bin/sh -c '
-        set -e;
-        CERT_NAME="${SSL_CERT_NAME:-tls.crt}";
-        KEY_NAME="${SSL_KEY_NAME:-tls.key}";
-        cat > /etc/nginx/nginx.conf <<NGINXCONF;
-        user  nginx; worker_processes  auto;
-        error_log  /var/log/nginx/error.log warn; pid /var/run/nginx.pid;
-        events { worker_connections 1024; }
-        http {
-          include       /etc/nginx/mime.types; default_type  application/octet-stream;
-          sendfile on; keepalive_timeout 65; gzip on;
+      set -e;
+      apk add --no-cache openssl curl;
+      mkdir -p /etc/nginx/certs;
+      if [ ! -f "/etc/nginx/certs/$SSL_CERT_NAME" ] || [ ! -f "/etc/nginx/certs/$SSL_KEY_NAME" ]; then
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+          -keyout "/etc/nginx/certs/${SSL_KEY_NAME}" \
+          -out "/etc/nginx/certs/${SSL_CERT_NAME}" \
+          -subj "/CN=${DOMAIN}";
+      fi;
+      cat > /etc/nginx/nginx.conf << "EOF";
+      user  nginx;
+      worker_processes  auto;
+      error_log  /var/log/nginx/error.log warn;
+      pid        /var/run/nginx.pid;
 
-          upstream api_upstream { server server:8080; }
-          upstream spa_upstream { server frontend:80; }
+      events { worker_connections  1024; }
 
-          # Redirect all HTTP to HTTPS
-          server {
-            listen 80; listen [::]:80; server_name _;
-            return 301 https://$host$request_uri;
+      http {
+        include       /etc/nginx/mime.types;
+        default_type  application/octet-stream;
+        log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                          '$status $body_bytes_sent "$http_referer" '
+                          '"$http_user_agent" "$http_x_forwarded_for"';
+        access_log  /var/log/nginx/access.log  main;
+        sendfile        on;
+        keepalive_timeout  65;
+
+        upstream api_upstream { server server:8080; }
+        upstream app_upstream { server frontend:80; }
+
+        server {
+          listen 80;
+          listen [::]:80;
+          return 301 https://$host$request_uri;
+        }
+
+        server {
+          listen 443 ssl;
+          listen [::]:443 ssl;
+          server_name _;
+          ssl_certificate     /etc/nginx/certs/SSL_CERT_NAME_PLACEHOLDER;
+          ssl_certificate_key /etc/nginx/certs/SSL_KEY_NAME_PLACEHOLDER;
+          ssl_protocols TLSv1.2 TLSv1.3;
+          ssl_ciphers HIGH:!aNULL:!MD5;
+
+          # Security headers
+          add_header X-Frame-Options "DENY" always;
+          add_header X-Content-Type-Options "nosniff" always;
+          add_header X-XSS-Protection "1; mode=block" always;
+
+          # API proxy
+          location /api/ {
+            proxy_pass http://api_upstream/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto https;
           }
 
-          server {
-            listen 443 ssl http2; listen [::]:443 ssl http2;
-            server_name _;
-
-            ssl_certificate     /etc/nginx/certs/$CERT_NAME;
-            ssl_certificate_key /etc/nginx/certs/$KEY_NAME;
-            ssl_protocols       TLSv1.2 TLSv1.3;
-            ssl_ciphers         HIGH:!aNULL:!MD5;
-            ssl_prefer_server_ciphers on;
-
-            # Security headers
-            add_header X-Frame-Options "SAMEORIGIN" always;
-            add_header X-Content-Type-Options "nosniff" always;
-            add_header X-XSS-Protection "1; mode=block" always;
-            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-
-            # Proxy API to FastAPI backend
-            location /api/ {
-              proxy_pass http://api_upstream;
-              proxy_set_header Host $host;
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-              proxy_set_header Cookie $http_cookie;
-              proxy_pass_header Set-Cookie;
-              proxy_cookie_path / /;
-            }
-
-            # Serve Angular SPA
-            location / {
-              proxy_pass http://spa_upstream;
-              proxy_set_header Host $host;
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-            }
+          # Frontend app
+          location / {
+            proxy_pass http://app_upstream/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto https;
           }
         }
-      NGINXCONF
-        nginx -g "daemon off;";
-      '
+      }
+      EOF
+  sed -i "s|SSL_CERT_NAME_PLACEHOLDER|$SSL_CERT_NAME|g" /etc/nginx/nginx.conf;
+      sed -i "s|SSL_KEY_NAME_PLACEHOLDER|$SSL_KEY_NAME|g" /etc/nginx/nginx.conf;
+      nginx -t;
+      exec nginx -g "daemon off;"'
     restart: unless-stopped
     networks:
       - nebula
+    healthcheck:
+      test: ["CMD-SHELL", "curl -skf https://localhost >/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
 
 networks:
   nebula:
