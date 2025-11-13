@@ -7,8 +7,8 @@ import { Subscription } from 'rxjs';
  * Place this component in the app root or layout to show notifications from any service.
  */
 @Component({
-  selector: 'app-notifications',
-  template: `
+    selector: 'app-notifications',
+    template: `
     <div class="notification-container">
       <div *ngFor="let msg of messages" 
            class="notification" 
@@ -19,7 +19,7 @@ import { Subscription } from 'rxjs';
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .notification-container {
       position: fixed;
       top: 1rem;
@@ -85,7 +85,8 @@ import { Subscription } from 'rxjs';
     .close-btn:hover {
       opacity: 1;
     }
-  `]
+  `],
+    standalone: false
 })
 export class NotificationsComponent implements OnInit, OnDestroy {
   messages: ErrorMessage[] = [];

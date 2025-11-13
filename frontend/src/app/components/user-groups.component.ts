@@ -5,8 +5,8 @@ import { ApiService } from '../services/api.service';
 import { UserGroup } from '../models';
 
 @Component({
-  selector: 'app-user-groups',
-  template: `
+    selector: 'app-user-groups',
+    template: `
     <div class="dashboard">
       <app-navbar></app-navbar>
       
@@ -160,7 +160,7 @@ import { UserGroup } from '../models';
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .dashboard {
       min-height: 100vh;
       background: #f5f5f5;
@@ -486,7 +486,8 @@ import { UserGroup } from '../models';
         width: 100%;
       }
     }
-  `]
+  `],
+    standalone: false
 })
 export class UserGroupsComponent implements OnInit {
   currentUser = this.authService.getCurrentUser();

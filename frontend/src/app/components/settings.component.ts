@@ -5,8 +5,8 @@ import { NotificationService } from '../services/notification.service';
 import { Settings } from '../models';
 
 @Component({
-  selector: 'app-settings',
-  template: `
+    selector: 'app-settings',
+    template: `
     <div class="dashboard">
       <app-navbar></app-navbar>
       
@@ -79,7 +79,7 @@ import { Settings } from '../models';
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .dashboard {
       min-height: 100vh;
       background: #f5f5f5;
@@ -223,7 +223,8 @@ import { Settings } from '../models';
         width: 100%;
       }
     }
-  `]
+  `],
+    standalone: false
 })
 export class SettingsComponent implements OnInit {
   settings: Settings = {

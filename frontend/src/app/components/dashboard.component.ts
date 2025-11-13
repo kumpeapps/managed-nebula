@@ -4,8 +4,8 @@ import { ApiService } from '../services/api.service';
 import { User, Client } from '../models';
 
 @Component({
-  selector: 'app-dashboard',
-  template: `
+    selector: 'app-dashboard',
+    template: `
     <div class="dashboard">
       <app-navbar></app-navbar>
       
@@ -59,7 +59,7 @@ import { User, Client } from '../models';
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .dashboard {
       min-height: 100vh;
       background: #f5f5f5;
@@ -149,7 +149,8 @@ import { User, Client } from '../models';
       background: #f8d7da;
       color: #721c24;
     }
-  `]
+  `],
+    standalone: false
 })
 export class DashboardComponent implements OnInit {
   currentUser: User | null = null;

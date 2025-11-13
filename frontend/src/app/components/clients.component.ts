@@ -5,8 +5,8 @@ import { ApiService } from '../services/api.service';
 import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCreateRequest } from '../models';
 
 @Component({
-  selector: 'app-clients',
-  template: `
+    selector: 'app-clients',
+    template: `
     <div class="dashboard">
       <app-navbar></app-navbar>
       
@@ -169,7 +169,7 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .dashboard {
       min-height: 100vh;
       background: #f5f5f5;
@@ -514,7 +514,8 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
         grid-template-columns: 1fr;
       }
     }
-  `]
+  `],
+    standalone: false
 })
 export class ClientsComponent implements OnInit {
   clients: Client[] = [];
