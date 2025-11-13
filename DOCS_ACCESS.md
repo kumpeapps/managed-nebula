@@ -2,6 +2,42 @@
 
 This document explains how to access the FastAPI interactive documentation through the frontend proxy.
 
+## Architecture Overview
+
+The Managed Nebula platform now proxies API documentation through the frontend nginx server, providing unified HTTPS access:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         Browser                              │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+                     │ HTTPS
+                     │
+┌────────────────────▼────────────────────────────────────────┐
+│              Frontend (Nginx) :443                           │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Location Routing:                                   │   │
+│  │  • /api/docs      → http://server:8080/docs          │   │
+│  │  • /api/redoc     → http://server:8080/redoc         │   │
+│  │  • /api/openapi.json → http://server:8080/openapi.json│  │
+│  │  • /api/*         → http://server:8080/api/*         │   │
+│  └──────────────────────────────────────────────────────┘   │
+└────────────────────┬────────────────────────────────────────┘
+                     │
+                     │ HTTP (internal network)
+                     │
+┌────────────────────▼────────────────────────────────────────┐
+│             FastAPI Server :8080                             │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Documentation Endpoints:                            │   │
+│  │  • /docs          → Swagger UI                       │   │
+│  │  • /redoc         → ReDoc                            │   │
+│  │  • /openapi.json  → OpenAPI 3.0 Schema               │   │
+│  │  • /api/v1/*      → REST API Endpoints               │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
 ## Available Documentation Endpoints
 
 The Managed Nebula API documentation is now accessible through the frontend HTTPS proxy:
