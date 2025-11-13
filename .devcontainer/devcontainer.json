@@ -12,6 +12,10 @@
 		"ghcr.io/devcontainers/features/python:1": {
 			"installTools": true,
 			"version": "os-provided"
+		},
+		"ghcr.io/devcontainers/features/docker-in-docker:2": {
+			"version": "latest",
+			"enableNonRootDocker": "true"
 		}
 	},
 	"forwardPorts": [443,8080,4200]
