@@ -96,7 +96,7 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
                   </ng-container>
                   <ng-template #autoIpSelect>
                     <select class="form-control" [(ngModel)]="newIPAddress">
-                      <option [ngValue]="client?.ip_address">{{ client?.ip_address || 'Current IP' }}</option>
+                      <option [ngValue]="client.ip_address">{{ client.ip_address || 'Current IP' }}</option>
                       <option *ngFor="let ip of availableIPs" [ngValue]="ip.ip_address">{{ ip.ip_address }}</option>
                     </select>
                   </ng-template>

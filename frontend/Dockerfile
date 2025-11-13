@@ -5,8 +5,10 @@ WORKDIR /app
 
 # Copy package files and install dependencies
 COPY package.json package-lock.json* ./
-LABEL org.opencontainers.image.source https://github.com/kumpeapps/managed-nebula
-RUN npm install
+LABEL org.opencontainers.image.source=https://github.com/kumpeapps/managed-nebula
+
+# Install dependencies with optimizations for ARM64
+RUN npm ci --no-audit --no-fund
 
 # Copy source code and build
 COPY . .
