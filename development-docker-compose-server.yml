@@ -1,0 +1,75 @@
+############################################################
+# Development Docker Compose (SSL frontend proxy + local builds)
+#
+# This file mirrors `docker-compose-server.yml` but overrides
+# images with local build contexts for iterative development.
+# - Frontend (nginx) terminates TLS and proxies /api to server
+# - Server is also exposed directly on 8080 for easier debugging
+# - Uses local code builds; optionally mount sources for live reload
+#
+# Usage:
+#   DOMAIN=nebula.dev docker compose -f development-docker-compose-server.yml up -d --build
+#
+# Optional: place real certs in ./certs (tls.crt, tls.key). If absent, a self-signed cert is generated.
+#
+# Notes:
+# - For rapid backend iteration you can uncomment the app code volume mount.
+# - Frontend container here is production-mode nginx serving built Angular assets with SSL.
+#   For Angular live dev server (hot reload) use `docker-compose.yml` instead.
+############################################################
+
+services:
+  server:
+    build: ./server
+    image: managed-nebula-server:dev-local
+    environment:
+      - DB_URL=${DB_URL:-sqlite+aiosqlite:///./data/app.db}
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - ENABLE_SCHEMA_AUTOSYNC=${ENABLE_SCHEMA_AUTOSYNC:-true}
+      - DEBUG_AUTH=${DEBUG_AUTH:-true}
+    ports:
+      - "8080:8080"   # Direct access for API debugging (also proxied via frontend)
+    volumes:
+      - server_data:/app/data
+      # Uncomment for live code reload if Dockerfile/entrypoint supports it:
+      # - ./server/app:/app/app
+    restart: unless-stopped
+    networks:
+      - nebula
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/api/v1/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  frontend:
+    build: ./frontend
+    image: managed-nebula-frontend:dev-local
+    depends_on:
+      - server
+    environment:
+      - SSL_CERT_NAME=${SSL_CERT_NAME:-tls.crt}
+      - SSL_KEY_NAME=${SSL_KEY_NAME:-tls.key}
+      - DOMAIN=${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./certs:/etc/nginx/certs:ro
+    restart: unless-stopped
+    networks:
+      - nebula
+    healthcheck:
+      test: ["CMD-SHELL", "curl -skf https://localhost/api/v1/healthz >/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+networks:
+  nebula:
+    driver: bridge
+
+volumes:
+  server_data:
