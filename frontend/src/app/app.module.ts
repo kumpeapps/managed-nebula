@@ -1,6 +1,6 @@
 import { NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
-import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
+import { HTTP_INTERCEPTORS, provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 
@@ -27,42 +27,36 @@ import { NotificationService } from './services/notification.service';
 import { AuthGuard } from './guards/auth.guard';
 import { AuthInterceptor } from './interceptors/auth.interceptor';
 
-@NgModule({
-  declarations: [
-    AppComponent,
-    LoginComponent,
-    DashboardComponent,
-    ClientsComponent,
-    ClientDetailComponent,
-    GroupsComponent,
-    FirewallRulesComponent,
-    IPPoolsComponent,
-    IPGroupsComponent,
-    CAComponent,
-    UsersComponent,
-    UserGroupsComponent,
-    SettingsComponent,
-    NavbarComponent,
-    NotificationsComponent
-  ],
-  imports: [
-    BrowserModule,
-    CommonModule,
-    AppRoutingModule,
-    HttpClientModule,
-    FormsModule
-  ],
-  providers: [
-    AuthService,
-    ApiService,
-    NotificationService,
-    AuthGuard,
-    {
-      provide: HTTP_INTERCEPTORS,
-      useClass: AuthInterceptor,
-      multi: true
-    }
-  ],
-  bootstrap: [AppComponent]
-})
+@NgModule({ declarations: [
+        AppComponent,
+        LoginComponent,
+        DashboardComponent,
+        ClientsComponent,
+        ClientDetailComponent,
+        GroupsComponent,
+        FirewallRulesComponent,
+        IPPoolsComponent,
+        IPGroupsComponent,
+        CAComponent,
+        UsersComponent,
+        UserGroupsComponent,
+        SettingsComponent,
+        NavbarComponent,
+        NotificationsComponent
+    ],
+    bootstrap: [AppComponent], imports: [BrowserModule,
+        CommonModule,
+        AppRoutingModule,
+        FormsModule], providers: [
+        AuthService,
+        ApiService,
+        NotificationService,
+        AuthGuard,
+        {
+            provide: HTTP_INTERCEPTORS,
+            useClass: AuthInterceptor,
+            multi: true
+        },
+        provideHttpClient(withInterceptorsFromDi())
+    ] })
 export class AppModule { }
