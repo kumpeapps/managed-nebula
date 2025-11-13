@@ -1,0 +1,67 @@
+user  nginx;
+worker_processes  auto;
+
+error_log  /var/log/nginx/error.log warn;
+pid        /var/run/nginx.pid;
+
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    sendfile        on;
+    keepalive_timeout  65;
+    gzip on;
+
+    upstream api_upstream { server server:8080; }
+
+    # Redirect all HTTP to HTTPS
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name _;
+        return 301 https://$host$request_uri;
+    }
+
+    server {
+        listen 443 ssl;
+        listen [::]:443 ssl;
+        http2 on;
+        server_name _;
+
+        root /usr/share/nginx/html;
+        index index.html;
+
+        ssl_certificate     /etc/nginx/certs/__CERT_NAME__;
+        ssl_certificate_key /etc/nginx/certs/__KEY_NAME__;
+        ssl_protocols       TLSv1.2 TLSv1.3;
+        ssl_ciphers         HIGH:!aNULL:!MD5;
+        ssl_prefer_server_ciphers on;
+
+        # Security headers
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+        # Angular routes
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+
+        # Proxy API
+        location /api/ {
+            proxy_pass http://api_upstream;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header Cookie $http_cookie;
+            proxy_pass_header Set-Cookie;
+            proxy_cookie_path / /;
+        }
+    }
+}
