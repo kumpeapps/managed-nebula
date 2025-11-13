@@ -142,11 +142,11 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
                 </div>
                 <div class="info-item">
                   <span class="label">Config Last Changed:</span>
-                  <span>{{ client.config_last_changed_at | date:'medium' || 'Never' }}</span>
+                  <span>{{ (client.config_last_changed_at | date:'medium') || 'Never' }}</span>
                 </div>
                 <div class="info-item">
                   <span class="label">Last Config Download:</span>
-                  <span>{{ client.last_config_download_at | date:'medium' || 'Never' }}</span>
+                  <span>{{ (client.last_config_download_at | date:'medium') || 'Never' }}</span>
                 </div>
                 <div class="info-item">
                   <span class="label">Owner:</span>
