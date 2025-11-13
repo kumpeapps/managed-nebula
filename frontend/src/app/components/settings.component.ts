@@ -75,6 +75,54 @@ import { Settings } from '../models';
               </label>
             </div>
           </div>
+          
+          <div class="setting-section">
+            <h3>Docker Compose Template</h3>
+            <p class="help-text">Customize the docker-compose.yml template generated for clients using dynamic placeholders</p>
+            
+            <div class="template-editor-container">
+              <div class="editor-section">
+                <div class="editor-header">
+                  <strong>Template Editor</strong>
+                  <button class="reset-btn" (click)="resetTemplate()">Reset to Default</button>
+                </div>
+                <textarea 
+                  [(ngModel)]="settings.docker_compose_template"
+                  (input)="onTemplateChange()"
+                  class="template-textarea"
+                  placeholder="Enter docker-compose template with placeholders..."></textarea>
+              </div>
+              
+              <div class="placeholders-section">
+                <strong>Available Placeholders</strong>
+                <table class="placeholders-table">
+                  <thead>
+                    <tr>
+                      <th>Placeholder</th>
+                      <th>Description</th>
+                      <th>Example</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let ph of placeholders">
+                      <td><code>{{ph.name}}</code></td>
+                      <td>{{ph.description}}</td>
+                      <td><code>{{ph.example}}</code></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              
+              <div class="preview-section">
+                <strong>Preview (with sample data)</strong>
+                <pre class="preview-content">{{previewTemplate}}</pre>
+              </div>
+            </div>
+            
+            <div class="form-actions">
+              <button class="save-btn" (click)="saveSettings()">Save Changes</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -206,6 +254,163 @@ import { Settings } from '../models';
       border-color: #4CAF50;
     }
     
+    .template-editor-container {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      margin-top: 1rem;
+    }
+    
+    .editor-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    
+    .editor-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem;
+      background: #f0f0f0;
+      border-radius: 4px 4px 0 0;
+    }
+    
+    .editor-header strong {
+      color: #333;
+      font-size: 1rem;
+    }
+    
+    .reset-btn {
+      padding: 0.5rem 1rem;
+      background: #ff9800;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: background 0.3s;
+    }
+    
+    .reset-btn:hover {
+      background: #f57c00;
+    }
+    
+    .template-textarea {
+      width: 100%;
+      min-height: 300px;
+      padding: 1rem;
+      border: 1px solid #ddd;
+      border-radius: 0 0 4px 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      resize: vertical;
+    }
+    
+    .template-textarea:focus {
+      outline: none;
+      border-color: #4CAF50;
+    }
+    
+    .placeholders-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    
+    .placeholders-section strong {
+      color: #333;
+      font-size: 1rem;
+      padding: 0.75rem;
+      background: #f0f0f0;
+      border-radius: 4px;
+    }
+    
+    .placeholders-table {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    
+    .placeholders-table th,
+    .placeholders-table td {
+      padding: 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+    
+    .placeholders-table th {
+      background: #f9f9f9;
+      font-weight: 600;
+      color: #333;
+    }
+    
+    .placeholders-table tr:last-child td {
+      border-bottom: none;
+    }
+    
+    .placeholders-table code {
+      background: #e8f5e9;
+      padding: 0.2rem 0.4rem;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85rem;
+      color: #2e7d32;
+    }
+    
+    .preview-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    
+    .preview-section strong {
+      color: #333;
+      font-size: 1rem;
+      padding: 0.75rem;
+      background: #f0f0f0;
+      border-radius: 4px;
+    }
+    
+    .preview-content {
+      background: #f9f9f9;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 1rem;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      overflow-x: auto;
+      white-space: pre;
+      color: #333;
+    }
+    
+    .form-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    
+    .save-btn {
+      padding: 0.75rem 2rem;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 500;
+      transition: background 0.3s;
+    }
+    
+    .save-btn:hover {
+      background: #45a049;
+    }
+    
     @media (max-width: 768px) {
       .container {
         padding: 1rem;
@@ -222,6 +427,16 @@ import { Settings } from '../models';
       .form-actions button {
         width: 100%;
       }
+      
+      .editor-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+      }
+      
+      .reset-btn {
+        width: 100%;
+      }
     }
   `],
     standalone: false
@@ -230,9 +445,13 @@ export class SettingsComponent implements OnInit {
   settings: Settings = {
     punchy_enabled: false,
     client_docker_image: 'ghcr.io/kumpeapps/managed-nebula-client:latest',
-    server_url: 'http://localhost:8080'
+    server_url: 'http://localhost:8080',
+    docker_compose_template: ''
   };
   isAdmin = this.authService.isAdmin();
+  placeholders: any[] = [];
+  previewTemplate: string = '';
+  templateOriginal: string = '';
 
   constructor(
     private authService: AuthService,
@@ -246,12 +465,15 @@ export class SettingsComponent implements OnInit {
       return;
     }
     this.loadSettings();
+    this.loadPlaceholders();
   }
 
   loadSettings(): void {
     this.apiService.getSettings().subscribe({
       next: (settings: Settings) => {
         this.settings = settings;
+        this.templateOriginal = settings.docker_compose_template;
+        this.updatePreview();
       },
       error: (err: any) => {
         console.error('Failed to load settings:', err);
@@ -260,15 +482,29 @@ export class SettingsComponent implements OnInit {
     });
   }
 
+  loadPlaceholders(): void {
+    this.apiService.getPlaceholders().subscribe({
+      next: (response: any) => {
+        this.placeholders = response.placeholders;
+      },
+      error: (err: any) => {
+        console.error('Failed to load placeholders:', err);
+      }
+    });
+  }
+
   saveSettings(): void {
     this.apiService.updateSettings({
       punchy_enabled: this.settings.punchy_enabled,
       client_docker_image: this.settings.client_docker_image,
-      server_url: this.settings.server_url
+      server_url: this.settings.server_url,
+      docker_compose_template: this.settings.docker_compose_template
     }).subscribe({
       next: (updated: Settings) => {
         this.settings = updated;
+        this.templateOriginal = updated.docker_compose_template;
         this.notificationService.notify('Settings saved successfully', 'success');
+        this.updatePreview();
       },
       error: (err: any) => {
         console.error('Failed to save settings:', err);
@@ -277,5 +513,46 @@ export class SettingsComponent implements OnInit {
         this.loadSettings();
       }
     });
+  }
+
+  resetTemplate(): void {
+    if (confirm('Are you sure you want to reset the template to default? This will discard your current template.')) {
+      const defaultTemplate = `version: '3.8'
+
+services:
+  nebula-client:
+    image: {{CLIENT_DOCKER_IMAGE}}
+    container_name: nebula-{{CLIENT_NAME}}
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    environment:
+      SERVER_URL: {{SERVER_URL}}
+      CLIENT_TOKEN: {{CLIENT_TOKEN}}
+      POLL_INTERVAL_HOURS: {{POLL_INTERVAL_HOURS}}
+    volumes:
+      - ./nebula-config:/etc/nebula
+      - ./nebula-data:/var/lib/nebula
+    network_mode: host`;
+      this.settings.docker_compose_template = defaultTemplate;
+      this.updatePreview();
+    }
+  }
+
+  updatePreview(): void {
+    // Replace placeholders with sample data for preview
+    let preview = this.settings.docker_compose_template;
+    preview = preview.replace(/\{\{CLIENT_NAME\}\}/g, 'example-client');
+    preview = preview.replace(/\{\{CLIENT_TOKEN\}\}/g, 'abc123xyz789...');
+    preview = preview.replace(/\{\{SERVER_URL\}\}/g, this.settings.server_url || 'http://localhost:8080');
+    preview = preview.replace(/\{\{CLIENT_DOCKER_IMAGE\}\}/g, this.settings.client_docker_image || 'ghcr.io/kumpeapps/managed-nebula/client:latest');
+    preview = preview.replace(/\{\{POLL_INTERVAL_HOURS\}\}/g, '24');
+    this.previewTemplate = preview;
+  }
+
+  onTemplateChange(): void {
+    this.updatePreview();
   }
 }
