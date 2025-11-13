@@ -5,8 +5,8 @@ import { ApiService } from '../services/api.service';
 import { IPGroup, IPPool } from '../models';
 
 @Component({
-  selector: 'app-ip-groups',
-  template: `
+    selector: 'app-ip-groups',
+    template: `
     <div class="dashboard">
       <app-navbar></app-navbar>
       
@@ -111,7 +111,7 @@ import { IPGroup, IPPool } from '../models';
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .dashboard {
       min-height: 100vh;
       background: #f5f5f5;
@@ -402,7 +402,8 @@ import { IPGroup, IPPool } from '../models';
         width: 100%;
       }
     }
-  `]
+  `],
+    standalone: false
 })
 export class IPGroupsComponent implements OnInit {
   ipGroups: IPGroup[] = [];

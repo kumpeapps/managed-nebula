@@ -4,8 +4,8 @@ import { IPPool, Client } from '../models';
 import { Router } from '@angular/router';
 
 @Component({
-  selector: 'app-ip-pools',
-  template: `
+    selector: 'app-ip-pools',
+    template: `
     <app-navbar></app-navbar>
     <div class="resource-page">
       <h2>IP Pools</h2>
@@ -91,7 +91,7 @@ import { Router } from '@angular/router';
       <p *ngIf="!pools.length">No IP pools defined.</p>
     </div>
   `,
-  styles: [`
+    styles: [`
     .resource-page { padding: 1.5rem; }
     .actions { margin-bottom: 1rem; }
     .table { width: 100%; border-collapse: collapse; }
@@ -111,7 +111,8 @@ import { Router } from '@angular/router';
       th, td { padding: 0.5rem 0.25rem; }
       .table-responsive { overflow-x: auto; }
     }
-  `]
+  `],
+    standalone: false
 })
 export class IPPoolsComponent implements OnInit {
   pools: IPPool[] = [];

@@ -4,8 +4,8 @@ import { AuthService } from '../services/auth.service';
 import { User } from '../models';
 
 @Component({
-  selector: 'app-users',
-  template: `
+    selector: 'app-users',
+    template: `
     <app-navbar></app-navbar>
     <div class="resource-page">
       <h2>Users</h2>
@@ -76,7 +76,7 @@ import { User } from '../models';
       <p *ngIf="!users.length">No users found.</p>
     </div>
   `,
-  styles: [`
+    styles: [`
     .resource-page { padding:1.5rem; }
     .actions { margin-bottom:1rem; }
     .table { width:100%; border-collapse:collapse; }
@@ -95,7 +95,8 @@ import { User } from '../models';
       th, td { padding: 0.5rem 0.25rem; }
       .table-responsive { overflow-x: auto; }
     }
-  `]
+  `],
+    standalone: false
 })
 export class UsersComponent implements OnInit {
   users: User[] = [];

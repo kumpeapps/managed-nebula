@@ -6,8 +6,8 @@ import { AuthService } from '../services/auth.service';
  * Reusable navigation bar component for consistent navigation across all pages.
  */
 @Component({
-  selector: 'app-navbar',
-  template: `
+    selector: 'app-navbar',
+    template: `
     <nav class="navbar">
       <h1>Managed Nebula</h1>
       <button class="mobile-menu-toggle" (click)="toggleMobileMenu()" [class.open]="mobileMenuOpen">
@@ -31,7 +31,7 @@ import { AuthService } from '../services/auth.service';
       </div>
     </nav>
   `,
-  styles: [`
+    styles: [`
     .navbar {
       background: white;
       padding: 1rem 2rem;
@@ -181,7 +181,8 @@ import { AuthService } from '../services/auth.service';
         margin-top: 1rem;
       }
     }
-  `]
+  `],
+    standalone: false
 })
 export class NavbarComponent {
   currentUser = this.authService.getCurrentUser();

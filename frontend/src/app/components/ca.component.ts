@@ -3,8 +3,8 @@ import { ApiService } from '../services/api.service';
 import { CACertificate } from '../models';
 
 @Component({
-  selector: 'app-ca',
-  template: `
+    selector: 'app-ca',
+    template: `
     <app-navbar></app-navbar>
     <div class="resource-page">
       <h2>Certificate Authorities</h2>
@@ -84,7 +84,7 @@ import { CACertificate } from '../models';
       <p *ngIf="!cas.length">No CA certificates.</p>
     </div>
   `,
-  styles: [`
+    styles: [`
     .resource-page { padding:1.5rem; }
     .actions { margin-bottom:1rem; display:flex; gap:.5rem; }
     .table { width:100%; border-collapse:collapse; }
@@ -109,7 +109,8 @@ import { CACertificate } from '../models';
       th, td { padding: 0.5rem 0.25rem; }
       .table-responsive { overflow-x: auto; }
     }
-  `]
+  `],
+    standalone: false
 })
 export class CAComponent implements OnInit {
   cas: CACertificate[] = [];

@@ -3,8 +3,8 @@ import { Router } from '@angular/router';
 import { AuthService } from '../services/auth.service';
 
 @Component({
-  selector: 'app-login',
-  template: `
+    selector: 'app-login',
+    template: `
     <div class="login-container">
       <div class="login-card">
         <h1>Managed Nebula</h1>
@@ -50,7 +50,7 @@ import { AuthService } from '../services/auth.service';
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     .login-container {
       display: flex;
       justify-content: center;
@@ -155,7 +155,8 @@ import { AuthService } from '../services/auth.service';
         font-size: 1rem;
       }
     }
-  `]
+  `],
+    standalone: false
 })
 export class LoginComponent {
   email = '';

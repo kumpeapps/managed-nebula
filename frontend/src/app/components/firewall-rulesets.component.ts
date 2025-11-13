@@ -4,8 +4,8 @@ import { AuthService } from '../services/auth.service';
 import { FirewallRuleset, FirewallRule, Group, GroupRef } from '../models';
 
 @Component({
-  selector: 'app-firewall-rulesets',
-  template: `
+    selector: 'app-firewall-rulesets',
+    template: `
     <app-navbar></app-navbar>
     <div class="resource-page">
       <h2>Firewall Rulesets</h2>
@@ -127,7 +127,7 @@ import { FirewallRuleset, FirewallRule, Group, GroupRef } from '../models';
       <p *ngIf="!rulesets.length">No firewall rulesets defined.</p>
     </div>
   `,
-  styles: [`
+    styles: [`
     .resource-page {
       padding: 1.5rem;
       background: #f5f5f5;
@@ -231,7 +231,8 @@ import { FirewallRuleset, FirewallRule, Group, GroupRef } from '../models';
         overflow-x: auto;
       }
     }
-  `]
+  `],
+    standalone: false
 })
 export class FirewallRulesComponent implements OnInit {
   rulesets: FirewallRuleset[] = [];
