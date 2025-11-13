@@ -71,6 +71,7 @@ def create_app() -> FastAPI:
 
     # Routers
     app.include_router(api.router, prefix="/api")
+    app.include_router(api.enrollment_router)  # Public enrollment endpoint (no prefix)
     app.include_router(auth.router)
 
     # Background scheduler for rotations

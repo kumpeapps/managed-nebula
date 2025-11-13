@@ -151,3 +151,27 @@ class IPAssignment(Base):
     ip_address: Mapped[str] = mapped_column(String(64), unique=True)
     pool_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("ip_pools.id"), nullable=True)
     ip_group_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("ip_groups.id"), nullable=True)
+
+
+class EnrollmentCode(Base):
+    """One-time enrollment code for Mobile Nebula devices."""
+    __tablename__ = "enrollment_codes"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    client_id: Mapped[int] = mapped_column(Integer, ForeignKey("clients.id", ondelete="CASCADE"))
+    
+    # Device information (populated after enrollment)
+    device_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    device_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    platform: Mapped[str | None] = mapped_column(String(50), nullable=True)  # iOS, Android, etc.
+    
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    
+    # Status
+    is_used: Mapped[bool] = mapped_column(Boolean, default=False)
+    
+    # Relationship
+    client: Mapped[Client] = relationship("Client", backref="enrollment_codes")

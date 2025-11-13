@@ -5,7 +5,7 @@ from datetime import datetime
 
 from ..db import get_session
 from ..models import ClientToken, Client, IPAssignment, GlobalSettings, CACertificate, IPPool
-from ..models.client import ClientCertificate
+from ..models.client import ClientCertificate, EnrollmentCode
 from ..models.schemas import (
     ClientConfigRequest,
     GroupRef,
@@ -56,6 +56,10 @@ from ..models.schemas import (
     ClientPermissionGrant,
     ClientPermissionResponse,
     ClientOwnerUpdate,
+    EnrollmentCodeCreate,
+    EnrollmentCodeResponse,
+    EnrollmentRequest,
+    MobileEnrollmentResponse,
 )
 from ..services.cert_manager import CertManager
 from ..services.config_builder import build_nebula_config
@@ -71,6 +75,9 @@ import ipaddress
 
 
 router = APIRouter(prefix="/v1", tags=["api"])
+
+# Public enrollment router (no prefix, no auth)
+enrollment_router = APIRouter(tags=["enrollment"])
 
 
 # ============ Helper Functions ============
@@ -3005,3 +3012,360 @@ async def delete_user(user_id: int, session: AsyncSession = Depends(get_session)
     await session.delete(u)
     await session.commit()
     return {"status": "deleted", "id": user_id}
+
+
+# ============ Enrollment Codes REST API ============
+
+@router.post("/enrollment/codes", response_model=EnrollmentCodeResponse)
+async def create_enrollment_code(
+    body: EnrollmentCodeCreate,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user)
+):
+    """Generate an enrollment code for Mobile Nebula device enrollment.
+    
+    Requires: admin, client owner, or can_download_config permission.
+    """
+    from datetime import timedelta
+    
+    # Validate validity hours (1-168 hours = 1 hour to 7 days)
+    if body.validity_hours < 1 or body.validity_hours > 168:
+        raise HTTPException(status_code=400, detail="Validity must be between 1 and 168 hours")
+    
+    # Get client and check permissions
+    client_result = await session.execute(
+        select(Client).where(Client.id == body.client_id)
+    )
+    client = client_result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    # Check permissions: admin, owner, or can_download_config
+    is_admin = bool(user.role and user.role.name == "admin")
+    is_owner = client.owner_user_id == user.id
+    
+    if not is_admin and not is_owner:
+        # Check if user has download permission
+        perm_result = await session.execute(
+            select(ClientPermission).where(
+                ClientPermission.client_id == body.client_id,
+                ClientPermission.user_id == user.id,
+                ClientPermission.can_download_config == True
+            )
+        )
+        perm = perm_result.scalar_one_or_none()
+        if not perm:
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Verify client has IP assignment
+    ip_result = await session.execute(
+        select(IPAssignment).where(IPAssignment.client_id == body.client_id)
+    )
+    ip_assignment = ip_result.scalar_one_or_none()
+    if not ip_assignment:
+        raise HTTPException(status_code=409, detail="Client has no IP assignment")
+    
+    # Generate secure random code
+    code = secrets.token_urlsafe(32)
+    
+    # Calculate expiration
+    now = datetime.utcnow()
+    expires_at = now + timedelta(hours=body.validity_hours)
+    
+    # Create enrollment code
+    enrollment_code = EnrollmentCode(
+        code=code,
+        client_id=body.client_id,
+        device_name=body.device_name,
+        created_at=now,
+        expires_at=expires_at,
+        is_used=False
+    )
+    session.add(enrollment_code)
+    await session.commit()
+    await session.refresh(enrollment_code)
+    
+    # Build enrollment URL (base URL from settings or use relative path)
+    settings = (await session.execute(select(GlobalSettings))).scalars().first()
+    base_url = settings.server_url if settings and settings.server_url else ""
+    enrollment_url = f"{base_url}/enroll?code={code}"
+    
+    return EnrollmentCodeResponse(
+        id=enrollment_code.id,
+        code=enrollment_code.code,
+        client_id=enrollment_code.client_id,
+        client_name=client.name,
+        device_name=enrollment_code.device_name,
+        device_id=enrollment_code.device_id,
+        platform=enrollment_code.platform,
+        created_at=enrollment_code.created_at,
+        expires_at=enrollment_code.expires_at,
+        used_at=enrollment_code.used_at,
+        is_used=enrollment_code.is_used,
+        enrollment_url=enrollment_url
+    )
+
+
+@router.get("/enrollment/codes", response_model=List[EnrollmentCodeResponse])
+async def list_enrollment_codes(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user)
+):
+    """List enrollment codes for clients the user has access to."""
+    from sqlalchemy.orm import selectinload
+    
+    # Get all enrollment codes with client info
+    query = select(EnrollmentCode).options(selectinload(EnrollmentCode.client))
+    
+    # Non-admins only see codes for clients they own or have permissions for
+    is_admin = bool(user.role and user.role.name == "admin")
+    if not is_admin:
+        # Get client IDs user has access to
+        perm_result = await session.execute(
+            select(ClientPermission.client_id).where(
+                ClientPermission.user_id == user.id,
+                ClientPermission.can_view == True
+            )
+        )
+        permitted_ids = [row[0] for row in perm_result.all()]
+        
+        # Filter to owned or permitted clients
+        query = query.join(Client).where(
+            (Client.owner_user_id == user.id) | (Client.id.in_(permitted_ids))
+        )
+    
+    result = await session.execute(query)
+    codes = result.scalars().all()
+    
+    # Build enrollment URLs
+    settings = (await session.execute(select(GlobalSettings))).scalars().first()
+    base_url = settings.server_url if settings and settings.server_url else ""
+    
+    responses = []
+    for code in codes:
+        enrollment_url = f"{base_url}/enroll?code={code.code}"
+        responses.append(EnrollmentCodeResponse(
+            id=code.id,
+            code=code.code,
+            client_id=code.client_id,
+            client_name=code.client.name,
+            device_name=code.device_name,
+            device_id=code.device_id,
+            platform=code.platform,
+            created_at=code.created_at,
+            expires_at=code.expires_at,
+            used_at=code.used_at,
+            is_used=code.is_used,
+            enrollment_url=enrollment_url
+        ))
+    
+    return responses
+
+
+@router.delete("/enrollment/codes/{code_id}")
+async def delete_enrollment_code(
+    code_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user)
+):
+    """Delete an unused enrollment code."""
+    # Get enrollment code
+    result = await session.execute(
+        select(EnrollmentCode).where(EnrollmentCode.id == code_id)
+    )
+    enrollment_code = result.scalar_one_or_none()
+    
+    if not enrollment_code:
+        raise HTTPException(status_code=404, detail="Enrollment code not found")
+    
+    # Check if already used
+    if enrollment_code.is_used:
+        raise HTTPException(status_code=409, detail="Cannot delete used enrollment code")
+    
+    # Get client and check permissions
+    client_result = await session.execute(
+        select(Client).where(Client.id == enrollment_code.client_id)
+    )
+    client = client_result.scalar_one_or_none()
+    
+    # Check permissions: admin, owner, or can_download_config
+    is_admin = bool(user.role and user.role.name == "admin")
+    is_owner = client.owner_user_id == user.id if client else False
+    
+    if not is_admin and not is_owner:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    await session.delete(enrollment_code)
+    await session.commit()
+    
+    return {"status": "deleted", "id": code_id}
+
+
+# ============ Public Enrollment Endpoint (no auth required) ============
+
+@enrollment_router.post("/enroll", response_model=MobileEnrollmentResponse)
+async def enroll_mobile_device(
+    body: EnrollmentRequest,
+    session: AsyncSession = Depends(get_session)
+):
+    """Public endpoint for Mobile Nebula device enrollment using one-time code.
+    
+    This endpoint is unauthenticated and used by the Mobile Nebula app to enroll devices.
+    """
+    from sqlalchemy.orm import selectinload
+    from ..models.client import FirewallRuleset
+    
+    # Validate enrollment code
+    code_result = await session.execute(
+        select(EnrollmentCode)
+        .options(selectinload(EnrollmentCode.client))
+        .where(EnrollmentCode.code == body.code)
+    )
+    enrollment_code = code_result.scalar_one_or_none()
+    
+    if not enrollment_code:
+        raise HTTPException(status_code=404, detail="Invalid enrollment code")
+    
+    # Check if code already used
+    if enrollment_code.is_used:
+        raise HTTPException(status_code=410, detail="Enrollment code already used")
+    
+    # Check if code expired
+    now = datetime.utcnow()
+    if now > enrollment_code.expires_at:
+        raise HTTPException(status_code=410, detail="Enrollment code expired")
+    
+    # Get client with relationships
+    client_result = await session.execute(
+        select(Client)
+        .options(
+            selectinload(Client.groups),
+            selectinload(Client.firewall_rulesets).selectinload(FirewallRuleset.rules).selectinload(FirewallRule.groups)
+        )
+        .where(Client.id == enrollment_code.client_id)
+    )
+    client = client_result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    # Check if client is blocked
+    if client.is_blocked:
+        raise HTTPException(status_code=403, detail="Client is blocked")
+    
+    # Verify client has IP assignment
+    ip_result = await session.execute(
+        select(IPAssignment).where(IPAssignment.client_id == client.id)
+    )
+    ip_assignment = ip_result.scalar_one_or_none()
+    if not ip_assignment:
+        raise HTTPException(status_code=409, detail="Client has no IP assignment")
+    
+    # Load settings and active CA(s)
+    settings = (await session.execute(select(GlobalSettings))).scalars().first()
+    cas = (
+        await session.execute(
+            select(CACertificate).where(
+                CACertificate.include_in_config == True,
+                CACertificate.not_after > now,
+            )
+        )
+    ).scalars().all()
+    
+    if not cas:
+        raise HTTPException(status_code=503, detail="No active CA configured")
+    
+    # Determine IP/CIDR prefix for certificate
+    if ip_assignment.pool_id:
+        pool = (await session.execute(select(IPPool).where(IPPool.id == ip_assignment.pool_id))).scalars().first()
+        cidr = pool.cidr if pool else (settings.default_cidr_pool if settings else "10.100.0.0/16")
+    else:
+        cidr = settings.default_cidr_pool if settings else "10.100.0.0/16"
+    
+    try:
+        prefix = ipaddress.ip_network(cidr, strict=False).prefixlen
+    except Exception:
+        prefix = 24
+    
+    client_ip_cidr = f"{ip_assignment.ip_address}/{prefix}"
+    
+    # Issue client certificate using provided public key
+    cert_mgr = CertManager(session)
+    client_cert_pem, not_before, not_after = await cert_mgr.issue_or_rotate_client_cert(
+        client=client,
+        public_key_str=body.public_key,
+        client_ip=ip_assignment.ip_address,
+        cidr_prefix=prefix,
+    )
+    
+    # Build lighthouse maps
+    lighthouses = (
+        await session.execute(select(Client).where(Client.is_lighthouse == True))
+    ).scalars().all()
+    static_map: dict[str, list[str]] = {}
+    lh_hosts: list[str] = []
+    for lh in lighthouses:
+        lh_ip_row = (await session.execute(select(IPAssignment).where(IPAssignment.client_id == lh.id))).scalars().first()
+        if not lh_ip_row or not lh.public_ip:
+            continue
+        
+        # Only include lighthouse if it's in the same pool
+        if lh_ip_row.pool_id != ip_assignment.pool_id:
+            continue
+        
+        lh_hosts.append(lh_ip_row.ip_address)
+        static_map[lh_ip_row.ip_address] = [f"{lh.public_ip}:{settings.lighthouse_port if settings else 4242}"]
+    
+    # Build inline CA bundle
+    ca_bundle = "".join([(c.pem_cert.decode().rstrip() + "\n") for c in cas])
+    
+    # Collect revoked fingerprints
+    revoked_rows = (
+        await session.execute(
+            select(ClientCertificate.fingerprint).where(
+                ClientCertificate.revoked == True,
+                ClientCertificate.not_after > now,
+                ClientCertificate.fingerprint.isnot(None)
+            )
+        )
+    ).scalars().all()
+    revoked_fps = [fp for fp in revoked_rows if fp]
+    
+    # Build config YAML
+    config_yaml = build_nebula_config(
+        client=client,
+        client_ip_cidr=client_ip_cidr,
+        settings=settings,
+        static_host_map=static_map,
+        lighthouse_host_ips=lh_hosts,
+        revoked_fingerprints=revoked_fps,
+        key_path="/var/lib/nebula/host.key",
+        ca_path="/etc/nebula/ca.crt",
+        cert_path="/etc/nebula/host.crt",
+        inline_ca_pem=ca_bundle,
+        inline_cert_pem=client_cert_pem,
+    )
+    
+    # Mark enrollment code as used and record device info
+    enrollment_code.is_used = True
+    enrollment_code.used_at = now
+    if body.device_name:
+        enrollment_code.device_name = body.device_name
+    if body.device_id:
+        enrollment_code.device_id = body.device_id
+    if body.platform:
+        enrollment_code.platform = body.platform
+    
+    # Update client's last config download timestamp
+    client.last_config_download_at = now
+    
+    await session.commit()
+    
+    # Return Mobile Nebula compatible response
+    return MobileEnrollmentResponse(
+        config=config_yaml,
+        cert=client_cert_pem,
+        ca=ca_bundle,
+        hostID=client.name,
+        counter=1,  # Always 1 for new enrollments
+        trusted_keys=[]  # Optional: could include CA fingerprints
+    )

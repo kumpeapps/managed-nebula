@@ -473,3 +473,47 @@ class UserGroupMembershipResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ============ Enrollment Code Schemas ============
+
+class EnrollmentCodeCreate(BaseModel):
+    """Create model for mobile enrollment code."""
+    client_id: int
+    validity_hours: int = 24  # Default 24 hours, max 168 (7 days)
+    device_name: Optional[str] = None  # Optional device name/notes
+
+class EnrollmentCodeResponse(BaseModel):
+    """Response model for enrollment code."""
+    id: int
+    code: str
+    client_id: int
+    client_name: str  # Denormalized for convenience
+    device_name: Optional[str]
+    device_id: Optional[str]
+    platform: Optional[str]
+    created_at: datetime
+    expires_at: datetime
+    used_at: Optional[datetime]
+    is_used: bool
+    enrollment_url: str  # Full URL for convenience
+    
+    class Config:
+        from_attributes = True
+
+class EnrollmentRequest(BaseModel):
+    """Request model for mobile device enrollment (public endpoint)."""
+    code: str
+    public_key: str  # Ed25519 public key from Mobile Nebula
+    device_name: Optional[str] = None
+    device_id: Optional[str] = None
+    platform: Optional[str] = None  # "iOS", "Android", etc.
+
+class MobileEnrollmentResponse(BaseModel):
+    """Response model for mobile enrollment (Mobile Nebula compatible format)."""
+    config: str  # Full Nebula YAML config
+    cert: str  # PEM-encoded client certificate
+    ca: str  # PEM-encoded CA certificate(s)
+    hostID: str  # Client identifier (name)
+    counter: int  # Config version (always 1 for new enrollments)
+    trusted_keys: List[str] = []  # Optional: CA fingerprints
