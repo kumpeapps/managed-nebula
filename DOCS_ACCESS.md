@@ -43,7 +43,8 @@ The Managed Nebula platform now proxies API documentation through the frontend n
 The Managed Nebula API documentation is now accessible through the frontend HTTPS proxy:
 
 ### Swagger UI (Interactive API Documentation)
-- **URL**: `https://localhost/api/docs` (or `https://your-domain/api/docs`)
+- **Production**: `https://localhost/api/docs` (or `https://your-domain/api/docs`)
+- **Development**: `https://localhost/api/docs`
 - **Description**: Interactive API documentation with "Try it out" functionality
 - **Features**: 
   - Browse all API endpoints
@@ -52,7 +53,8 @@ The Managed Nebula API documentation is now accessible through the frontend HTTP
   - View authentication requirements
 
 ### ReDoc (Alternative Documentation)
-- **URL**: `https://localhost/api/redoc` (or `https://your-domain/api/redoc`)
+- **Production**: `https://localhost/api/redoc` (or `https://your-domain/api/redoc`)
+- **Development**: `https://localhost/api/redoc`
 - **Description**: Clean, responsive API documentation
 - **Features**:
   - Beautiful three-panel layout
@@ -61,8 +63,9 @@ The Managed Nebula API documentation is now accessible through the frontend HTTP
   - Download OpenAPI spec
 
 ### OpenAPI JSON Schema
-- **URL**: `https://localhost/api/openapi.json` (or `https://your-domain/api/openapi.json`)
-- **Description**: Raw OpenAPI 3.0 specification in JSON format
+- **Production**: `https://localhost/api/openapi.json` (or `https://your-domain/api/openapi.json`)
+- **Development**: `https://localhost/api/openapi.json`
+- **Description**: Raw OpenAPI 3.1.0 specification in JSON format
 - **Use Cases**:
   - Import into API testing tools (Postman, Insomnia, etc.)
   - Generate client libraries
@@ -92,8 +95,11 @@ Access documentation at:
 DOMAIN=localhost docker compose -f development-docker-compose-server.yml up -d
 ```
 Access documentation at:
-- `https://localhost:4200/api/docs` (frontend on port 4200)
-- `http://localhost:8080/docs` (direct server access)
+- `https://localhost/api/docs` (Swagger UI via frontend proxy on port 4200)
+- `https://localhost/api/redoc` (ReDoc via frontend proxy on port 4200)
+- `https://localhost/api/openapi.json` (OpenAPI spec via frontend proxy)
+- `http://localhost:8080/docs` (direct server access - Swagger UI)
+- `http://localhost:8080/redoc` (direct server access - ReDoc)
 
 ## Authentication
 
@@ -106,7 +112,9 @@ The documentation endpoints themselves do not require authentication. However:
 
 ## Testing API Endpoints from Swagger UI
 
-1. Navigate to `https://localhost/api/docs`
+1. Navigate to the appropriate URL:
+   - **Production**: `https://localhost/api/docs`
+   - **Development**: `https://localhost/api/docs`
 2. If testing authenticated endpoints:
    - First login through the web UI (`/login`)
    - Your session cookie will be automatically sent with test requests
@@ -143,7 +151,9 @@ location = /api/docs {
 ### Documentation Not Loading
 1. Verify containers are running: `docker compose ps`
 2. Check nginx logs: `docker compose logs frontend`
-3. Verify server is healthy: `curl -k https://localhost/api/v1/healthz`
+3. Verify server is healthy:
+   - **Production**: `curl -k https://localhost/api/v1/healthz`
+   - **Development**: `curl -k https://localhost/api/v1/healthz`
 
 ### "Not Found" Errors
 - Ensure you're using the correct URL path: `/api/docs` (not `/docs`)
@@ -155,8 +165,25 @@ location = /api/docs {
 - Verify CORS settings allow your domain
 - Ensure session cookies are being sent (for authenticated endpoints)
 
+## Recent Improvements
+
+### Fixed OpenAPI Version Issue
+- **Problem**: Swagger UI displayed "Unable to render this definition" due to missing OpenAPI version
+- **Solution**: Added explicit `openapi_version="3.1.0"` to FastAPI configuration
+- **Result**: Valid OpenAPI 3.1.0 specification with proper documentation rendering
+
+### Fixed ReDoc JavaScript Library Issue  
+- **Problem**: ReDoc failed to load due to invalid CDN URL (`@next` tag didn't exist)
+- **Solution**: Custom ReDoc endpoint using stable version (`redoc@2.1.3`)
+- **Result**: Working ReDoc documentation with proper JavaScript library loading
+
+### Enhanced nginx Proxy Configuration
+- **Problem**: Frontend proxy couldn't serve `/openapi.json` from root path
+- **Solution**: Added nginx location rules for both `/api/openapi.json` and `/openapi.json`
+- **Result**: Swagger UI and ReDoc can load OpenAPI spec through frontend proxy
+
 ## Related Files
 
 - `frontend/nginx.conf` - Non-SSL proxy configuration
-- `frontend/nginx-ssl.conf.template` - SSL proxy configuration template
-- `server/app/main.py` - FastAPI application with docs configuration
+- `frontend/nginx-ssl.conf.template` - SSL proxy configuration template  
+- `server/app/main.py` - FastAPI application with docs configuration and custom ReDoc endpoint
