@@ -48,6 +48,10 @@ from ..models.schemas import (
     ClientConfigDownloadResponse,
     SettingsResponse,
     SettingsUpdate,
+    DockerComposeTemplateResponse,
+    DockerComposeTemplateUpdate,
+    PlaceholderInfo,
+    PlaceholdersResponse,
     ClientCreate,
     ClientPermissionGrant,
     ClientPermissionResponse,
@@ -154,7 +158,8 @@ async def get_settings(session: AsyncSession = Depends(get_session), user: User 
     return SettingsResponse(
         punchy_enabled=row.punchy_enabled,
         client_docker_image=row.client_docker_image,
-        server_url=row.server_url
+        server_url=row.server_url,
+        docker_compose_template=row.docker_compose_template
     )
 
 @router.put("/settings", response_model=SettingsResponse)
@@ -169,13 +174,96 @@ async def update_settings(body: SettingsUpdate, session: AsyncSession = Depends(
         row.client_docker_image = body.client_docker_image
     if body.server_url is not None:
         row.server_url = body.server_url
+    if body.docker_compose_template is not None:
+        # Validate YAML
+        try:
+            yaml.safe_load(body.docker_compose_template)
+        except yaml.YAMLError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid YAML: {str(e)}")
+        row.docker_compose_template = body.docker_compose_template
     await session.commit()
     await session.refresh(row)
     return SettingsResponse(
         punchy_enabled=row.punchy_enabled,
         client_docker_image=row.client_docker_image,
-        server_url=row.server_url
+        server_url=row.server_url,
+        docker_compose_template=row.docker_compose_template
     )
+
+
+# ============ Docker Compose Template Settings ============
+@router.get("/settings/docker-compose-template", response_model=DockerComposeTemplateResponse)
+async def get_docker_compose_template(
+    session: AsyncSession = Depends(get_session), 
+    user: User = Depends(require_admin)
+):
+    """Retrieve the current docker-compose template (admin-only)."""
+    row = (await session.execute(select(GlobalSettings))).scalars().first()
+    if not row:
+        # Create defaults if missing
+        row = GlobalSettings()
+        session.add(row)
+        await session.commit()
+        await session.refresh(row)
+    return DockerComposeTemplateResponse(template=row.docker_compose_template)
+
+
+@router.put("/settings/docker-compose-template", response_model=DockerComposeTemplateResponse)
+async def update_docker_compose_template(
+    body: DockerComposeTemplateUpdate,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_admin)
+):
+    """Update the docker-compose template with validation (admin-only)."""
+    # Validate YAML structure
+    try:
+        yaml.safe_load(body.template)
+    except yaml.YAMLError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid YAML: {str(e)}")
+    
+    row = (await session.execute(select(GlobalSettings))).scalars().first()
+    if not row:
+        row = GlobalSettings()
+        session.add(row)
+    
+    row.docker_compose_template = body.template
+    await session.commit()
+    await session.refresh(row)
+    
+    return DockerComposeTemplateResponse(template=row.docker_compose_template)
+
+
+@router.get("/settings/placeholders", response_model=PlaceholdersResponse)
+async def get_placeholders(user: User = Depends(require_admin)):
+    """List available placeholders with descriptions (admin-only)."""
+    placeholders = [
+        PlaceholderInfo(
+            name="{{CLIENT_NAME}}",
+            description="Client hostname/identifier",
+            example="my-client"
+        ),
+        PlaceholderInfo(
+            name="{{CLIENT_TOKEN}}",
+            description="Authentication token for API access",
+            example="abc123..."
+        ),
+        PlaceholderInfo(
+            name="{{SERVER_URL}}",
+            description="Full API endpoint URL",
+            example="https://nebula.example.com"
+        ),
+        PlaceholderInfo(
+            name="{{CLIENT_DOCKER_IMAGE}}",
+            description="Docker image reference",
+            example="ghcr.io/kumpeapps/managed-nebula/client:latest"
+        ),
+        PlaceholderInfo(
+            name="{{POLL_INTERVAL_HOURS}}",
+            description="Config polling frequency in hours",
+            example="24"
+        ),
+    ]
+    return PlaceholdersResponse(placeholders=placeholders)
 
 
 @router.post("/client/config")
@@ -1238,31 +1326,20 @@ async def download_client_docker_compose(
     if not token:
         raise HTTPException(status_code=409, detail="Client has no active token")
     
-    # Get settings for Docker image and server URL
+    # Get settings for template and values
     settings = (await session.execute(select(GlobalSettings))).scalars().first()
-    docker_image = settings.client_docker_image if settings else "ghcr.io/kumpeapps/managed-nebula-client:latest"
-    server_url = settings.server_url if settings else "http://localhost:8080"
+    if not settings:
+        settings = GlobalSettings()
     
-    # Build docker-compose.yml content
-    compose_content = f"""services:
-  nebula-client:
-    image: {docker_image}
-    container_name: {client.name}-nebula
-    restart: unless-stopped
-    cap_add:
-      - NET_ADMIN
-    devices:
-      - /dev/net/tun
-    environment:
-      - SERVER_URL={server_url}
-      - CLIENT_TOKEN={token.token}
-      - POLL_INTERVAL_HOURS=24
-      - START_NEBULA=true
-    volumes:
-      - ./nebula-data:/var/lib/nebula
-      - ./nebula-config:/etc/nebula
-    network_mode: host
-"""
+    # Get template
+    template = settings.docker_compose_template
+    
+    # Replace placeholders
+    compose_content = template.replace("{{CLIENT_NAME}}", client.name)
+    compose_content = compose_content.replace("{{CLIENT_TOKEN}}", token.token)
+    compose_content = compose_content.replace("{{SERVER_URL}}", settings.server_url)
+    compose_content = compose_content.replace("{{CLIENT_DOCKER_IMAGE}}", settings.client_docker_image)
+    compose_content = compose_content.replace("{{POLL_INTERVAL_HOURS}}", "24")
     
     # Return as downloadable file
     return Response(

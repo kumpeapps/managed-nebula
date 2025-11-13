@@ -370,11 +370,35 @@ class SettingsResponse(BaseModel):
     punchy_enabled: bool
     client_docker_image: str
     server_url: str
+    docker_compose_template: str
 
 class SettingsUpdate(BaseModel):
     punchy_enabled: bool | None = None
     client_docker_image: str | None = None
     server_url: str | None = None
+    docker_compose_template: str | None = None
+
+
+class DockerComposeTemplateResponse(BaseModel):
+    """Response model for docker-compose template."""
+    template: str
+
+
+class DockerComposeTemplateUpdate(BaseModel):
+    """Update model for docker-compose template."""
+    template: str
+
+
+class PlaceholderInfo(BaseModel):
+    """Information about a placeholder."""
+    name: str
+    description: str
+    example: str
+
+
+class PlaceholdersResponse(BaseModel):
+    """Response model listing all available placeholders."""
+    placeholders: List[PlaceholderInfo]
 
 
 # ============ Client Permissions Schemas ============

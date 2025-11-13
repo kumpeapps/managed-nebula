@@ -1,6 +1,28 @@
-from sqlalchemy import String, Integer, Boolean
+from sqlalchemy import String, Integer, Boolean, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from ..db import Base
+
+
+# Default docker-compose template with placeholders
+DEFAULT_DOCKER_COMPOSE_TEMPLATE = """version: '3.8'
+
+services:
+  nebula-client:
+    image: {{CLIENT_DOCKER_IMAGE}}
+    container_name: nebula-{{CLIENT_NAME}}
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    environment:
+      SERVER_URL: {{SERVER_URL}}
+      CLIENT_TOKEN: {{CLIENT_TOKEN}}
+      POLL_INTERVAL_HOURS: {{POLL_INTERVAL_HOURS}}
+    volumes:
+      - ./nebula-config:/etc/nebula
+      - ./nebula-data:/var/lib/nebula
+    network_mode: host"""
 
 
 class GlobalSettings(Base):
@@ -19,3 +41,5 @@ class GlobalSettings(Base):
     client_docker_image: Mapped[str] = mapped_column(String(500), default="ghcr.io/kumpeapps/managed-nebula/client:latest")
     # Server URL for client docker-compose files
     server_url: Mapped[str] = mapped_column(String(500), default="http://localhost:8080")
+    # Docker-compose template with placeholders
+    docker_compose_template: Mapped[str] = mapped_column(Text, default=DEFAULT_DOCKER_COMPOSE_TEMPLATE)

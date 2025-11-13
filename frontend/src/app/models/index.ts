@@ -197,12 +197,28 @@ export interface Settings {
   punchy_enabled: boolean;
   client_docker_image: string;
   server_url: string;
+  docker_compose_template: string;
 }
 
 export interface SettingsUpdate {
   punchy_enabled?: boolean;
   client_docker_image?: string;
   server_url?: string;
+  docker_compose_template?: string;
+}
+
+export interface DockerComposeTemplate {
+  template: string;
+}
+
+export interface Placeholder {
+  name: string;
+  description: string;
+  example: string;
+}
+
+export interface PlaceholdersResponse {
+  placeholders: Placeholder[];
 }
 
 // Client create request payload
