@@ -131,15 +131,33 @@ docker-compose up -d server
 Additional deployment examples are provided:
 
 ```bash
-# HTTPS reverse proxy + server + frontend
-docker compose -f docker-compose-server.yml up -d --build
+# Production-like: Frontend terminates TLS and proxies /api to server
+DOMAIN=nebula.example.com \
+  docker compose -f docker-compose-server.yml up -d
 
 # Standalone client example (requires CLIENT_TOKEN and SERVER_URL)
-CLIENT_TOKEN=your-token SERVER_URL=https://your-domain \ 
-  docker compose -f docker-compose-client.yml up -d --build
+CLIENT_TOKEN=your-token SERVER_URL=https://your-domain \
+  docker compose -f docker-compose-client.yml up -d
 ```
 
-The `docker-compose-server.yml` file includes an Nginx reverse proxy terminating TLS on port 443. You must supply your own certificate and key in the `./certs` directory on the host. By default, the proxy expects `tls.crt` and `tls.key`, but you can override just the filenames using the `SSL_CERT_NAME` and `SSL_KEY_NAME` environment variables (e.g., for `.pem` or custom-named files). No self-signed certificates are generated automatically.
+About `docker-compose-server.yml`:
+- The Angular frontend container serves the SPA and terminates HTTPS on port 443
+- It proxies all `/api/*` requests to the FastAPI server service on the internal network
+- If you mount real certs at `./certs` on the host, set their names via `SSL_CERT_NAME` and `SSL_KEY_NAME`
+- If no certs are mounted, the container will generate a self-signed certificate for `DOMAIN` (default: `localhost`)
+
+Environment variables for TLS:
+- `DOMAIN` (default `localhost`) – Common Name used for self-signed fallback and redirects
+- `SSL_CERT_NAME` (default `tls.crt`) – Filename of the certificate inside `/etc/nginx/certs`
+- `SSL_KEY_NAME` (default `tls.key`) – Filename of the private key inside `/etc/nginx/certs`
+
+Optional host certificate mount:
+```yaml
+services:
+  frontend:
+    volumes:
+      - ./certs:/etc/nginx/certs:ro
+```
 
 The `docker-compose-client.yml` file demonstrates a single Nebula client container using host networking and required TUN capabilities.
 
@@ -152,7 +170,7 @@ services:
     image: ghcr.io/kumpeapps/managed-nebula/frontend:latest
 ```
 
-The server API will be available at `http://localhost:8080` and the Angular frontend at `http://localhost:4200`.
+When using `docker-compose-server.yml`, the frontend is served at `https://<DOMAIN>` and the API is available under `https://<DOMAIN>/api/`.
 
 ### 2️⃣ Initial Setup
 
