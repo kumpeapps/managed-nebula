@@ -18,6 +18,7 @@ import { AuthService } from '../services/auth.service';
       <div class="nav-links" [class.mobile-open]="mobileMenuOpen">
         <a routerLink="/dashboard" routerLinkActive="active" (click)="closeMobileMenu()">Dashboard</a>
         <a routerLink="/clients" routerLinkActive="active" (click)="closeMobileMenu()">Clients</a>
+        <a routerLink="/enrollment" routerLinkActive="active" (click)="closeMobileMenu()">Mobile Enrollment</a>
         <a routerLink="/groups" routerLinkActive="active" (click)="closeMobileMenu()">Groups</a>
         <a routerLink="/firewall-rules" routerLinkActive="active" (click)="closeMobileMenu()">Firewall Rules</a>
         <a routerLink="/ip-pools" routerLinkActive="active" (click)="closeMobileMenu()">IP Pools</a>

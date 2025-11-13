@@ -233,3 +233,25 @@ export interface ClientCreateRequest {
   ip_group_id?: number | null;
   ip_address?: string | null;
 }
+
+// Enrollment code interfaces
+export interface EnrollmentCode {
+  id: number;
+  code: string;
+  client_id: number;
+  client_name: string;
+  device_name: string | null;
+  device_id: string | null;
+  platform: string | null;
+  created_at: string;
+  expires_at: string;
+  used_at: string | null;
+  is_used: boolean;
+  enrollment_url: string;
+}
+
+export interface EnrollmentCodeCreateRequest {
+  client_id: number;
+  validity_hours: number;  // 1-168 hours (1 hour to 7 days)
+  device_name?: string | null;
+}

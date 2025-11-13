@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { Client, Group, FirewallRule, FirewallRuleset, IPPool, IPGroup, AvailableIP, CACertificate, User, ClientUpdateRequest, ClientCreateRequest, ClientCertificate, ClientConfigDownload, Settings, SettingsUpdate, DockerComposeTemplate, PlaceholdersResponse } from '../models';
+import { Client, Group, FirewallRule, FirewallRuleset, IPPool, IPGroup, AvailableIP, CACertificate, User, ClientUpdateRequest, ClientCreateRequest, ClientCertificate, ClientConfigDownload, Settings, SettingsUpdate, DockerComposeTemplate, PlaceholdersResponse, EnrollmentCode, EnrollmentCodeCreateRequest } from '../models';
 
 @Injectable({
   providedIn: 'root'
@@ -282,5 +282,18 @@ export class ApiService {
 
   getPlaceholders(): Observable<PlaceholdersResponse> {
     return this.http.get<PlaceholdersResponse>(`${this.apiUrl}/settings/placeholders`, { withCredentials: true });
+  }
+  // Enrollment code endpoints
+
+  getEnrollmentCodes(): Observable<EnrollmentCode[]> {
+    return this.http.get<EnrollmentCode[]>(`${this.apiUrl}/enrollment/codes`, { withCredentials: true });
+  }
+
+  createEnrollmentCode(data: EnrollmentCodeCreateRequest): Observable<EnrollmentCode> {
+    return this.http.post<EnrollmentCode>(`${this.apiUrl}/enrollment/codes`, data, { withCredentials: true });
+  }
+
+  deleteEnrollmentCode(id: number): Observable<{ status: string; id: number }> {
+    return this.http.delete<{ status: string; id: number }>(`${this.apiUrl}/enrollment/codes/${id}`, { withCredentials: true });
   }
 }

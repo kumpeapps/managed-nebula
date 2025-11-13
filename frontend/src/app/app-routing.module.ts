@@ -13,6 +13,7 @@ import { CAComponent } from './components/ca.component';
 import { UsersComponent } from './components/users.component';
 import { UserGroupsComponent } from './components/user-groups.component';
 import { SettingsComponent } from './components/settings.component';
+import { EnrollmentCodesComponent } from './components/enrollment-codes.component';
 
 const routes: Routes = [
   { path: 'login', component: LoginComponent },
@@ -27,6 +28,7 @@ const routes: Routes = [
   { path: 'users', component: UsersComponent, canActivate: [AuthGuard] },
   { path: 'user-groups', component: UserGroupsComponent, canActivate: [AuthGuard] },
   { path: 'settings', component: SettingsComponent, canActivate: [AuthGuard] },
+  { path: 'enrollment', component: EnrollmentCodesComponent, canActivate: [AuthGuard] },
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' }
 ];
 
