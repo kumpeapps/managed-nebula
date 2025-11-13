@@ -18,7 +18,28 @@
 			"enableNonRootDocker": "true"
 		}
 	},
-	"forwardPorts": [443,8080,4200]
+	"forwardPorts": [8443,8080,4200],
+	"portsAttributes": {
+		"8443": {
+			"label": "Frontend HTTPS (Mapped from 443)",
+			"protocol": "https",
+			"onAutoForward": "notify"
+		},
+		"8080": {
+			"label": "Server API",
+			"protocol": "http",
+			"onAutoForward": "notify"
+		},
+		"4200": {
+			"label": "Angular Dev Server",
+			"protocol": "http",
+			"onAutoForward": "notify"
+		}
+	},
+	"postCreateCommand": "echo 'Dev container setup complete. Ports 443, 8080, and 4200 should be forwarded.'",
+	"remoteEnv": {
+		"DISPLAY": "${localEnv:DISPLAY}"
+	}
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
