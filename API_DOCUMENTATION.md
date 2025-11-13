@@ -569,7 +569,181 @@ curl -X POST http://localhost:8080/api/v1/client/config \
 
 ---
 
-**Last Updated:** 2025-11-08  
+## Mobile Enrollment Codes (`/enrollment/codes`)
+
+Manage one-time enrollment codes for Mobile Nebula devices. These codes allow mobile users to enroll their devices by scanning a QR code or entering an enrollment URL.
+
+### Generate Enrollment Code
+```
+POST /api/v1/enrollment/codes
+```
+**Authentication:** Required (admin, client owner, or can_download_config permission)
+
+**Request Body:**
+```json
+{
+  "client_id": 1,
+  "validity_hours": 24,
+  "device_name": "John's iPhone"  // Optional
+}
+```
+
+**Validation:**
+- `validity_hours` must be between 1 and 168 (7 days)
+- Client must have an IP assignment
+- User must have permission to access the client
+
+**Response:**
+```json
+{
+  "id": 1,
+  "code": "abc123...",
+  "client_id": 1,
+  "client_name": "mobile-client",
+  "device_name": "John's iPhone",
+  "device_id": null,
+  "platform": null,
+  "created_at": "2025-11-13T00:00:00",
+  "expires_at": "2025-11-14T00:00:00",
+  "used_at": null,
+  "is_used": false,
+  "enrollment_url": "http://localhost:8080/enroll?code=abc123..."
+}
+```
+
+### List Enrollment Codes
+```
+GET /api/v1/enrollment/codes
+```
+**Authentication:** Required
+
+**Returns:** Array of enrollment codes filtered by user permissions (admin sees all, others see only their clients)
+
+### Delete Enrollment Code
+```
+DELETE /api/v1/enrollment/codes/{code_id}
+```
+**Authentication:** Required (admin or client owner)
+
+**Returns:** `{"status": "deleted", "id": code_id}`
+
+**Error:** `409 Conflict` if code has already been used
+
+---
+
+## Public Enrollment Endpoint
+
+### Mobile Device Enrollment
+```
+POST /enroll
+```
+**Authentication:** None (public endpoint)
+
+**Request Body:**
+```json
+{
+  "code": "abc123...",
+  "public_key": "-----BEGIN NEBULA ED25519 PUBLIC KEY-----\n...",
+  "device_name": "John's iPhone",  // Optional
+  "device_id": "ABC123",           // Optional
+  "platform": "iOS"                // Optional
+}
+```
+
+**Response (Mobile Nebula compatible format):**
+```json
+{
+  "config": "pki:\n  ca: |\n    -----BEGIN NEBULA CERTIFICATE-----\n...",
+  "cert": "-----BEGIN NEBULA CERTIFICATE-----\n...",
+  "ca": "-----BEGIN NEBULA CERTIFICATE-----\n...",
+  "hostID": "mobile-client",
+  "counter": 1,
+  "trusted_keys": []
+}
+```
+
+**Error Responses:**
+- `404 Not Found`: Invalid enrollment code
+- `410 Gone`: Code expired or already used
+- `409 Conflict`: Client has no IP assignment
+- `503 Service Unavailable`: No active CA configured
+
+**Process:**
+1. Mobile app generates Ed25519 keypair locally
+2. App scans QR code or enters enrollment URL to get code
+3. App sends enrollment request with public key and code
+4. Server validates code, issues certificate, marks code as used
+5. App receives config and certificates, starts Nebula daemon
+
+**One-Time Use:** Each enrollment code can only be used once. After successful enrollment, the code is marked as used and cannot be reused.
+
+---
+
+## Example: Mobile Enrollment Flow
+
+### 1. Admin Generates Enrollment Code
+```bash
+curl -X POST http://localhost:8080/api/v1/enrollment/codes \
+  -H "Content-Type: application/json" \
+  -b "session=..." \
+  -d '{
+    "client_id": 5,
+    "validity_hours": 48,
+    "device_name": "Sales Team iPad"
+  }'
+```
+
+**Response:**
+```json
+{
+  "id": 1,
+  "code": "k8sDf3jK9mL2pQ4xY7zA...",
+  "enrollment_url": "http://nebula.company.com/enroll?code=k8sDf3jK9mL2pQ4xY7zA...",
+  "expires_at": "2025-11-15T00:00:00"
+}
+```
+
+### 2. Admin Shares QR Code or URL
+- Display QR code in web UI
+- User scans with Mobile Nebula app
+- Or user manually enters URL in app
+
+### 3. Mobile App Enrolls Device
+```bash
+curl -X POST http://nebula.company.com/enroll \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "k8sDf3jK9mL2pQ4xY7zA...",
+    "public_key": "-----BEGIN NEBULA ED25519 PUBLIC KEY-----\nABC...\n-----END NEBULA ED25519 PUBLIC KEY-----",
+    "device_name": "iPad Pro",
+    "device_id": "12345-ABCDE",
+    "platform": "iOS"
+  }'
+```
+
+**Response:** Full Nebula config with embedded certificates
+
+### 4. Code is Marked as Used
+```bash
+curl http://localhost:8080/api/v1/enrollment/codes -b "session=..."
+```
+
+**Response shows code is now used:**
+```json
+[{
+  "id": 1,
+  "code": "k8sDf3jK9mL2pQ4xY7zA...",
+  "is_used": true,
+  "used_at": "2025-11-13T14:30:00",
+  "device_name": "iPad Pro",
+  "device_id": "12345-ABCDE",
+  "platform": "iOS"
+}]
+```
+
+---
+
+**Last Updated:** 2025-11-13  
 **API Version:** v1  
 **Server:** FastAPI with SQLAlchemy async  
-**Authentication:** Session-based (web) + Token-based (client agent)
+**Authentication:** Session-based (web) + Token-based (client agent) + Code-based (mobile enrollment)
