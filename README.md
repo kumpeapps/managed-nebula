@@ -198,7 +198,7 @@ If automatic bootstrap doesn't work (e.g., with MySQL), create an admin user man
 ./scripts/create-admin.sh admin@example.com
 
 # Using docker-compose
-docker-compose exec server python manage.py create-admin admin@example.com
+docker compose exec server python manage.py create-admin admin@example.com
 
 # Using docker directly
 docker exec -it managed-nebula-server python manage.py create-admin admin@example.com

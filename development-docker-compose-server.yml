@@ -54,10 +54,9 @@ services:
       - SSL_KEY_NAME=${SSL_KEY_NAME:-tls.key}
       - DOMAIN=${DOMAIN:-localhost}
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./certs:/etc/nginx/certs:ro
+      - "4200:443"
+    # volumes:
+    #   - ./certs:/etc/nginx/certs:ro
     restart: unless-stopped
     networks:
       - nebula
