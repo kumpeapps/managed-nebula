@@ -517,9 +517,7 @@ export class SettingsComponent implements OnInit {
 
   resetTemplate(): void {
     if (confirm('Are you sure you want to reset the template to default? This will discard your current template.')) {
-      const defaultTemplate = `version: '3.8'
-
-services:
+      const defaultTemplate = `services:
   nebula-client:
     image: {{CLIENT_DOCKER_IMAGE}}
     container_name: nebula-{{CLIENT_NAME}}
