@@ -54,4 +54,36 @@ export class NotificationService {
     console.error(context || 'HTTP Error', error);
     this.notify(message, 'error');
   }
+
+  /**
+   * Convenience method to show error messages.
+   * @param message The error message to display.
+   */
+  showError(message: string): void {
+    this.notify(message, 'error');
+  }
+
+  /**
+   * Convenience method to show success messages.
+   * @param message The success message to display.
+   */
+  showSuccess(message: string): void {
+    this.notify(message, 'success');
+  }
+
+  /**
+   * Convenience method to show warning messages.
+   * @param message The warning message to display.
+   */
+  showWarning(message: string): void {
+    this.notify(message, 'warning');
+  }
+
+  /**
+   * Convenience method to show info messages.
+   * @param message The info message to display.
+   */
+  showInfo(message: string): void {
+    this.notify(message, 'info');
+  }
 }

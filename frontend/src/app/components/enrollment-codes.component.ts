@@ -4,12 +4,12 @@ import { FormsModule } from '@angular/forms';
 import { ApiService } from '../services/api.service';
 import { NotificationService } from '../services/notification.service';
 import { EnrollmentCode, EnrollmentCodeCreateRequest, Client } from '../models';
-import { QRCodeModule } from 'angularx-qrcode';
+import { QRCodeComponent } from 'angularx-qrcode';
 
 @Component({
   selector: 'app-enrollment-codes',
   standalone: true,
-  imports: [CommonModule, FormsModule, QRCodeModule],
+  imports: [CommonModule, FormsModule, QRCodeComponent],
   template: `
     <div class="container mt-4">
       <h2>Mobile Enrollment Codes</h2>

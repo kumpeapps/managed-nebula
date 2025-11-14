@@ -16,6 +16,10 @@
 		"ghcr.io/devcontainers/features/docker-in-docker:2": {
 			"version": "latest",
 			"enableNonRootDocker": "true"
+		},
+		"ghcr.io/devcontainers/features/node:1": {
+			"version": "20",
+			"installTools": "true"
 		}
 	},
 	"forwardPorts": [8443,8080,4200],
