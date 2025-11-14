@@ -38,6 +38,29 @@ fi
 
 # Start background poller
 python3 /app/agent.py --loop &
+POLLER_PID=$!
 
-# Run nebula (from PATH, installed via apt)
-exec nebula -config /etc/nebula/config.yml
+# Function to handle shutdown signals
+cleanup() {
+    echo "Shutting down..."
+    kill $POLLER_PID 2>/dev/null || true
+    
+    # Stop nebula if running
+    if [[ -f /var/lib/nebula/nebula.pid ]]; then
+        NEBULA_PID=$(cat /var/lib/nebula/nebula.pid)
+        kill $NEBULA_PID 2>/dev/null || true
+        rm -f /var/lib/nebula/nebula.pid
+    fi
+    exit 0
+}
+
+# Set up signal handlers
+trap cleanup SIGTERM SIGINT
+
+# Start nebula and track its PID
+nebula -config /etc/nebula/config.yml &
+NEBULA_PID=$!
+echo $NEBULA_PID > /var/lib/nebula/nebula.pid
+
+# Wait for either process to exit
+wait
