@@ -26,7 +26,10 @@ export CLIENT_TOKEN="your-token-from-server"
 export SERVER_URL="http://localhost:8080"
 
 # Run the agent
-python agent.py
+python agent.py              # Run once and exit
+python agent.py --once       # Same as above
+python agent.py --once --restart  # Run once, restart Nebula if config changed
+python agent.py --loop       # Continuous polling (production mode)
 ```
 
 ### Running in Docker
@@ -73,15 +76,17 @@ pytest tests/ -v  # If tests exist
    - `/etc/nebula/ca.crt`: CA certificate chain
 
 ### Nebula Daemon Management
-1. Check if Nebula daemon is running
-2. If config changed or cert expired, restart Nebula
-3. Start Nebula: `nebula -config /etc/nebula/config.yml`
+1. **Hash-based change detection**: Calculate SHA256 hash of config + certificates
+2. **Graceful restart**: SIGTERM → SIGKILL fallback with 2-second timeout
+3. **PID tracking**: Maintain `/var/lib/nebula/nebula.pid` for process management
+4. **Start Nebula**: `nebula -config /etc/nebula/config.yml` (background process)
 
-### Polling Loop
+### Polling Loop (Automatic Restart)
 1. Sleep for `POLL_INTERVAL_HOURS` (default 24 hours)
-2. Repeat configuration fetch
-3. Update files if changes detected
-4. Restart Nebula if needed
+2. Fetch configuration from server
+3. Compare hash with current config files
+4. **Auto-restart Nebula only if config actually changed**
+5. Log restart events for debugging
 
 ## Environment Variables
 
@@ -163,10 +168,11 @@ def atomic_write(path: str, content: str, mode: int = 0o644):
 - **Public key format**: PEM-encoded, extracted from `host.pub` file
 
 ### Process Management
-- **Clean shutdown**: Catch signals (SIGTERM, SIGINT)
-- **Graceful restart**: Stop Nebula before updating config
-- **PID tracking**: Keep track of Nebula process
-- **Log output**: Capture and log Nebula output
+- **Clean shutdown**: Catch signals (SIGTERM, SIGINT) in entrypoint.sh
+- **Graceful restart**: SIGTERM → 2s wait → SIGKILL if needed
+- **PID tracking**: Store/read from `/var/lib/nebula/nebula.pid`
+- **Process detection**: Fallback to `pgrep -f "nebula.*config.yml"`
+- **Background processes**: Nebula runs detached, agent manages it
 
 Example:
 ```python
