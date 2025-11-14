@@ -207,7 +207,7 @@ docker exec -it managed-nebula-server python manage.py create-admin admin@exampl
 docker exec managed-nebula-server python manage.py create-admin admin@example.com MySecurePassword123
 ```
 
-Open your browser to **http://localhost:4200** (frontend) or **http://localhost:8080/docs** (API docs) and log in with your admin credentials, then:
+Open your browser to **http://localhost** (frontend) or **https://localhost/api/docs** (API docs) and log in with your admin credentials, then:
 
 1. Generate your first Certificate Authority (CA) in the CA management page
 2. Create an IP pool (e.g., `10.100.0.0/16`) in IP Pools
@@ -413,7 +413,22 @@ DB_URL=mysql+aiomysql://username:password@hostname:3306/database
 - `GET /api/v1/settings` - Get global settings
 - `PUT /api/v1/settings` - Update global settings
 
-**Interactive API documentation available at `/docs` (Swagger UI) and `/redoc` (ReDoc) when server is running.**
+**Interactive API documentation:**
+
+**Production deployment** (`docker-compose-server.yml`):
+- Swagger UI: `https://localhost/api/docs`
+- ReDoc: `https://localhost/api/redoc`
+- OpenAPI spec: `https://localhost/api/openapi.json`
+
+**Development mode** (`development-docker-compose-server.yml`):
+- Swagger UI: `https://localhost/api/docs`
+- ReDoc: `https://localhost/api/redoc`
+- OpenAPI spec: `https://localhost/api/openapi.json`
+- Direct server access: `http://localhost:8080/docs` and `http://localhost:8080/redoc`
+
+All API documentation is accessible through the frontend proxy with proper SSL termination and includes comprehensive endpoint documentation, request/response schemas, and interactive testing capabilities.
+
+See [DOCS_ACCESS.md](DOCS_ACCESS.md) for detailed documentation access guide.
 
 ## �️ Management Commands
 
@@ -547,7 +562,7 @@ docker build -t managed-nebula-client:latest -f client/Dockerfile client/
 ```bash
 cd frontend
 npm install
-npm start  # Starts dev server on http://localhost:4200
+npm start  # Starts dev server on http://localhost
 
 # Build for production
 npm run build:prod  # Output in dist/
@@ -574,6 +589,7 @@ The system uses `bcrypt_sha256` for password hashing to avoid bcrypt's 72-byte p
 ## 📖 Documentation
 
 - **[Quick Start Guide](QUICKSTART.md)** - Common commands and troubleshooting
+- **[API Docs Access Guide](DOCS_ACCESS.md)** - How to access Swagger UI, ReDoc, and OpenAPI schema
 - [API Documentation](API_DOCUMENTATION.md) - Complete REST API reference
 - [Group System](GROUP_SYSTEM.md) - Hierarchical groups and permissions
 - [Copilot Instructions](.github/copilot-instructions.md) - AI agent guidance for development

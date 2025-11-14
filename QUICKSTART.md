@@ -54,10 +54,22 @@ docker exec managed-nebula-server alembic upgrade head
 
 ## Web Interface
 
-- **Frontend**: http://localhost:4200
-- **API Docs**: http://localhost:8080/docs
-- **ReDoc**: http://localhost:8080/redoc
-- **Health Check**: http://localhost:8080/api/v1/healthz
+### Development Mode (docker-compose.yml or development-docker-compose-server.yml)
+- **Frontend**: http://localhost:4200 or https://localhost:4200
+- **API Docs (Proxied)**: https://localhost:4200/api/docs
+- **ReDoc (Proxied)**: https://localhost:4200/api/redoc
+- **API Docs (Direct)**: http://localhost:8080/docs
+- **ReDoc (Direct)**: http://localhost:8080/redoc
+- **Health Check**: https://localhost:4200/api/v1/healthz
+
+### Production Mode (docker-compose-server.yml)
+- **Frontend**: https://localhost
+- **API Docs**: https://localhost/api/docs
+- **ReDoc**: https://localhost/api/redoc
+- **OpenAPI Schema**: https://localhost/api/openapi.json
+- **Health Check**: https://localhost/api/v1/healthz
+
+See [DOCS_ACCESS.md](DOCS_ACCESS.md) for complete API documentation access guide.
 
 ## Environment Variables
 

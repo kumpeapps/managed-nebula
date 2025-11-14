@@ -14,7 +14,40 @@ from sqlalchemy import select
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Managed Nebula API", version="0.1.0")
+    app = FastAPI(
+        title="Managed Nebula API", 
+        version="0.1.0",
+        openapi_version="3.1.0",
+        description="A comprehensive VPN management platform for Nebula mesh networks",
+        docs_url="/docs",
+        redoc_url=None  # Disable default ReDoc to create custom one
+    )
+
+    # Custom ReDoc endpoint with working JS library
+    from fastapi.responses import HTMLResponse
+    
+    @app.get("/redoc", response_class=HTMLResponse, include_in_schema=False)
+    async def custom_redoc():
+        return HTMLResponse(content="""
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <title>Managed Nebula API - ReDoc</title>
+        <meta charset="utf-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link href="https://fonts.googleapis.com/css?family=Montserrat:300,400,700|Roboto:300,400,700" rel="stylesheet">
+        <link rel="shortcut icon" href="https://fastapi.tiangolo.com/img/favicon.png">
+        <style>
+          body { margin: 0; padding: 0; }
+        </style>
+        </head>
+        <body>
+        <noscript>ReDoc requires Javascript to function. Please enable it to browse the documentation.</noscript>
+        <redoc spec-url="/openapi.json"></redoc>
+        <script src="https://cdn.jsdelivr.net/npm/redoc@2.1.3/bundles/redoc.standalone.js"></script>
+        </body>
+        </html>
+        """)
 
     # Sessions for auth (used by both SPA and client agent)
     # MUST be added before CORS to ensure cookie is set properly
