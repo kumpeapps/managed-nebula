@@ -175,9 +175,17 @@ async def update_settings(body: SettingsUpdate, session: AsyncSession = Depends(
     if body.server_url is not None:
         row.server_url = body.server_url
     if body.docker_compose_template is not None:
-        # Validate YAML
+        # Validate YAML by replacing placeholders with dummy values
         try:
-            yaml.safe_load(body.docker_compose_template)
+            # Replace common placeholders with dummy values for validation
+            validation_template = body.docker_compose_template
+            validation_template = validation_template.replace("{{CLIENT_NAME}}", "test-client")
+            validation_template = validation_template.replace("{{CLIENT_TOKEN}}", "dummy-token")
+            validation_template = validation_template.replace("{{SERVER_URL}}", "http://localhost:8080")
+            validation_template = validation_template.replace("{{CLIENT_DOCKER_IMAGE}}", "test-image:latest")
+            validation_template = validation_template.replace("{{POLL_INTERVAL_HOURS}}", "24")
+            
+            yaml.safe_load(validation_template)
         except yaml.YAMLError as e:
             raise HTTPException(status_code=400, detail=f"Invalid YAML: {str(e)}")
         row.docker_compose_template = body.docker_compose_template
@@ -215,9 +223,17 @@ async def update_docker_compose_template(
     user: User = Depends(require_admin)
 ):
     """Update the docker-compose template with validation (admin-only)."""
-    # Validate YAML structure
+    # Validate YAML by replacing placeholders with dummy values
     try:
-        yaml.safe_load(body.template)
+        # Replace common placeholders with dummy values for validation
+        validation_template = body.template
+        validation_template = validation_template.replace("{{CLIENT_NAME}}", "test-client")
+        validation_template = validation_template.replace("{{CLIENT_TOKEN}}", "dummy-token")
+        validation_template = validation_template.replace("{{SERVER_URL}}", "http://localhost:8080")
+        validation_template = validation_template.replace("{{CLIENT_DOCKER_IMAGE}}", "test-image:latest")
+        validation_template = validation_template.replace("{{POLL_INTERVAL_HOURS}}", "24")
+        
+        yaml.safe_load(validation_template)
     except yaml.YAMLError as e:
         raise HTTPException(status_code=400, detail=f"Invalid YAML: {str(e)}")
     
@@ -1330,9 +1346,17 @@ async def download_client_docker_compose(
     settings = (await session.execute(select(GlobalSettings))).scalars().first()
     if not settings:
         settings = GlobalSettings()
+        session.add(settings)
+        await session.commit()
     
-    # Get template
+    # Get template, fallback to default if None
+    from ..models.settings import DEFAULT_DOCKER_COMPOSE_TEMPLATE
     template = settings.docker_compose_template
+    if not template:
+        template = DEFAULT_DOCKER_COMPOSE_TEMPLATE
+        # Update the settings record to have the template for future use
+        settings.docker_compose_template = template
+        await session.commit()
     
     # Replace placeholders
     compose_content = template.replace("{{CLIENT_NAME}}", client.name)
