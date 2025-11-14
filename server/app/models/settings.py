@@ -4,9 +4,7 @@ from ..db import Base
 
 
 # Default docker-compose template with placeholders
-DEFAULT_DOCKER_COMPOSE_TEMPLATE = """version: '3.8'
-
-services:
+DEFAULT_DOCKER_COMPOSE_TEMPLATE = """services:
   nebula-client:
     image: {{CLIENT_DOCKER_IMAGE}}
     container_name: nebula-{{CLIENT_NAME}}
