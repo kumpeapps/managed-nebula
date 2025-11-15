@@ -398,6 +398,33 @@ DB_URL=mysql+aiomysql://username:password@hostname:3306/database
 
 #### IP Management
 - `GET /api/v1/ip-pools` - List IP pools
+ 
+## 🧩 Systemd Services (Optional)
+
+You can install systemd units on the host that manage the server or client via Docker Compose. The templates are embedded in the images and a helper script renders them using Docker Compose metadata from the running containers.
+
+Quick install on the host (requires sudo):
+
+```bash
+# Install a unit for the server compose service
+bash scripts/install-systemd-service.sh server --activate
+
+# Install a unit for the client compose service
+bash scripts/install-systemd-service.sh client --activate
+```
+
+What it does:
+- Detects the running container for `server` or `client`
+- Reads compose working dir and compose files via `docker inspect`
+- Renders a unit that runs: `docker compose -f <files> -p <project> up -d <service>`
+- Installs to `/etc/systemd/system/managed-nebula-<service>.service`
+
+After installation:
+```bash
+sudo systemctl status managed-nebula-server.service
+sudo systemctl status managed-nebula-client.service
+```
+
 - `POST /api/v1/ip-pools` - Create IP pool
 - `GET /api/v1/ip-groups` - List IP groups within pools
 

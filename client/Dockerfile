@@ -42,4 +42,8 @@ ENV CLIENT_TOKEN="" \
 
 VOLUME ["/etc/nebula", "/var/lib/nebula"]
 
+# Provide systemd unit templates inside the image for host installation
+RUN mkdir -p /opt/managed-nebula/systemd
+COPY systemd/*.service.tpl /opt/managed-nebula/systemd/
+
 ENTRYPOINT ["/app/entrypoint.sh"]
