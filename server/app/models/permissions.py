@@ -1,5 +1,5 @@
 from __future__ import annotations
-from sqlalchemy import Integer, Boolean, ForeignKey, String, DateTime, Table, Column, Enum as SQLEnum
+from sqlalchemy import Integer, Boolean, ForeignKey, String, DateTime, Table, Column
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Optional
 from datetime import datetime
