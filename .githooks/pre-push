@@ -3,7 +3,8 @@ set -euo pipefail
 
 # Git pre-push hook enforcing branch policy for managed-nebula
 
-branch_regex='^(feature|bugfix|hotfix|docs|refactor)/(server|frontend|client|all)-[0-9]+$'
+# Allow both manual branches and Copilot-generated branches
+branch_regex='^((feature|bugfix|hotfix|docs|refactor)/(server|frontend|client|all)-[0-9]+|copilot/.*)$'
 
 current_branch=$(git symbolic-ref --quiet --short HEAD || echo "")
 
@@ -36,7 +37,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   if [[ ! $branch_name =~ $branch_regex ]]; then
     echo "\n[POLICY] Branch name '$branch_name' violates naming scheme." >&2
     echo "Required: $branch_regex" >&2
-    echo "Examples: feature/server-5, bugfix/frontend-12, feature/client-8, hotfix/all-23" >&2
+    echo "Examples: feature/server-5, bugfix/frontend-12, feature/client-8, hotfix/all-23, copilot/<description>" >&2
     exit 1
   fi
 done

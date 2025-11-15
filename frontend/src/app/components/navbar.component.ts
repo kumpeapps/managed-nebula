@@ -30,6 +30,7 @@ import { AuthService } from '../services/auth.service';
         <a routerLink="/ca" routerLinkActive="active" (click)="closeMobileMenu()">CA</a>
         <a routerLink="/users" routerLinkActive="active" *ngIf="isAdmin" (click)="closeMobileMenu()">Users</a>
         <a routerLink="/user-groups" routerLinkActive="active" (click)="closeMobileMenu()">User Groups</a>
+        <a routerLink="/permissions" routerLinkActive="active" *ngIf="isAdmin" (click)="closeMobileMenu()">Permissions</a>
         <a routerLink="/settings" routerLinkActive="active" *ngIf="isAdmin" (click)="closeMobileMenu()">Settings</a>
         <span class="user-info">{{ currentUser?.email }}</span>
         <button (click)="logout()" class="btn btn-secondary">Logout</button>

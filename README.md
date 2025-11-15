@@ -565,6 +565,7 @@ Common commands:
 Notes:
 - Direct pushes to `main` are blocked by the pre-push hook.
 - All PRs must target `dev`. A GitHub Action validates base branch, branch name, and PR title.
+- **Copilot-generated branches** (starting with `copilot/`) are also allowed alongside the manual naming scheme.
 
 ### Local Development Setup
 

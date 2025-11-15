@@ -26,11 +26,18 @@ class User(Base):
     
     async def has_permission(self, session: AsyncSession, resource: str, action: str) -> bool:
         """
-        Check if user has a specific permission through their group memberships.
-        Returns True if user belongs to any group with is_admin=True or has the specific permission.
+        Check if user has a specific permission through their group memberships or admin role.
+        Returns True if:
+        - User has admin role (role.name == 'admin')
+        - User belongs to any group with is_admin=True
+        - User has the specific permission through any group
         """
         from .permissions import UserGroup, UserGroupMembership, Permission, user_group_permissions
         from sqlalchemy.orm import selectinload
+        
+        # Check if user has admin role (legacy admin system)
+        if self.role and self.role.name == 'admin':
+            return True
         
         # Get user's groups with their permissions
         result = await session.execute(
