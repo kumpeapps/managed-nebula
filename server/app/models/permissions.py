@@ -1,5 +1,7 @@
+from __future__ import annotations
 from sqlalchemy import Integer, Boolean, ForeignKey, String, DateTime, Table, Column, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from typing import Optional
 from datetime import datetime
 from ..db import Base
 import enum
@@ -30,7 +32,7 @@ class Permission(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     resource: Mapped[str] = mapped_column(String(100), nullable=False)
     action: Mapped[str] = mapped_column(String(20), nullable=False)  # Using String for SQLite compatibility
-    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     __table_args__ = (
         # Unique constraint on resource + action combination
@@ -48,9 +50,9 @@ class UserGroup(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100), unique=True)
-    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    owner_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    owner_user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -77,8 +79,8 @@ class GroupPermission(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     group_id: Mapped[int] = mapped_column(Integer, ForeignKey("groups.id", ondelete="CASCADE"))
-    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
-    user_group_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("user_groups.id", ondelete="CASCADE"), nullable=True)
+    user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
+    user_group_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("user_groups.id", ondelete="CASCADE"), nullable=True)
     can_add_to_client: Mapped[bool] = mapped_column(Boolean, default=True)
     can_remove_from_client: Mapped[bool] = mapped_column(Boolean, default=False)
     can_create_subgroup: Mapped[bool] = mapped_column(Boolean, default=False)
