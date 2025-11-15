@@ -608,7 +608,8 @@ export class UserGroupsComponent implements OnInit {
   canManage(ug: UserGroup): boolean {
     const user = this.currentUser;
     if (!user) return false;
-    if (user.role?.name === 'admin') return true;
+    // Check both is_admin flag and role.name for backward compatibility
+    if (user.is_admin || user.role?.name === 'admin') return true;
     if (ug.owner && ug.owner.id === user.id) return true;
     return false;
   }

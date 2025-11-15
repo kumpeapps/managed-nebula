@@ -17,6 +17,7 @@ import { IPGroupsComponent } from './components/ip-groups.component';
 import { CAComponent } from './components/ca.component';
 import { UsersComponent } from './components/users.component';
 import { UserGroupsComponent } from './components/user-groups.component';
+import { PermissionsComponent } from './components/permissions.component';
 import { SettingsComponent } from './components/settings.component';
 import { NavbarComponent } from './components/navbar.component';
 import { NotificationsComponent } from './components/notifications.component';
@@ -41,6 +42,7 @@ import { AuthInterceptor } from './interceptors/auth.interceptor';
     CAComponent,
     UsersComponent,
     UserGroupsComponent,
+    PermissionsComponent,
     SettingsComponent,
     NavbarComponent,
     NotificationsComponent
