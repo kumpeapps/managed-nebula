@@ -12,6 +12,7 @@ import { IPGroupsComponent } from './components/ip-groups.component';
 import { CAComponent } from './components/ca.component';
 import { UsersComponent } from './components/users.component';
 import { UserGroupsComponent } from './components/user-groups.component';
+import { PermissionsComponent } from './components/permissions.component';
 import { SettingsComponent } from './components/settings.component';
 
 const routes: Routes = [
@@ -26,6 +27,7 @@ const routes: Routes = [
   { path: 'ca', component: CAComponent, canActivate: [AuthGuard] },
   { path: 'users', component: UsersComponent, canActivate: [AuthGuard] },
   { path: 'user-groups', component: UserGroupsComponent, canActivate: [AuthGuard] },
+  { path: 'permissions', component: PermissionsComponent, canActivate: [AuthGuard] },
   { path: 'settings', component: SettingsComponent, canActivate: [AuthGuard] },
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' }
 ];

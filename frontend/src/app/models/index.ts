@@ -221,6 +221,14 @@ export interface PlaceholdersResponse {
   placeholders: Placeholder[];
 }
 
+// Permission model
+export interface Permission {
+  id: number;
+  resource: string;
+  action: string;
+  description: string;
+}
+
 // Client create request payload
 export interface ClientCreateRequest {
   name: string;

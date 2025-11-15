@@ -36,7 +36,36 @@ async def require_login(user: User = Depends(get_current_user)) -> User:
     return user
 
 
-async def require_admin(user: User = Depends(get_current_user)) -> User:
-    if not user.role or user.role.name != "admin":
-        raise HTTPException(status_code=403, detail="Admin required")
-    return user
+async def require_admin(user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)) -> User:
+    """
+    Legacy admin check - checks if user belongs to admin group or has admin role.
+    For new code, use require_permission instead.
+    """
+    # Check new permission system - user in admin group
+    if await user.has_permission(session, "users", "delete"):  # Admin groups have all permissions
+        return user
+    
+    # Fallback to legacy role check
+    if user.role and user.role.name == "admin":
+        return user
+    
+    raise HTTPException(status_code=403, detail="Admin required")
+
+
+def require_permission(resource: str, action: str):
+    """
+    Dependency factory that creates a permission check dependency.
+    Usage: @router.get("/clients", dependencies=[Depends(require_permission("clients", "read"))])
+    """
+    async def permission_checker(
+        user: User = Depends(get_current_user),
+        session: AsyncSession = Depends(get_session)
+    ) -> User:
+        if not await user.has_permission(session, resource, action):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Insufficient permissions: {resource}:{action} required"
+            )
+        return user
+    
+    return permission_checker

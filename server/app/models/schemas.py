@@ -434,16 +434,33 @@ class ClientOwnerUpdate(BaseModel):
 
 # ============ User Group Schemas ============
 
+# ============ Permission Schemas ============
+
+class PermissionResponse(BaseModel):
+    """Response model for Permission."""
+    id: int
+    resource: str
+    action: str
+    description: str | None
+
+    class Config:
+        from_attributes = True
+
+
+# ============ User Group Schemas ============
+
 class UserGroupCreate(BaseModel):
     """Create model for User Group."""
     name: str
     description: str | None = None
+    is_admin: bool = False
 
 
 class UserGroupUpdate(BaseModel):
     """Update model for User Group."""
     name: str | None = None
     description: str | None = None
+    is_admin: bool | None = None
 
 
 class UserGroupResponse(BaseModel):
@@ -451,9 +468,12 @@ class UserGroupResponse(BaseModel):
     id: int
     name: str
     description: str | None
+    is_admin: bool
     owner: UserRef | None
     created_at: datetime
+    updated_at: datetime
     member_count: int = 0
+    permission_count: int = 0
 
     class Config:
         from_attributes = True
@@ -473,3 +493,15 @@ class UserGroupMembershipResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PermissionGrantRequest(BaseModel):
+    """Request to grant permission to a group."""
+    permission_id: int | None = None
+    resource: str | None = None
+    action: str | None = None
+
+    # At least one method must be provided
+    def validate_grant(self):
+        if not self.permission_id and not (self.resource and self.action):
+            raise ValueError("Either permission_id or both resource and action must be provided")

@@ -31,8 +31,8 @@
 			"onAutoForward": "notify"
 		},
 		"4200": {
-			"label": "Angular Dev Server",
-			"protocol": "http",
+			"label": "Frontend HTTPS (Development)",
+			"protocol": "https",
 			"onAutoForward": "notify"
 		}
 	},
