@@ -401,29 +401,60 @@ DB_URL=mysql+aiomysql://username:password@hostname:3306/database
  
 ## 🧩 Systemd Services (Optional)
 
-You can install systemd units on the host that manage the server or client via Docker Compose. The templates are embedded in the images and a helper script renders them using Docker Compose metadata from the running containers.
+You can install systemd units on the host that automatically start/stop your Docker Compose services on boot. The templates and installer script are embedded in the container images.
 
-Quick install on the host (requires sudo):
+### Quick Setup
+
+**Step 1**: Copy the installer script from a running container to your host:
 
 ```bash
-# Install a unit for the server compose service
-bash scripts/install-systemd-service.sh server --activate
+# Copy from server container
+docker cp managed-nebula-server-1:/opt/managed-nebula/install-systemd-service.sh .
 
-# Install a unit for the client compose service
-bash scripts/install-systemd-service.sh client --activate
+# Or from client container  
+docker cp managed-nebula-client-1:/opt/managed-nebula/install-systemd-service.sh .
 ```
 
-What it does:
-- Detects the running container for `server` or `client`
-- Reads compose working dir and compose files via `docker inspect`
-- Renders a unit that runs: `docker compose -f <files> -p <project> up -d <service>`
-- Installs to `/etc/systemd/system/managed-nebula-<service>.service`
+**Step 2**: Run the installer on your host (requires `docker` CLI and `sudo`):
 
-After installation:
+```bash
+# Install and activate server service
+bash install-systemd-service.sh server --activate
+
+# Install and activate client service
+bash install-systemd-service.sh client --activate
+```
+
+**Step 3**: Verify the services:
+
 ```bash
 sudo systemctl status managed-nebula-server.service
-sudo systemctl status managed-nebula-client.service
+sudo systemctl restart managed-nebula-server.service
 ```
+
+### Preview Before Installing
+
+Render the unit file to review it first:
+
+```bash
+bash install-systemd-service.sh server --render managed-nebula-server.service
+cat managed-nebula-server.service
+
+# Then install manually
+sudo install -m 0644 managed-nebula-server.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now managed-nebula-server.service
+```
+
+### How It Works
+
+The installer script:
+1. Uses `docker inspect` to detect your running container
+2. Reads Docker Compose metadata (working dir, compose files, project name)
+3. Renders a systemd unit that runs: `docker compose -f <files> -p <project> up -d <service>`
+4. Installs to `/etc/systemd/system/managed-nebula-<service>.service`
+
+**Note**: The script must run on the host (not inside the container) since it needs access to the `docker` CLI to inspect container metadata.
 
 - `POST /api/v1/ip-pools` - Create IP pool
 - `GET /api/v1/ip-groups` - List IP groups within pools

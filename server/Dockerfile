@@ -44,9 +44,11 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 COPY . /app
 
-# Provide systemd unit templates inside the image for host installation
+# Provide systemd unit templates and installer script inside the image for host installation
 RUN mkdir -p /opt/managed-nebula/systemd
 COPY systemd/*.service.tpl /opt/managed-nebula/systemd/
+COPY install-systemd-service.sh /opt/managed-nebula/
+RUN chmod +x /opt/managed-nebula/install-systemd-service.sh
 
 ENV APP_ENV=production \
     DB_URL=sqlite+aiosqlite:///./app.db \
