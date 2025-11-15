@@ -1,6 +1,7 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from '../services/auth.service';
+import { ApiService } from '../services/api.service';
 
 /**
  * Reusable navigation bar component for consistent navigation across all pages.
@@ -18,7 +19,7 @@ import { AuthService } from '../services/auth.service';
       <div class="nav-links" [class.mobile-open]="mobileMenuOpen">
         <a routerLink="/dashboard" routerLinkActive="active" (click)="closeMobileMenu()">Dashboard</a>
         <a routerLink="/clients" routerLinkActive="active" (click)="closeMobileMenu()">Clients</a>
-        <a routerLink="/enrollment" routerLinkActive="active" (click)="closeMobileMenu()">Mobile Enrollment</a>
+        <a routerLink="/enrollment" routerLinkActive="active" (click)="closeMobileMenu()" *ngIf="mobileEnrollmentEnabled">Mobile Enrollment</a>
         <a routerLink="/groups" routerLinkActive="active" (click)="closeMobileMenu()">Groups</a>
         <a routerLink="/firewall-rules" routerLinkActive="active" (click)="closeMobileMenu()">Firewall Rules</a>
         <a routerLink="/ip-pools" routerLinkActive="active" (click)="closeMobileMenu()">IP Pools</a>
@@ -185,15 +186,34 @@ import { AuthService } from '../services/auth.service';
   `],
     standalone: false
 })
-export class NavbarComponent {
+export class NavbarComponent implements OnInit {
   currentUser = this.authService.getCurrentUser();
   isAdmin = this.authService.isAdmin();
   mobileMenuOpen = false;
+  mobileEnrollmentEnabled = false;
 
   constructor(
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    private apiService: ApiService
   ) {}
+
+  ngOnInit(): void {
+    this.loadSettings();
+  }
+
+  loadSettings(): void {
+    this.apiService.getSettings().subscribe({
+      next: (settings) => {
+        this.mobileEnrollmentEnabled = settings.mobile_enrollment_enabled || false;
+      },
+      error: (err) => {
+        console.error('Failed to load settings:', err);
+        // Default to false on error
+        this.mobileEnrollmentEnabled = false;
+      }
+    });
+  }
 
   toggleMobileMenu(): void {
     this.mobileMenuOpen = !this.mobileMenuOpen;

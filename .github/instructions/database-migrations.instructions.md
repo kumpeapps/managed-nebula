@@ -233,6 +233,10 @@ def downgrade():
 - **Commit migration files**: Always version control migrations
 - **Document complex migrations**: Add comments explaining non-obvious logic
 - **Handle nullable constraints carefully**: Add column as nullable first, populate data, then make not-nullable if needed
+- **Make migrations idempotent**: Check if changes already exist before applying (see Idempotency section below)
+- **Use parameter binding for data**: Never embed raw data strings in SQL (use `:param` syntax)
+- **Use constants from code**: Import defaults from models, not duplicate them
+- **Avoid hardcoded values**: Especially version numbers, config values that may change
 
 ### DON'Ts ❌
 - ❌ Don't modify existing migration files after they've been applied
@@ -243,8 +247,124 @@ def downgrade():
 - ❌ Don't use raw SQL unless necessary (use Alembic operations)
 - ❌ Don't apply migrations directly on production without testing
 - ❌ Don't delete migration files that have been deployed
+- ❌ Don't hardcode version numbers in default data (e.g., `version: '3.8'` in docker-compose templates)
+- ❌ Don't embed multi-line strings with quotes directly in SQL - use parameter binding
+- ❌ Don't duplicate constants - import from models/settings files
 
 ## Common Migration Patterns
+
+### Making Migrations Idempotent (CRITICAL)
+Migrations MUST be idempotent - they should be safe to run multiple times. This is essential because:
+- Container restarts run migrations automatically via `entrypoint.sh`
+- Database may already have some changes applied
+- Rollback scenarios may require re-running migrations
+
+#### Idempotent Column Addition
+```python
+def upgrade():
+    """Idempotent migration - safe to run multiple times."""
+    from sqlalchemy import text, inspect
+    
+    # Check if column already exists
+    conn = op.get_bind()
+    inspector = inspect(conn)
+    columns = [col['name'] for col in inspector.get_columns('clients')]
+    
+    if 'status' not in columns:
+        op.add_column('clients', sa.Column('status', sa.String(20), nullable=True))
+    
+    # Update with parameter binding (safe from SQL injection)
+    conn.execute(
+        text("UPDATE clients SET status = :default_status WHERE status IS NULL"),
+        {"default_status": "active"}
+    )
+```
+
+#### Idempotent Table Creation
+```python
+def upgrade():
+    """Idempotent table creation."""
+    from sqlalchemy import inspect
+    
+    # Check if table already exists
+    conn = op.get_bind()
+    inspector = inspect(conn)
+    tables = inspector.get_table_names()
+    
+    if 'enrollment_codes' not in tables:
+        op.create_table('enrollment_codes',
+            sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+            sa.Column('code', sa.String(length=64), nullable=False),
+            # ... other columns ...
+            sa.PrimaryKeyConstraint('id')
+        )
+        op.create_index('ix_enrollment_codes_code', 'enrollment_codes', ['code'])
+```
+
+#### Idempotent Index Creation
+```python
+def upgrade():
+    """Idempotent index creation."""
+    from sqlalchemy import inspect
+    
+    conn = op.get_bind()
+    inspector = inspect(conn)
+    indexes = [idx['name'] for idx in inspector.get_indexes('clients')]
+    
+    if 'ix_clients_name' not in indexes:
+        op.create_index('ix_clients_name', 'clients', ['name'])
+```
+
+### Using Parameter Binding for Default Data (CRITICAL)
+NEVER embed complex strings directly in SQL - always use parameter binding:
+
+```python
+# ❌ WRONG - SQL injection risk, quote escaping issues
+def upgrade():
+    op.execute("""
+        UPDATE settings SET template = 'version: '3.8'
+        services:
+          app:
+            image: myapp'
+    """)
+
+# ✅ CORRECT - Use parameter binding with conn.execute()
+def upgrade():
+    from sqlalchemy import text
+    from ..models.settings import DEFAULT_TEMPLATE  # Import from code
+    
+    # Get connection from op.get_bind() to use parameter binding
+    conn = op.get_bind()
+    conn.execute(
+        text("UPDATE settings SET template = :template WHERE template IS NULL"),
+        {"template": DEFAULT_TEMPLATE}
+    )
+```
+
+**Note**: `op.execute()` doesn't support parameter binding. Use `conn = op.get_bind()` and then `conn.execute()` with `text()` and parameters.
+
+### Avoiding Hardcoded Configuration Values (CRITICAL)
+Don't hardcode values that may change or are environment-specific:
+
+```python
+# ❌ WRONG - Hardcoded version number
+DEFAULT_TEMPLATE = """version: '3.8'
+services:
+  app:
+    image: myapp:1.0.0"""
+
+# ✅ CORRECT - No version (Docker Compose v2+ doesn't require it)
+# Import from models to maintain single source of truth
+from ..models.settings import DEFAULT_DOCKER_COMPOSE_TEMPLATE
+
+def upgrade():
+    from sqlalchemy import text
+    conn = op.get_bind()
+    conn.execute(
+        text("UPDATE global_settings SET docker_compose_template = :template WHERE docker_compose_template IS NULL"),
+        {"template": DEFAULT_DOCKER_COMPOSE_TEMPLATE}
+    )
+```
 
 ### Adding a Non-Nullable Column
 ```python
@@ -252,8 +372,13 @@ def upgrade():
     # Step 1: Add column as nullable
     op.add_column('clients', sa.Column('status', sa.String(20), nullable=True))
     
-    # Step 2: Set default value for existing rows
-    op.execute("UPDATE clients SET status = 'active' WHERE status IS NULL")
+    # Step 2: Set default value for existing rows using parameter binding
+    from sqlalchemy import text
+    conn = op.get_bind()
+    conn.execute(
+        text("UPDATE clients SET status = :status WHERE status IS NULL"),
+        {"status": "active"}
+    )
     
     # Step 3: Make column non-nullable
     op.alter_column('clients', 'status', nullable=False)
@@ -476,6 +601,48 @@ def test_migrations_up_and_down(alembic_config):
     # Upgrade back to head
     command.upgrade(alembic_config, 'head')
 ```
+
+## Critical Checklist for Every Migration
+
+Before committing ANY migration file, verify:
+
+- [ ] **Idempotency**: Check if table/column/index exists before creating
+  ```python
+  from sqlalchemy import inspect
+  conn = op.get_bind()
+  inspector = inspect(conn)
+  tables = inspector.get_table_names()
+  if 'my_table' not in tables:
+      # create table
+  ```
+
+- [ ] **Parameter Binding**: Use `conn.execute()` with `text()` and parameters, NOT `op.execute()` with embedded strings
+  ```python
+  conn = op.get_bind()
+  conn.execute(text("UPDATE table SET col = :val"), {"val": value})
+  ```
+
+- [ ] **No Hardcoded Values**: Import constants from models, don't duplicate
+  ```python
+  from ..models.settings import DEFAULT_TEMPLATE  # ✅ Correct
+  DEFAULT_TEMPLATE = "..."  # ❌ Wrong - duplicates code
+  ```
+
+- [ ] **No Version Numbers**: Don't hardcode version numbers in config templates
+  ```python
+  # ❌ Wrong
+  template = """version: '3.8'
+  services: ..."""
+  
+  # ✅ Correct
+  template = """services:
+    ..."""  # Docker Compose v2+ doesn't need version
+  ```
+
+- [ ] **Test Locally**: Run migration twice to ensure idempotency
+  ```bash
+  docker compose restart server  # Should succeed without errors
+  ```
 
 ## Resources
 - [Alembic Documentation](https://alembic.sqlalchemy.org/)

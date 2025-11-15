@@ -42,6 +42,34 @@ import { Settings } from '../models';
           </div>
           
           <div class="setting-section">
+            <h3>Mobile Enrollment</h3>
+            <p class="help-text">Enable or disable mobile device enrollment via one-time codes and QR codes</p>
+            
+            <div class="setting-item">
+              <label class="toggle-label">
+                <input 
+                  type="checkbox" 
+                  [(ngModel)]="settings.mobile_enrollment_enabled"
+                  (change)="saveSettings()"
+                  class="toggle-checkbox">
+                <span class="toggle-text">
+                  <strong>Enable Mobile Enrollment</strong>
+                  <span class="description">
+                    Allow administrators to generate enrollment codes and QR codes for mobile devices.
+                    When disabled, the Mobile Enrollment menu will be hidden.
+                  </span>
+                </span>
+              </label>
+            </div>
+            
+            <div class="info-box" *ngIf="settings.mobile_enrollment_enabled">
+              <p><strong>ℹ️ Mobile Enrollment Enabled</strong></p>
+              <p>Users can now access the Mobile Enrollment page to generate one-time enrollment codes.</p>
+              <p class="text-muted small mt-2">Note: This feature is designed for a future Managed Nebula mobile app. Standard Mobile Nebula app from Defined Networking will not work with these enrollment codes.</p>
+            </div>
+          </div>
+          
+          <div class="setting-section">
             <h3>Client Docker Configuration</h3>
             <p class="help-text">Default Docker image and server URL used in generated docker-compose files for clients</p>
             

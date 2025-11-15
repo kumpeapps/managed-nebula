@@ -198,6 +198,7 @@ export interface Settings {
   client_docker_image: string;
   server_url: string;
   docker_compose_template: string;
+  mobile_enrollment_enabled: boolean;
 }
 
 export interface SettingsUpdate {
@@ -205,6 +206,7 @@ export interface SettingsUpdate {
   client_docker_image?: string;
   server_url?: string;
   docker_compose_template?: string;
+  mobile_enrollment_enabled?: boolean;
 }
 
 export interface DockerComposeTemplate {

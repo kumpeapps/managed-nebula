@@ -41,15 +41,15 @@ import { QRCodeComponent } from 'angularx-qrcode';
           </div>
 
           <div *ngIf="!loading && enrollmentCodes.length > 0" class="table-responsive">
-            <table class="table table-hover">
+            <table class="table table-hover align-middle">
               <thead>
                 <tr>
-                  <th>Client</th>
-                  <th>Device Info</th>
-                  <th>Status</th>
-                  <th>Created</th>
-                  <th>Expires</th>
-                  <th>Actions</th>
+                  <th style="width: 20%;">Client</th>
+                  <th style="width: 20%;">Device Info</th>
+                  <th style="width: 10%;">Status</th>
+                  <th style="width: 15%;">Created</th>
+                  <th style="width: 15%;">Expires</th>
+                  <th style="width: 20%;">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -58,42 +58,49 @@ import { QRCodeComponent } from 'angularx-qrcode';
                     <strong>{{ code.client_name }}</strong>
                   </td>
                   <td>
-                    <span *ngIf="code.device_name">{{ code.device_name }}</span>
-                    <span *ngIf="code.platform" class="badge bg-info ms-1">{{ code.platform }}</span>
-                    <span *ngIf="!code.device_name && !code.is_used" class="text-muted">Not enrolled yet</span>
+                    <div *ngIf="code.device_name">{{ code.device_name }}</div>
+                    <span *ngIf="code.platform" class="badge bg-info">{{ code.platform }}</span>
+                    <span *ngIf="!code.device_name && !code.is_used" class="text-muted small">Not enrolled yet</span>
                   </td>
                   <td>
                     <span class="badge" [ngClass]="{
                       'bg-success': code.is_used,
-                      'bg-warning': !code.is_used && !isExpired(code),
+                      'bg-warning text-dark': !code.is_used && !isExpired(code),
                       'bg-danger': isExpired(code)
                     }">
                       {{ getStatusText(code) }}
                     </span>
                   </td>
-                  <td>{{ formatDate(code.created_at) }}</td>
                   <td>
-                    {{ formatDate(code.expires_at) }}
-                    <span *ngIf="!code.is_used && !isExpired(code)" class="text-muted small d-block">
-                      {{ getTimeRemaining(code) }}
-                    </span>
+                    <small>{{ formatDate(code.created_at) }}</small>
                   </td>
                   <td>
-                    <button class="btn btn-sm btn-info me-1" 
-                            (click)="showCodeDetails(code)"
-                            [disabled]="code.is_used">
-                      <i class="bi bi-qr-code"></i> QR Code
-                    </button>
-                    <button class="btn btn-sm btn-outline-secondary me-1"
-                            (click)="copyToClipboard(code.enrollment_url, 'URL')"
-                            [disabled]="code.is_used">
-                      <i class="bi bi-link-45deg"></i> Copy URL
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger"
-                            (click)="deleteCode(code)"
-                            [disabled]="code.is_used">
-                      <i class="bi bi-trash"></i>
-                    </button>
+                    <small>{{ formatDate(code.expires_at) }}</small>
+                    <div *ngIf="!code.is_used && !isExpired(code)" class="text-muted" style="font-size: 0.75rem;">
+                      {{ getTimeRemaining(code) }}
+                    </div>
+                  </td>
+                  <td>
+                    <div class="btn-group btn-group-sm" role="group">
+                      <button class="btn btn-info" 
+                              (click)="showCodeDetails(code)"
+                              [disabled]="code.is_used"
+                              title="Show QR Code">
+                        <i class="bi bi-qr-code"></i>
+                      </button>
+                      <button class="btn btn-outline-secondary"
+                              (click)="copyToClipboard(code.enrollment_url, 'URL')"
+                              [disabled]="code.is_used"
+                              title="Copy URL">
+                        <i class="bi bi-link-45deg"></i>
+                      </button>
+                      <button class="btn btn-outline-danger"
+                              (click)="deleteCode(code)"
+                              [disabled]="code.is_used"
+                              title="Delete">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               </tbody>
