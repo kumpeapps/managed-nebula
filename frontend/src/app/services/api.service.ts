@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { Client, Group, FirewallRuleset, IPPool, IPGroup, AvailableIP, CACertificate, User, ClientUpdateRequest, ClientCreateRequest, ClientCertificate, ClientConfigDownload, Settings, SettingsUpdate, DockerComposeTemplate, PlaceholdersResponse } from '../models';
+import { Client, Group, FirewallRuleset, IPPool, IPGroup, AvailableIP, CACertificate, User, ClientUpdateRequest, ClientCreateRequest, ClientCertificate, ClientConfigDownload, Settings, SettingsUpdate, DockerComposeTemplate, PlaceholdersResponse, Permission } from '../models';
 
 @Injectable({
   providedIn: 'root'
@@ -282,5 +282,23 @@ export class ApiService {
 
   getPlaceholders(): Observable<PlaceholdersResponse> {
     return this.http.get<PlaceholdersResponse>(`${this.apiUrl}/settings/placeholders`, { withCredentials: true });
+  }
+
+  // Permissions endpoints
+  getPermissions(): Observable<Permission[]> {
+    return this.http.get<Permission[]>(`${this.apiUrl}/permissions`, { withCredentials: true });
+  }
+
+  // User Group Permissions endpoints
+  getUserGroupPermissions(groupId: number): Observable<Permission[]> {
+    return this.http.get<Permission[]>(`${this.apiUrl}/user-groups/${groupId}/permissions`, { withCredentials: true });
+  }
+
+  grantPermissionToUserGroup(groupId: number, permissionId: number): Observable<void> {
+    return this.http.post<void>(`${this.apiUrl}/user-groups/${groupId}/permissions`, { permission_id: permissionId }, { withCredentials: true });
+  }
+
+  revokePermissionFromUserGroup(groupId: number, permissionId: number): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}/user-groups/${groupId}/permissions/${permissionId}`, { withCredentials: true });
   }
 }
