@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="logo/android/playstore-icon.png" alt="Managed Nebula Logo" width="200" height="200">
+
 # 🌌 Managed Nebula
 
 ### Enterprise-Grade Mesh VPN Management Platform

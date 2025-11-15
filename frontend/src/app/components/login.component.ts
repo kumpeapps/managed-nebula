@@ -7,6 +7,9 @@ import { AuthService } from '../services/auth.service';
     template: `
     <div class="login-container">
       <div class="login-card">
+        <div class="logo-container">
+          <img src="assets/logo-login.png" alt="Managed Nebula Logo" class="login-logo">
+        </div>
         <h1>Managed Nebula</h1>
         <h2>Login</h2>
         
@@ -67,6 +70,18 @@ import { AuthService } from '../services/auth.service';
       width: 100%;
       max-width: 400px;
       margin: 1rem;
+    }
+    
+    .logo-container {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+    
+    .login-logo {
+      width: 100px;
+      height: 100px;
+      object-fit: contain;
     }
     
     h1 {
