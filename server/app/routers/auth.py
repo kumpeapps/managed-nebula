@@ -1,6 +1,7 @@
 from __future__ import annotations
 from fastapi import APIRouter, Request, Depends, HTTPException
 from pydantic import BaseModel
+from typing import Optional
 import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -22,7 +23,7 @@ class MeResponse(BaseModel):
     id: int
     email: str
     is_active: bool
-    role: str | None
+    role: Optional[str]
     is_admin: bool
 
 
