@@ -1,5 +1,7 @@
+from __future__ import annotations
 from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, Table, Column
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from typing import Optional
 from datetime import datetime
 from ..db import Base
 
@@ -52,11 +54,11 @@ class FirewallRule(Base):
     direction: Mapped[str] = mapped_column(String(20))  # 'inbound' or 'outbound'
     port: Mapped[str] = mapped_column(String(100))  # 'any', '80', '200-901', 'fragment'
     proto: Mapped[str] = mapped_column(String(20))  # 'any', 'tcp', 'udp', 'icmp'
-    host: Mapped[str | None] = mapped_column(String(100), nullable=True)  # 'any' or hostname
-    cidr: Mapped[str | None] = mapped_column(String(100), nullable=True)  # '0.0.0.0/0' or specific CIDR
-    local_cidr: Mapped[str | None] = mapped_column(String(100), nullable=True)  # for unsafe_routes
-    ca_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    ca_sha: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    host: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # 'any' or hostname
+    cidr: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # '0.0.0.0/0' or specific CIDR
+    local_cidr: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # for unsafe_routes
+    ca_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    ca_sha: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     
     # Many-to-many: a rule can reference multiple groups (AND'd together)
     groups = relationship("Group", secondary=firewall_rule_groups, backref="firewall_rules")
@@ -68,7 +70,7 @@ class FirewallRuleset(Base):
     __tablename__ = "firewall_rulesets"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100), unique=True)
-    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     
     rules = relationship("FirewallRule", secondary=ruleset_rules, back_populates="rulesets")
     clients = relationship("Client", secondary=client_firewall_rulesets, back_populates="firewall_rulesets")
@@ -79,16 +81,16 @@ class Client(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100))
     is_lighthouse: Mapped[bool] = mapped_column(Boolean, default=False)
-    public_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    public_ip: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     # Ownership
     owner_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     # Tracking config lifecycle
-    last_config_download_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    config_last_changed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_config_download_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    config_last_changed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     # Blocking state
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
-    blocked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    blocked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     groups = relationship("Group", secondary=client_groups, back_populates="clients")
     firewall_rulesets = relationship("FirewallRuleset", secondary=client_firewall_rulesets, back_populates="clients")
@@ -119,11 +121,11 @@ class ClientCertificate(Base):
     not_after: Mapped[datetime] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     # Metadata for lifecycle and revocation
-    fingerprint: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    issued_for_ip_cidr: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    issued_for_groups_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    fingerprint: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    issued_for_ip_cidr: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    issued_for_groups_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     client: Mapped[Client] = relationship("Client")
 
@@ -132,7 +134,7 @@ class IPPool(Base):
     __tablename__ = "ip_pools"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     cidr: Mapped[str] = mapped_column(String(64), unique=True)
-    description: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
 
 class IPGroup(Base):
@@ -149,5 +151,5 @@ class IPAssignment(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     client_id: Mapped[int] = mapped_column(Integer, ForeignKey("clients.id", ondelete="CASCADE"))
     ip_address: Mapped[str] = mapped_column(String(64), unique=True)
-    pool_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("ip_pools.id"), nullable=True)
-    ip_group_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("ip_groups.id"), nullable=True)
+    pool_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("ip_pools.id"), nullable=True)
+    ip_group_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("ip_groups.id"), nullable=True)
