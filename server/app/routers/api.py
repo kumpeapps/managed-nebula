@@ -4,7 +4,7 @@ from sqlalchemy import select, func
 from datetime import datetime
 
 from ..db import get_session
-from ..models import ClientToken, Client, IPAssignment, GlobalSettings, CACertificate, IPPool
+from ..models import ClientToken, Client, IPAssignment, GlobalSettings, CACertificate, IPPool, Permission
 from ..models.client import ClientCertificate
 from ..models.schemas import (
     ClientConfigRequest,
@@ -56,6 +56,8 @@ from ..models.schemas import (
     ClientPermissionGrant,
     ClientPermissionResponse,
     ClientOwnerUpdate,
+    PermissionResponse,
+    PermissionGrantRequest,
 )
 from ..services.cert_manager import CertManager
 from ..services.config_builder import build_nebula_config
@@ -63,7 +65,7 @@ from ..services.ip_allocator import ensure_default_pool, allocate_ip_from_pool
 from ..core.auth import require_admin, get_current_user
 from ..models.user import User
 from ..models.client import Group, FirewallRule, IPGroup, client_groups, client_firewall_rulesets
-from ..models.permissions import ClientPermission
+from ..models.permissions import ClientPermission, UserGroup, UserGroupMembership
 from typing import List, Optional
 import secrets
 import yaml
@@ -2993,6 +2995,8 @@ async def update_user(user_id: int, body: UserUpdate, session: AsyncSession = De
 
 @router.delete("/users/{user_id}")
 async def delete_user(user_id: int, session: AsyncSession = Depends(get_session), admin: User = Depends(require_admin)):
+    from ..models.permissions import UserGroupMembership
+    
     result = await session.execute(select(User).where(User.id == user_id))
     u = result.scalar_one_or_none()
     if not u:
@@ -3002,6 +3006,545 @@ async def delete_user(user_id: int, session: AsyncSession = Depends(get_session)
     if u.id == admin.id:
         raise HTTPException(status_code=409, detail="Cannot delete your own account")
     
+    # Check if this is the last admin
+    admins_group_result = await session.execute(
+        select(UserGroup).where(UserGroup.name == "Administrators")
+    )
+    admins_group = admins_group_result.scalar_one_or_none()
+    
+    if admins_group:
+        # Check if user is in admins group
+        user_in_admins = await session.execute(
+            select(UserGroupMembership).where(
+                UserGroupMembership.user_id == user_id,
+                UserGroupMembership.user_group_id == admins_group.id
+            )
+        )
+        if user_in_admins.scalar_one_or_none():
+            # Count total admins
+            admin_count = await session.execute(
+                select(func.count(UserGroupMembership.id)).where(
+                    UserGroupMembership.user_group_id == admins_group.id
+                )
+            )
+            if admin_count.scalar() <= 1:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Cannot delete the last administrator. Add another admin first."
+                )
+    
     await session.delete(u)
     await session.commit()
     return {"status": "deleted", "id": user_id}
+
+
+# ============ Permissions REST API ============
+
+@router.get("/permissions", response_model=List[PermissionResponse])
+async def list_permissions(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_admin)
+):
+    """List all available permissions in the system (requires users:read permission)."""
+    from ..models.permissions import Permission
+    
+    result = await session.execute(select(Permission).order_by(Permission.resource, Permission.action))
+    permissions = result.scalars().all()
+    
+    return [
+        PermissionResponse(
+            id=p.id,
+            resource=p.resource,
+            action=p.action,
+            description=p.description
+        )
+        for p in permissions
+    ]
+
+
+# ============ User Groups REST API ============
+
+@router.get("/user-groups", response_model=List[UserGroupResponse])
+async def list_user_groups(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_admin)
+):
+    """List all user groups with member and permission counts (requires users:read permission)."""
+    from sqlalchemy.orm import selectinload
+    
+    result = await session.execute(
+        select(UserGroup).options(
+            selectinload(UserGroup.owner),
+            selectinload(UserGroup.permissions)
+        )
+    )
+    groups = result.scalars().all()
+    
+    # Get member counts for each group
+    responses = []
+    for group in groups:
+        member_count_result = await session.execute(
+            select(func.count(UserGroupMembership.id)).where(
+                UserGroupMembership.user_group_id == group.id
+            )
+        )
+        member_count = member_count_result.scalar()
+        
+        responses.append(UserGroupResponse(
+            id=group.id,
+            name=group.name,
+            description=group.description,
+            is_admin=group.is_admin,
+            owner=UserRef(id=group.owner.id, email=group.owner.email) if group.owner else None,
+            created_at=group.created_at,
+            updated_at=group.updated_at,
+            member_count=member_count,
+            permission_count=len(group.permissions) if group.permissions else 0
+        ))
+    
+    return responses
+
+
+@router.get("/user-groups/{group_id}", response_model=UserGroupResponse)
+async def get_user_group(
+    group_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_admin)
+):
+    """Get user group details with members and permissions (requires users:read permission)."""
+    from sqlalchemy.orm import selectinload
+    
+    result = await session.execute(
+        select(UserGroup)
+        .options(selectinload(UserGroup.owner), selectinload(UserGroup.permissions))
+        .where(UserGroup.id == group_id)
+    )
+    group = result.scalar_one_or_none()
+    
+    if not group:
+        raise HTTPException(status_code=404, detail="User group not found")
+    
+    # Get member count
+    member_count_result = await session.execute(
+        select(func.count(UserGroupMembership.id)).where(
+            UserGroupMembership.user_group_id == group.id
+        )
+    )
+    member_count = member_count_result.scalar()
+    
+    return UserGroupResponse(
+        id=group.id,
+        name=group.name,
+        description=group.description,
+        is_admin=group.is_admin,
+        owner=UserRef(id=group.owner.id, email=group.owner.email) if group.owner else None,
+        created_at=group.created_at,
+        updated_at=group.updated_at,
+        member_count=member_count,
+        permission_count=len(group.permissions) if group.permissions else 0
+    )
+
+
+@router.post("/user-groups", response_model=UserGroupResponse)
+async def create_user_group(
+    body: UserGroupCreate,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_admin)
+):
+    """Create a new user group (requires users:create permission)."""
+    # Check for duplicate name
+    existing = await session.execute(select(UserGroup).where(UserGroup.name == body.name))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="User group with this name already exists")
+    
+    # Create group
+    group = UserGroup(
+        name=body.name,
+        description=body.description,
+        is_admin=body.is_admin,
+        owner_user_id=user.id,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    
+    session.add(group)
+    await session.commit()
+    await session.refresh(group)
+    
+    return UserGroupResponse(
+        id=group.id,
+        name=group.name,
+        description=group.description,
+        is_admin=group.is_admin,
+        owner=UserRef(id=user.id, email=user.email),
+        created_at=group.created_at,
+        updated_at=group.updated_at,
+        member_count=0,
+        permission_count=0
+    )
+
+
+@router.put("/user-groups/{group_id}", response_model=UserGroupResponse)
+async def update_user_group(
+    group_id: int,
+    body: UserGroupUpdate,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_admin)
+):
+    """Update user group (requires users:update permission)."""
+    from sqlalchemy.orm import selectinload
+    
+    result = await session.execute(
+        select(UserGroup)
+        .options(selectinload(UserGroup.owner), selectinload(UserGroup.permissions))
+        .where(UserGroup.id == group_id)
+    )
+    group = result.scalar_one_or_none()
+    
+    if not group:
+        raise HTTPException(status_code=404, detail="User group not found")
+    
+    # Prevent changing is_admin on Administrators group
+    if group.name == "Administrators" and body.is_admin is not None and not body.is_admin:
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot remove admin status from Administrators group"
+        )
+    
+    # Update fields
+    if body.name is not None:
+        # Check for duplicate name
+        if body.name != group.name:
+            existing = await session.execute(select(UserGroup).where(UserGroup.name == body.name))
+            if existing.scalar_one_or_none():
+                raise HTTPException(status_code=409, detail="User group with this name already exists")
+        group.name = body.name
+    
+    if body.description is not None:
+        group.description = body.description
+    
+    if body.is_admin is not None and group.name != "Administrators":
+        group.is_admin = body.is_admin
+    
+    group.updated_at = datetime.utcnow()
+    
+    await session.commit()
+    await session.refresh(group)
+    
+    # Get member count
+    member_count_result = await session.execute(
+        select(func.count(UserGroupMembership.id)).where(
+            UserGroupMembership.user_group_id == group.id
+        )
+    )
+    member_count = member_count_result.scalar()
+    
+    return UserGroupResponse(
+        id=group.id,
+        name=group.name,
+        description=group.description,
+        is_admin=group.is_admin,
+        owner=UserRef(id=group.owner.id, email=group.owner.email) if group.owner else None,
+        created_at=group.created_at,
+        updated_at=group.updated_at,
+        member_count=member_count,
+        permission_count=len(group.permissions) if group.permissions else 0
+    )
+
+
+@router.delete("/user-groups/{group_id}")
+async def delete_user_group(
+    group_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_admin)
+):
+    """Delete user group (requires users:delete permission). Cannot delete Administrators group."""
+    result = await session.execute(select(UserGroup).where(UserGroup.id == group_id))
+    group = result.scalar_one_or_none()
+    
+    if not group:
+        raise HTTPException(status_code=404, detail="User group not found")
+    
+    # Prevent deletion of Administrators group
+    if group.name == "Administrators":
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot delete the Administrators group"
+        )
+    
+    await session.delete(group)
+    await session.commit()
+    
+    return {"status": "deleted", "id": group_id}
+
+
+# ============ User Group Membership REST API ============
+
+@router.get("/user-groups/{group_id}/members", response_model=List[UserResponse])
+async def list_group_members(
+    group_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_admin)
+):
+    """List all members of a user group (requires users:read permission)."""
+    from sqlalchemy.orm import selectinload
+    
+    # Verify group exists
+    group_result = await session.execute(select(UserGroup).where(UserGroup.id == group_id))
+    if not group_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="User group not found")
+    
+    # Get members
+    result = await session.execute(
+        select(User)
+        .join(UserGroupMembership, UserGroupMembership.user_id == User.id)
+        .options(selectinload(User.role))
+        .where(UserGroupMembership.user_group_id == group_id)
+    )
+    members = result.scalars().all()
+    
+    return [
+        UserResponse(
+            id=u.id,
+            email=u.email,
+            is_active=u.is_active,
+            role=RoleRef(id=u.role.id, name=u.role.name) if u.role else None,
+            created_at=u.created_at
+        )
+        for u in members
+    ]
+
+
+@router.post("/user-groups/{group_id}/members")
+async def add_group_member(
+    group_id: int,
+    user_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(require_admin)
+):
+    """Add user to group (requires users:update permission)."""
+    # Verify group exists
+    group_result = await session.execute(select(UserGroup).where(UserGroup.id == group_id))
+    group = group_result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="User group not found")
+    
+    # Verify user exists
+    user_result = await session.execute(select(User).where(User.id == user_id))
+    if not user_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check if already a member
+    existing = await session.execute(
+        select(UserGroupMembership).where(
+            UserGroupMembership.user_id == user_id,
+            UserGroupMembership.user_group_id == group_id
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="User is already a member of this group")
+    
+    # Add membership
+    membership = UserGroupMembership(
+        user_id=user_id,
+        user_group_id=group_id,
+        added_at=datetime.utcnow()
+    )
+    session.add(membership)
+    await session.commit()
+    
+    return {"status": "added", "user_id": user_id, "group_id": group_id}
+
+
+@router.delete("/user-groups/{group_id}/members/{user_id}")
+async def remove_group_member(
+    group_id: int,
+    user_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(require_admin)
+):
+    """Remove user from group (requires users:update permission). Cannot remove last admin."""
+    # Verify group exists
+    group_result = await session.execute(select(UserGroup).where(UserGroup.id == group_id))
+    group = group_result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="User group not found")
+    
+    # Find membership
+    membership_result = await session.execute(
+        select(UserGroupMembership).where(
+            UserGroupMembership.user_id == user_id,
+            UserGroupMembership.user_group_id == group_id
+        )
+    )
+    membership = membership_result.scalar_one_or_none()
+    if not membership:
+        raise HTTPException(status_code=404, detail="User is not a member of this group")
+    
+    # Prevent removing last admin from Administrators group
+    if group.name == "Administrators":
+        admin_count = await session.execute(
+            select(func.count(UserGroupMembership.id)).where(
+                UserGroupMembership.user_group_id == group_id
+            )
+        )
+        if admin_count.scalar() <= 1:
+            raise HTTPException(
+                status_code=409,
+                detail="Cannot remove the last administrator. Add another admin first."
+            )
+    
+    await session.delete(membership)
+    await session.commit()
+    
+    return {"status": "removed", "user_id": user_id, "group_id": group_id}
+
+
+# ============ User Group Permissions REST API ============
+
+@router.get("/user-groups/{group_id}/permissions", response_model=List[PermissionResponse])
+async def list_group_permissions(
+    group_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_admin)
+):
+    """List permissions granted to a user group (requires users:read permission)."""
+    from sqlalchemy.orm import selectinload
+    
+    result = await session.execute(
+        select(UserGroup)
+        .options(selectinload(UserGroup.permissions))
+        .where(UserGroup.id == group_id)
+    )
+    group = result.scalar_one_or_none()
+    
+    if not group:
+        raise HTTPException(status_code=404, detail="User group not found")
+    
+    # If group is admin, return all permissions
+    if group.is_admin:
+        all_perms_result = await session.execute(select(Permission))
+        all_perms = all_perms_result.scalars().all()
+        return [
+            PermissionResponse(
+                id=p.id,
+                resource=p.resource,
+                action=p.action,
+                description=p.description
+            )
+            for p in all_perms
+        ]
+    
+    return [
+        PermissionResponse(
+            id=p.id,
+            resource=p.resource,
+            action=p.action,
+            description=p.description
+        )
+        for p in group.permissions
+    ]
+
+
+@router.post("/user-groups/{group_id}/permissions")
+async def grant_group_permission(
+    group_id: int,
+    body: PermissionGrantRequest,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_admin)
+):
+    """Grant permission to group (requires users:update permission)."""
+    from sqlalchemy.orm import selectinload
+    
+    # Verify group exists
+    result = await session.execute(
+        select(UserGroup)
+        .options(selectinload(UserGroup.permissions))
+        .where(UserGroup.id == group_id)
+    )
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="User group not found")
+    
+    # If group is admin, permissions are automatic (no need to grant)
+    if group.is_admin:
+        return {"status": "ignored", "message": "Admin groups automatically have all permissions"}
+    
+    # Find permission
+    permission = None
+    if body.permission_id:
+        perm_result = await session.execute(
+            select(Permission).where(Permission.id == body.permission_id)
+        )
+        permission = perm_result.scalar_one_or_none()
+    elif body.resource and body.action:
+        perm_result = await session.execute(
+            select(Permission).where(
+                Permission.resource == body.resource,
+                Permission.action == body.action
+            )
+        )
+        permission = perm_result.scalar_one_or_none()
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Either permission_id or both resource and action must be provided"
+        )
+    
+    if not permission:
+        raise HTTPException(status_code=404, detail="Permission not found")
+    
+    # Check if already granted
+    if permission in group.permissions:
+        raise HTTPException(status_code=409, detail="Permission already granted to this group")
+    
+    # Grant permission
+    group.permissions.append(permission)
+    group.updated_at = datetime.utcnow()
+    await session.commit()
+    
+    return {"status": "granted", "permission_id": permission.id, "group_id": group_id}
+
+
+@router.delete("/user-groups/{group_id}/permissions/{permission_id}")
+async def revoke_group_permission(
+    group_id: int,
+    permission_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_admin)
+):
+    """Revoke permission from group (requires users:update permission)."""
+    from sqlalchemy.orm import selectinload
+    
+    # Verify group exists
+    result = await session.execute(
+        select(UserGroup)
+        .options(selectinload(UserGroup.permissions))
+        .where(UserGroup.id == group_id)
+    )
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="User group not found")
+    
+    # If group is admin, cannot revoke permissions (they have all)
+    if group.is_admin:
+        return {"status": "ignored", "message": "Cannot revoke permissions from admin groups"}
+    
+    # Find permission
+    perm_result = await session.execute(
+        select(Permission).where(Permission.id == permission_id)
+    )
+    permission = perm_result.scalar_one_or_none()
+    if not permission:
+        raise HTTPException(status_code=404, detail="Permission not found")
+    
+    # Check if permission is granted
+    if permission not in group.permissions:
+        raise HTTPException(status_code=404, detail="Permission not granted to this group")
+    
+    # Revoke permission
+    group.permissions.remove(permission)
+    group.updated_at = datetime.utcnow()
+    await session.commit()
+    
+    return {"status": "revoked", "permission_id": permission_id, "group_id": group_id}
