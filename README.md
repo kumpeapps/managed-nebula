@@ -84,11 +84,13 @@ Nebula is a scalable overlay networking tool focusing on performance, simplicity
 - Auto-sync mode for development (optional column additions)
 
 ### 👥 **Advanced User & Permission Management**
-- **User Groups** - Organize users into logical groups
-- **Group Permissions** - Control which users can assign specific Nebula groups to clients
-- **Client Permissions** - Granular per-client access control (view, update, download config, view tokens)
-- **Owner-based Access** - Clients have owners, other users can be granted specific permissions
-- **Role-based Admin Access** - Admin role has full system access
+- **Comprehensive RBAC** - Granular, resource/action permissions (e.g. `clients:read`, `ip_pools:update`)
+- **User Groups** - Users inherit all permissions from their groups
+- **Admin Groups** - Any group with `is_admin` automatically has all permissions
+- **System Seed** - Initial migration seeds default permissions & two groups (Administrators, Users)
+- **Permission Management UI** - Assign/revoke group permissions in a dedicated page
+- **Client-Level Grants** - Fine-grained per-client overrides for visibility & config download
+- **Admin Lockout Protection** - Admin role + admin group bypass ensures continuous access
 
 ## 🆕 Recent Updates
 
@@ -298,6 +300,56 @@ The web interface provides a "Download Docker Compose" button on each client's d
 - **Scheduler**: APScheduler for background tasks (CA rotation, cert renewal)
 - **Certificate Management**: `nebula-cert` CLI integration
 - **Password Hashing**: bcrypt_sha256 (avoids 72-byte truncation)
+- **RBAC Enforcement**: `require_permission(resource, action)` dependency replaces legacy admin checks
+- **Default Permissions**: 40+ seeded covering clients, groups, firewall_rules, ip_pools, ip_groups, ca, users, user_groups, settings, lighthouse, dashboard
+
+### 🔐 RBAC Permission System
+
+Managed Nebula uses a resource/action permission matrix instead of simple roles.
+
+| Resource | Common Actions | Notes |
+|----------|----------------|-------|
+| clients | read, create, update, delete, download | Download returns YAML config & certs |
+| groups | read, create, update, delete | Nebula logical grouping |
+| firewall_rules / firewall_rulesets | read, create, update, delete | Structured rule objects, not raw YAML |
+| ip_pools | read, create, update, delete | CIDR-based allocation domains |
+| ip_groups | read, create, update, delete | Sub-segmentation within pools |
+| ca | read, create, delete, download | CA rotation & chain retrieval |
+| users | read, create, update, delete | User admin endpoints |
+| user_groups | read, create, update, delete, manage_members, manage_permissions | Group lifecycle & permission binding |
+| settings | read, update, docker_compose | Global settings + compose template feature |
+| lighthouse | read, update | Lighthouse public IP/port control |
+| dashboard | read | Summary metrics & status |
+
+Permission naming convention: `<resource>:<action>` (e.g. `firewall_rules:create`). Extended actions use underscores (`manage_permissions`).
+
+Enforcement pattern:
+```python
+@router.get("/clients", dependencies=[Depends(require_permission("clients", "read"))])
+async def list_clients(...):
+  ...
+```
+
+Admin access paths:
+- Belonging to a group with `is_admin=True` grants all permissions
+- Admin role fallback in `User.has_permission()` prevents accidental lockout
+
+Permission management endpoints:
+- `GET /api/v1/permissions` – Enumerate all permissions
+- `GET /api/v1/user-groups/{id}/permissions` – List a group's permissions
+- `POST /api/v1/user-groups/{id}/permissions` – Grant permission (requires `user_groups:manage_permissions`)
+- `DELETE /api/v1/user-groups/{id}/permissions/{perm_id}` – Revoke permission (requires `user_groups:manage_permissions`)
+
+UI workflow:
+1. Create a user group
+2. Grant permissions via Permissions page
+3. Add users to the group for inheritance
+4. Optionally grant client-specific permissions for narrower access
+
+Admin recommendations:
+- Keep at least one non-deletable admin group (default: Administrators)
+- Periodically audit group memberships and granted permissions
+- Use client-level grants sparingly—prefer group-based policies
 
 #### 🎨 **Frontend** (`frontend/`)
 - **Framework**: Angular 17 SPA
