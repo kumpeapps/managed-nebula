@@ -29,7 +29,7 @@ class Permission(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     resource: Mapped[str] = mapped_column(String(100), nullable=False)
-    action: Mapped[str] = mapped_column(SQLEnum(PermissionAction), nullable=False)
+    action: Mapped[str] = mapped_column(String(20), nullable=False)  # Using String for SQLite compatibility
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     __table_args__ = (
@@ -55,7 +55,7 @@ class UserGroup(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     owner = relationship("User", foreign_keys=[owner_user_id])
-    permissions = relationship("Permission", secondary=user_group_permissions, lazy="selectinload")
+    permissions = relationship("Permission", secondary=user_group_permissions)
 
 
 class UserGroupMembership(Base):
