@@ -30,6 +30,13 @@ jobs:
           echo "Head: $HEAD_REF"
           echo "Title: $TITLE"
 
+          # Special case: allow dev -> main for releases
+          if [[ "$HEAD_REF" == "dev" && "$BASE_REF" == "main" ]]; then
+            echo "✅ Release PR: dev -> main allowed"
+            echo "PR checks passed."
+            exit 0
+          fi
+
           # Allow both manual branches and Copilot-generated branches
           branch_regex='^((feature|bugfix|hotfix|docs|refactor)/(server|frontend|client|all)-[0-9]+|copilot/.*)$'
 
