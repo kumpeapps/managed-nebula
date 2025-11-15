@@ -14,9 +14,9 @@ Options:
   --render     Render unit to the given path and skip installation
 
 Examples:
-  $0 server --activate
-  $0 client
   $0 frontend --activate
+  $0 server
+  $0 client
 EOF
 }
 
@@ -116,10 +116,10 @@ else
 fi
 
 # Render placeholders
-ESC_WORKDIR="${WORKDIR//\//\\/}"
-ESC_PROJECT="${PROJECT_NAME//\//\\/}"
-ESC_SERVICE="${SERVICE_NAME//\//\\/}"
-ESC_FLAGS="${COMPOSE_FILES_FLAGS//\//\\/}"
+ESC_WORKDIR="${WORKDIR//\//\\}"
+ESC_PROJECT="${PROJECT_NAME//\//\\}"
+ESC_SERVICE="${SERVICE_NAME//\//\\}"
+ESC_FLAGS="${COMPOSE_FILES_FLAGS//\//\\}"
 
 RENDERED="$TMPDIR/managed-nebula-${SERVICE_NAME}.service"
 sed -e "s|{{COMPOSE_WORKING_DIR}}|$ESC_WORKDIR|g" \
