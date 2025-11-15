@@ -44,9 +44,11 @@ def upgrade() -> None:
         sa.Column('docker_compose_template', sa.Text(), nullable=True)
     )
     
-    # Set default value for existing rows
-    op.execute(
-        f"UPDATE global_settings SET docker_compose_template = '{DEFAULT_DOCKER_COMPOSE_TEMPLATE}' WHERE docker_compose_template IS NULL"
+    # Set default value for existing rows using parameterized query
+    conn = op.get_bind()
+    conn.execute(
+        sa.text("UPDATE global_settings SET docker_compose_template = :template WHERE docker_compose_template IS NULL"),
+        {"template": DEFAULT_DOCKER_COMPOSE_TEMPLATE}
     )
 
 
