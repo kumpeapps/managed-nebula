@@ -42,19 +42,19 @@ class ClientResponse(BaseModel):
     """Response model for Client."""
     id: int
     name: str
-    ip_address: str | None
-    pool_id: int | None = None  # Current IP pool assignment
-    ip_group_id: int | None = None  # Current IP group assignment
+    ip_address: Optional[str]
+    pool_id: Optional[int] = None  # Current IP pool assignment
+    ip_group_id: Optional[int] = None  # Current IP group assignment
     is_lighthouse: bool
-    public_ip: str | None
+    public_ip: Optional[str]
     is_blocked: bool
     created_at: datetime
-    config_last_changed_at: datetime | None
-    last_config_download_at: datetime | None
-    owner: UserRef | None  # Owner of the client
+    config_last_changed_at: Optional[datetime]
+    last_config_download_at: Optional[datetime]
+    owner: Optional[UserRef]  # Owner of the client
     groups: List[GroupRef]
     firewall_rulesets: List[FirewallRulesetRef] = []
-    token: str | None  # Only included for admins or owner
+    token: Optional[str]  # Only included for admins or owner
 
     class Config:
         from_attributes = True
@@ -95,17 +95,17 @@ class GroupCreate(BaseModel):
 
 class GroupUpdate(BaseModel):
     """Update model for Group."""
-    name: str | None = None
+    name: Optional[str] = None
 
 
 class GroupResponse(BaseModel):
     """Response model for Group with ownership and hierarchy info."""
     id: int
     name: str
-    owner: UserRef | None = None
+    owner: Optional[UserRef] = None
     created_at: datetime
     client_count: int
-    parent_name: str | None = None  # Extracted from hierarchical name (e.g., "parent:child" -> parent="parent")
+    parent_name: Optional[str] = None  # Extracted from hierarchical name (e.g., "parent:child" -> parent="parent")
     is_subgroup: bool = False  # True if name contains colons
 
     class Config:
@@ -114,8 +114,8 @@ class GroupResponse(BaseModel):
 
 class GroupPermissionGrant(BaseModel):
     """Grant permission for a group to a user or user group."""
-    user_id: int | None = None
-    user_group_id: int | None = None
+    user_id: Optional[int] = None
+    user_group_id: Optional[int] = None
     can_add_to_client: bool = True
     can_remove_from_client: bool = False
     can_create_subgroup: bool = False
@@ -125,8 +125,8 @@ class GroupPermissionResponse(BaseModel):
     """Response model for group permissions."""
     id: int
     group_id: int
-    user: UserRef | None = None
-    user_group: UserGroupRef | None = None
+    user: Optional[UserRef] = None
+    user_group: Optional[UserGroupRef] = None
     can_add_to_client: bool
     can_remove_from_client: bool
     can_create_subgroup: bool
@@ -340,11 +340,11 @@ class ClientCertificateResponse(BaseModel):
     not_before: datetime
     not_after: datetime
     created_at: datetime
-    fingerprint: str | None
-    issued_for_ip_cidr: str | None
-    issued_for_groups_hash: str | None
+    fingerprint: Optional[str]
+    issued_for_ip_cidr: Optional[str]
+    issued_for_groups_hash: Optional[str]
     revoked: bool
-    revoked_at: datetime | None
+    revoked_at: Optional[datetime]
 
     class Config:
         from_attributes = True
@@ -374,10 +374,10 @@ class SettingsResponse(BaseModel):
     docker_compose_template: str
 
 class SettingsUpdate(BaseModel):
-    punchy_enabled: bool | None = None
-    client_docker_image: str | None = None
-    server_url: str | None = None
-    docker_compose_template: str | None = None
+    punchy_enabled: Optional[bool] = None
+    client_docker_image: Optional[str] = None
+    server_url: Optional[str] = None
+    docker_compose_template: Optional[str] = None
 
 
 class DockerComposeTemplateResponse(BaseModel):
@@ -442,7 +442,7 @@ class PermissionResponse(BaseModel):
     id: int
     resource: str
     action: str
-    description: str | None
+    description: Optional[str]
 
     class Config:
         from_attributes = True
@@ -453,24 +453,24 @@ class PermissionResponse(BaseModel):
 class UserGroupCreate(BaseModel):
     """Create model for User Group."""
     name: str
-    description: str | None = None
+    description: Optional[str] = None
     is_admin: bool = False
 
 
 class UserGroupUpdate(BaseModel):
     """Update model for User Group."""
-    name: str | None = None
-    description: str | None = None
-    is_admin: bool | None = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_admin: Optional[bool] = None
 
 
 class UserGroupResponse(BaseModel):
     """Response model for User Group."""
     id: int
     name: str
-    description: str | None
+    description: Optional[str]
     is_admin: bool
-    owner: UserRef | None
+    owner: Optional[UserRef]
     created_at: datetime
     updated_at: datetime
     member_count: int = 0
@@ -488,8 +488,8 @@ class UserGroupMembershipAdd(BaseModel):
 class UserGroupMembershipResponse(BaseModel):
     """Response model for user group membership."""
     id: int
-    user: UserRef | None = None
-    user_group: UserGroupRef | None = None
+    user: Optional[UserRef] = None
+    user_group: Optional[UserGroupRef] = None
     added_at: datetime
 
     class Config:
@@ -498,9 +498,9 @@ class UserGroupMembershipResponse(BaseModel):
 
 class PermissionGrantRequest(BaseModel):
     """Request to grant permission to a group."""
-    permission_id: int | None = None
-    resource: str | None = None
-    action: str | None = None
+    permission_id: Optional[int] = None
+    resource: Optional[str] = None
+    action: Optional[str] = None
 
     # At least one method must be provided
     def validate_grant(self):
