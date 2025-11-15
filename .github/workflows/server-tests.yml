@@ -36,10 +36,6 @@ jobs:
         run: |
           alembic upgrade head
 
-      - name: Seed admin user
-        run: |
-          python manage.py create-admin "$TEST_ADMIN_EMAIL" "$TEST_ADMIN_PASSWORD" || true
-
       - name: Run tests
         run: |
-          pytest -q
+          pytest -v
