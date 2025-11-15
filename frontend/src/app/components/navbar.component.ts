@@ -9,7 +9,12 @@ import { AuthService } from '../services/auth.service';
     selector: 'app-navbar',
     template: `
     <nav class="navbar">
-      <h1>Managed Nebula</h1>
+      <div class="navbar-brand">
+        <a routerLink="/dashboard" class="logo-link">
+          <img src="assets/logo-navbar.png" alt="Managed Nebula Logo" class="navbar-logo">
+          <h1>Managed Nebula</h1>
+        </a>
+      </div>
       <button class="mobile-menu-toggle" (click)="toggleMobileMenu()" [class.open]="mobileMenuOpen">
         <span></span>
         <span></span>
@@ -40,6 +45,29 @@ import { AuthService } from '../services/auth.service';
       justify-content: space-between;
       align-items: center;
       position: relative;
+    }
+    
+    .navbar-brand {
+      display: flex;
+      align-items: center;
+    }
+    
+    .logo-link {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-decoration: none;
+      transition: opacity 0.3s;
+    }
+    
+    .logo-link:hover {
+      opacity: 0.8;
+    }
+    
+    .navbar-logo {
+      width: 40px;
+      height: 40px;
+      object-fit: contain;
     }
     
     .navbar h1 {
@@ -130,6 +158,11 @@ import { AuthService } from '../services/auth.service';
     @media (max-width: 768px) {
       .navbar {
         padding: 1rem;
+      }
+      
+      .navbar-logo {
+        width: 32px;
+        height: 32px;
       }
       
       .navbar h1 {
