@@ -62,7 +62,7 @@ from ..models.schemas import (
 from ..services.cert_manager import CertManager
 from ..services.config_builder import build_nebula_config
 from ..services.ip_allocator import ensure_default_pool, allocate_ip_from_pool
-from ..core.auth import require_admin, require_permission, get_current_user
+from ..core.auth import require_permission, get_current_user
 from ..models.user import User
 from ..models.client import Group, FirewallRule, IPGroup, client_groups, client_firewall_rulesets
 from ..models.permissions import ClientPermission, UserGroup, UserGroupMembership
