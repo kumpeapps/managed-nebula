@@ -41,3 +41,5 @@ class GlobalSettings(Base):
     server_url: Mapped[str] = mapped_column(String(500), default="http://localhost:8080")
     # Docker-compose template with placeholders
     docker_compose_template: Mapped[str] = mapped_column(Text, default=DEFAULT_DOCKER_COMPOSE_TEMPLATE)
+    # Enable mobile enrollment feature
+    mobile_enrollment_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

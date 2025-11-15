@@ -3203,6 +3203,45 @@ async def delete_enrollment_code(
 
 # ============ Public Enrollment Endpoint (no auth required) ============
 
+@enrollment_router.get("/enroll")
+async def validate_enrollment_code(
+    code: str,
+    session: AsyncSession = Depends(get_session)
+):
+    """Validate an enrollment code and return basic information.
+    
+    Used by Mobile Nebula to validate the code before collecting device keys.
+    """
+    from sqlalchemy.orm import selectinload
+    
+    # Validate enrollment code
+    code_result = await session.execute(
+        select(EnrollmentCode)
+        .options(selectinload(EnrollmentCode.client))
+        .where(EnrollmentCode.code == code)
+    )
+    enrollment_code = code_result.scalar_one_or_none()
+    
+    if not enrollment_code:
+        raise HTTPException(status_code=404, detail="Invalid enrollment code")
+    
+    # Check if code already used
+    if enrollment_code.is_used:
+        raise HTTPException(status_code=410, detail="Enrollment code already used")
+    
+    # Check if code expired
+    now = datetime.utcnow()
+    if now > enrollment_code.expires_at:
+        raise HTTPException(status_code=410, detail="Enrollment code expired")
+    
+    # Return basic validation info
+    return {
+        "valid": True,
+        "client_name": enrollment_code.client.name if enrollment_code.client else "Unknown",
+        "expires_at": enrollment_code.expires_at.isoformat()
+    }
+
+
 @enrollment_router.post("/enroll", response_model=MobileEnrollmentResponse)
 async def enroll_mobile_device(
     body: EnrollmentRequest,

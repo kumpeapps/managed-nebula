@@ -371,12 +371,14 @@ class SettingsResponse(BaseModel):
     client_docker_image: str
     server_url: str
     docker_compose_template: str
+    mobile_enrollment_enabled: bool
 
 class SettingsUpdate(BaseModel):
     punchy_enabled: bool | None = None
     client_docker_image: str | None = None
     server_url: str | None = None
     docker_compose_template: str | None = None
+    mobile_enrollment_enabled: bool | None = None
 
 
 class DockerComposeTemplateResponse(BaseModel):

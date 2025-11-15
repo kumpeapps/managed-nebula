@@ -16,10 +16,8 @@ branch_labels = None
 depends_on = None
 
 
-# Default docker-compose template
-DEFAULT_DOCKER_COMPOSE_TEMPLATE = """version: '3.8'
-
-services:
+# Default docker-compose template (no version - let Docker choose)
+DEFAULT_DOCKER_COMPOSE_TEMPLATE = """services:
   nebula-client:
     image: {{CLIENT_DOCKER_IMAGE}}
     container_name: nebula-{{CLIENT_NAME}}
@@ -39,14 +37,25 @@ services:
 
 
 def upgrade() -> None:
-    # Add docker_compose_template column to global_settings table
-    op.add_column('global_settings', 
-        sa.Column('docker_compose_template', sa.Text(), nullable=True)
-    )
+    from sqlalchemy import text, inspect
+    from sqlalchemy.engine import reflection
     
-    # Set default value for existing rows
-    op.execute(
-        f"UPDATE global_settings SET docker_compose_template = '{DEFAULT_DOCKER_COMPOSE_TEMPLATE}' WHERE docker_compose_template IS NULL"
+    # Check if column already exists (idempotent)
+    conn = op.get_bind()
+    inspector = inspect(conn)
+    columns = [col['name'] for col in inspector.get_columns('global_settings')]
+    
+    if 'docker_compose_template' not in columns:
+        # Add docker_compose_template column to global_settings table
+        op.add_column('global_settings', 
+            sa.Column('docker_compose_template', sa.Text(), nullable=True)
+        )
+    
+    # Set default value for existing rows using bound parameters
+    # Use connection execute for parameter binding
+    conn.execute(
+        text("UPDATE global_settings SET docker_compose_template = :template WHERE docker_compose_template IS NULL"),
+        {"template": DEFAULT_DOCKER_COMPOSE_TEMPLATE}
     )
 
 
