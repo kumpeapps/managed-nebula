@@ -1,5 +1,6 @@
-from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey
+from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, select
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from ..db import Base
 
@@ -22,3 +23,33 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     role: Mapped[Role | None] = relationship("Role")
+    
+    async def has_permission(self, session: AsyncSession, resource: str, action: str) -> bool:
+        """
+        Check if user has a specific permission through their group memberships.
+        Returns True if user belongs to any group with is_admin=True or has the specific permission.
+        """
+        from .permissions import UserGroup, UserGroupMembership, Permission, user_group_permissions
+        from sqlalchemy.orm import selectinload
+        
+        # Get user's groups with their permissions
+        result = await session.execute(
+            select(UserGroup)
+            .join(UserGroupMembership, UserGroupMembership.user_group_id == UserGroup.id)
+            .options(selectinload(UserGroup.permissions))
+            .where(UserGroupMembership.user_id == self.id)
+        )
+        groups = result.scalars().all()
+        
+        # Check if user belongs to any admin group
+        for group in groups:
+            if group.is_admin:
+                return True
+        
+        # Check if user has the specific permission through any group
+        for group in groups:
+            for perm in group.permissions:
+                if perm.resource == resource and perm.action == action:
+                    return True
+        
+        return False
