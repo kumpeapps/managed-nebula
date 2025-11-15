@@ -532,6 +532,40 @@ docker exec <container> python manage.py --help
 
 ## �🔧 Development
 
+### Branch Workflow Agent (Required)
+
+This repo includes a small helper that enforces our Copilot branch policy and naming scheme.
+
+Enable local git hooks once per clone:
+
+```bash
+git config core.hooksPath .githooks
+chmod +x .githooks/* scripts/branch-agent.sh
+```
+
+Common commands:
+
+```bash
+# Ensure dev branch exists remotely (created from main if missing)
+./scripts/branch-agent.sh ensure-dev
+
+# Create a properly named feature branch from dev
+./scripts/branch-agent.sh create-branch feature server 5 "Add user auth endpoint"
+
+# Validate current branch conforms to policy
+./scripts/branch-agent.sh check
+
+# Print the required PR title format for this branch
+./scripts/branch-agent.sh pr-title "Add user auth endpoint"
+
+# Rebase your branch on the latest dev
+./scripts/branch-agent.sh rebase-dev
+```
+
+Notes:
+- Direct pushes to `main` are blocked by the pre-push hook.
+- All PRs must target `dev`. A GitHub Action validates base branch, branch name, and PR title.
+
 ### Local Development Setup
 
 ```bash

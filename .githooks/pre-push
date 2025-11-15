@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Git pre-push hook enforcing branch policy for managed-nebula
+
+branch_regex='^(feature|bugfix|hotfix|docs|refactor)/(server|frontend|client|all)-[0-9]+$'
+
+current_branch=$(git symbolic-ref --quiet --short HEAD || echo "")
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # Skip if input is empty
+  [[ -z "$local_ref" ]] && continue
+
+  # Only enforce rules for branch pushes (refs/heads/*)
+  case "$remote_ref" in
+    refs/heads/*) ;;
+    *) continue ;;
+  esac
+
+  branch_name=${remote_ref#refs/heads/}
+
+  # Disallow direct pushes to main
+  if [[ "$branch_name" == "main" ]]; then
+    echo "\n[POLICY] Direct pushes to 'main' are not allowed."
+    echo "Create a PR targeting 'dev' instead."
+    exit 1
+  fi
+
+  # Allow dev pushes (e.g., release merges) but warn when pushing dev directly
+  if [[ "$branch_name" == "dev" ]]; then
+    echo "[WARN] Pushing to 'dev'. Ensure this is an intended integration action."
+    continue
+  fi
+
+  # Enforce branch naming on other branches
+  if [[ ! $branch_name =~ $branch_regex ]]; then
+    echo "\n[POLICY] Branch name '$branch_name' violates naming scheme." >&2
+    echo "Required: $branch_regex" >&2
+    echo "Examples: feature/server-5, bugfix/frontend-12, feature/client-8, hotfix/all-23" >&2
+    exit 1
+  fi
+done
+
+exit 0
