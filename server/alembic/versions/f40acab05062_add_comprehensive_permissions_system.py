@@ -21,11 +21,12 @@ depends_on = None
 
 def upgrade() -> None:
     # Create permissions table
+    # For SQLite compatibility, we'll use String instead of Enum
     op.create_table(
         'permissions',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('resource', sa.String(length=100), nullable=False),
-        sa.Column('action', sa.Enum('read', 'create', 'update', 'delete', 'download', name='permissionaction'), nullable=False),
+        sa.Column('action', sa.String(length=20), nullable=False),
         sa.Column('description', sa.String(length=500), nullable=True),
         sa.PrimaryKeyConstraint('id')
     )
