@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<EOF
-Usage: $0 <service-name> [--activate] [--render <path>]
+Usage: $0 <server|client> [--activate] [--render <path>]
 
 Generates and installs a systemd service for the running Docker Compose service
 by copying a template from the container image and rendering it with metadata
@@ -16,7 +16,6 @@ Options:
 Examples:
   $0 server --activate
   $0 client
-  $0 frontend --activate
 EOF
 }
 
