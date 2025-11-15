@@ -1,5 +1,7 @@
+from __future__ import annotations
 from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, select
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from ..db import Base
@@ -19,10 +21,10 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    role_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("roles.id", ondelete="SET NULL"), nullable=True)
+    role_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("roles.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    role: Mapped[Role | None] = relationship("Role")
+    role: Mapped[Optional[Role]] = relationship("Role")
     
     async def has_permission(self, session: AsyncSession, resource: str, action: str) -> bool:
         """
