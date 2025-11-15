@@ -1,6 +1,6 @@
 """Pydantic schemas for API request/response models."""
 from __future__ import annotations
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import List, Optional
 
@@ -56,8 +56,7 @@ class ClientResponse(BaseModel):
     firewall_rulesets: List[FirewallRulesetRef] = []
     token: Optional[str]  # Only included for admins or owner
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ClientCreate(BaseModel):
@@ -108,8 +107,7 @@ class GroupResponse(BaseModel):
     parent_name: Optional[str] = None  # Extracted from hierarchical name (e.g., "parent:child" -> parent="parent")
     is_subgroup: bool = False  # True if name contains colons
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class GroupPermissionGrant(BaseModel):
@@ -131,8 +129,7 @@ class GroupPermissionResponse(BaseModel):
     can_remove_from_client: bool
     can_create_subgroup: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ============ Firewall Rule Schemas ============
@@ -176,8 +173,7 @@ class FirewallRuleResponse(BaseModel):
     ca_sha: Optional[str]
     groups: List[GroupRef]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ============ Firewall Ruleset Schemas ============
@@ -204,8 +200,7 @@ class FirewallRulesetResponse(BaseModel):
     rules: List[FirewallRuleResponse]
     client_count: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ============ IP Pool Schemas ============
@@ -229,8 +224,7 @@ class IPPoolResponse(BaseModel):
     description: Optional[str]
     allocated_count: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ============ IP Group Schemas ============
@@ -259,8 +253,7 @@ class IPGroupResponse(BaseModel):
     end_ip: str
     client_count: int = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AvailableIPResponse(BaseModel):
@@ -297,8 +290,7 @@ class CAResponse(BaseModel):
     created_at: datetime
     status: str  # "current", "previous", "expired", "inactive"
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ============ User Schemas ============
@@ -327,8 +319,7 @@ class UserResponse(BaseModel):
     role: Optional[RoleRef]
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ============ Certificate Schemas ============
@@ -346,8 +337,7 @@ class ClientCertificateResponse(BaseModel):
     revoked: bool
     revoked_at: Optional[datetime]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ClientConfigDownloadResponse(BaseModel):
@@ -424,8 +414,7 @@ class ClientPermissionResponse(BaseModel):
     can_view_token: bool
     can_download_docker_config: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ClientOwnerUpdate(BaseModel):
@@ -444,8 +433,7 @@ class PermissionResponse(BaseModel):
     action: str
     description: Optional[str]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ============ User Group Schemas ============
@@ -476,8 +464,7 @@ class UserGroupResponse(BaseModel):
     member_count: int = 0
     permission_count: int = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserGroupMembershipAdd(BaseModel):
@@ -492,8 +479,7 @@ class UserGroupMembershipResponse(BaseModel):
     user_group: Optional[UserGroupRef] = None
     added_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PermissionGrantRequest(BaseModel):
