@@ -198,7 +198,8 @@ async def update_settings(body: SettingsUpdate, session: AsyncSession = Depends(
             yaml.safe_load(validation_template)
         except yaml.YAMLError as e:
             raise HTTPException(
-                status_code=400, detail=f"Invalid YAML: {str(e)}")
+                status_code=400, detail=f"Invalid YAML: {str(e)}"
+            ) from e
         row.docker_compose_template = body.docker_compose_template
     await session.commit()
     await session.refresh(row)
