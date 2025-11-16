@@ -252,7 +252,7 @@ async def update_docker_compose_template(
 
         yaml.safe_load(validation_template)
     except yaml.YAMLError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid YAML: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid YAML: {str(e)}") from e
 
     row = (await session.execute(select(GlobalSettings))).scalars().first()
     if not row:
