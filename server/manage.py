@@ -27,7 +27,7 @@ import string
 
 
 async def create_admin_user(email: str, password: str):
-    """Create an admin user."""
+    """Create an admin user and add to Administrators group."""
     async with AsyncSessionLocal() as session:
         # Check if user already exists
         existing = (await session.execute(
@@ -38,7 +38,7 @@ async def create_admin_user(email: str, password: str):
             print(f"❌ User with email '{email}' already exists!")
             return False
         
-        # Ensure admin role exists
+        # Ensure admin role exists (legacy)
         admin_role = (await session.execute(
             select(Role).where(Role.name == "admin")
         )).scalars().first()
@@ -57,6 +57,18 @@ async def create_admin_user(email: str, password: str):
             is_active=True
         )
         session.add(user)
+        await session.flush()
+
+        # Ensure Administrators group exists
+        admins = (await session.execute(select(UserGroup).where(UserGroup.name == "Administrators"))).scalars().first()
+        if not admins:
+            admins = UserGroup(name="Administrators", description="Administrators with full access", is_admin=True)
+            session.add(admins)
+            await session.flush()
+
+        # Add user to Administrators group
+        session.add(UserGroupMembership(user_id=user.id, user_group_id=admins.id))
+
         await session.commit()
         
         print(f"✅ Admin user created successfully: {email}")
@@ -82,7 +94,7 @@ async def reset_password(email: str, new_password: str):
 
 
 async def list_users():
-    """List all users."""
+    """List all users with group memberships."""
     async with AsyncSessionLocal() as session:
         users = (await session.execute(
             select(User).order_by(User.created_at)
@@ -95,18 +107,19 @@ async def list_users():
         print("\n📋 Users:")
         print("-" * 80)
         for user in users:
-            # Eager load role
-            role = (await session.execute(
-                select(Role).where(Role.id == user.role_id)
-            )).scalars().first()
-            role_name = role.name if role else "none"
+            # Load groups
+            groups = (await session.execute(
+                select(UserGroup).join(UserGroupMembership, UserGroupMembership.user_group_id == UserGroup.id)
+                .where(UserGroupMembership.user_id == user.id)
+            )).scalars().all()
+            group_names = ", ".join(g.name for g in groups) if groups else "(none)"
             status = "✅ active" if user.is_active else "❌ inactive"
-            print(f"  {user.email:<40} | {role_name:<10} | {status}")
+            print(f"  {user.email:<40} | groups: {group_names:<25} | {status}")
         print("-" * 80)
 
 
 async def make_admin(email: str):
-    """Make an existing user an admin."""
+    """Make an existing user an admin: add to Administrators group (and legacy role)."""
     async with AsyncSessionLocal() as session:
         user = (await session.execute(
             select(User).where(User.email == email)
@@ -116,7 +129,7 @@ async def make_admin(email: str):
             print(f"❌ User with email '{email}' not found!")
             return False
         
-        # Ensure admin role exists
+        # Ensure admin role exists (legacy)
         admin_role = (await session.execute(
             select(Role).where(Role.name == "admin")
         )).scalars().first()
@@ -128,6 +141,20 @@ async def make_admin(email: str):
             await session.flush()
         
         user.role_id = admin_role.id
+
+        # Ensure Administrators group exists
+        admins = (await session.execute(select(UserGroup).where(UserGroup.name == "Administrators"))).scalars().first()
+        if not admins:
+            admins = UserGroup(name="Administrators", description="Administrators with full access", is_admin=True)
+            session.add(admins)
+            await session.flush()
+        # Add membership if missing
+        existing = (await session.execute(
+            select(UserGroupMembership).where(UserGroupMembership.user_id == user.id, UserGroupMembership.user_group_id == admins.id)
+        )).scalars().first()
+        if not existing:
+            session.add(UserGroupMembership(user_id=user.id, user_group_id=admins.id))
+
         await session.commit()
         
         print(f"✅ User '{email}' is now an admin!")

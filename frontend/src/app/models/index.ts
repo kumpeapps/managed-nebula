@@ -5,7 +5,8 @@ export interface User {
   email: string;
   is_active: boolean;
   is_admin: boolean;
-  role?: { id: number; name: string } | null;
+  groups: { id: number; name: string }[];
+  role?: { id: number; name: string } | null; // legacy
 }
 
 export interface UserRef {
@@ -198,6 +199,7 @@ export interface Settings {
   client_docker_image: string;
   server_url: string;
   docker_compose_template: string;
+  externally_managed_users: boolean;
 }
 
 export interface SettingsUpdate {

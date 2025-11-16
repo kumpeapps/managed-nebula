@@ -29,6 +29,7 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
       - ENABLE_SCHEMA_AUTOSYNC=${ENABLE_SCHEMA_AUTOSYNC:-true}
       - DEBUG_AUTH=${DEBUG_AUTH:-true}
+      - EXTERNALLY_MANAGED_USERS=${EXTERNALLY_MANAGED_USERS:-false}
     ports:
       - "8080:8080"   # Direct access for API debugging (also proxied via frontend)
     volumes:

@@ -14,6 +14,7 @@ import { UsersComponent } from './components/users.component';
 import { UserGroupsComponent } from './components/user-groups.component';
 import { PermissionsComponent } from './components/permissions.component';
 import { SettingsComponent } from './components/settings.component';
+import { ProfileComponent } from './components/profile.component';
 
 const routes: Routes = [
   { path: 'login', component: LoginComponent },
@@ -29,6 +30,7 @@ const routes: Routes = [
   { path: 'user-groups', component: UserGroupsComponent, canActivate: [AuthGuard] },
   { path: 'permissions', component: PermissionsComponent, canActivate: [AuthGuard] },
   { path: 'settings', component: SettingsComponent, canActivate: [AuthGuard] },
+  { path: 'profile', component: ProfileComponent, canActivate: [AuthGuard] },
   { path: '', redirectTo: '/dashboard', pathMatch: 'full' }
 ];
 

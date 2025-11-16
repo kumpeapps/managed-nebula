@@ -38,6 +38,15 @@ export class AuthService {
   }
 
   /**
+   * Refresh current user details from the server
+   */
+  refreshMe(): void {
+    this.http.get<User>(`${this.apiUrl}/auth/me`, { withCredentials: true })
+      .pipe(catchError(() => of(null)))
+      .subscribe((user: User | null) => this.currentUserSubject.next(user));
+  }
+
+  /**
    * Login with username and password
    */
   login(email: string, password: string): Observable<User> {

@@ -64,6 +64,7 @@ from ..services.cert_manager import CertManager
 from ..services.config_builder import build_nebula_config
 from ..services.ip_allocator import ensure_default_pool, allocate_ip_from_pool
 from ..core.auth import require_permission, get_current_user
+from ..core.config import settings
 from ..models.user import User
 from ..models.client import Group, FirewallRule, IPGroup, client_groups, client_firewall_rulesets
 from ..models.permissions import ClientPermission, UserGroup, UserGroupMembership
@@ -164,7 +165,8 @@ async def get_settings(session: AsyncSession = Depends(get_session), user: User 
         punchy_enabled=row.punchy_enabled,
         client_docker_image=row.client_docker_image,
         server_url=row.server_url,
-        docker_compose_template=row.docker_compose_template
+        docker_compose_template=row.docker_compose_template,
+        externally_managed_users=settings.externally_managed_users
     )
 
 
@@ -208,7 +210,8 @@ async def update_settings(body: SettingsUpdate, session: AsyncSession = Depends(
         punchy_enabled=row.punchy_enabled,
         client_docker_image=row.client_docker_image,
         server_url=row.server_url,
-        docker_compose_template=row.docker_compose_template
+        docker_compose_template=row.docker_compose_template,
+        externally_managed_users=settings.externally_managed_users
     )
 
 
@@ -2665,42 +2668,58 @@ async def delete_ca(ca_id: int, session: AsyncSession = Depends(get_session), us
 @router.get("/users", response_model=List[UserResponse])
 async def list_users(session: AsyncSession = Depends(get_session), user: User = Depends(require_permission("users", "read"))):
     from sqlalchemy.orm import selectinload
-    from ..models.user import Role
+    from ..models.permissions import UserGroup, UserGroupMembership
     result = await session.execute(select(User).options(selectinload(User.role)))
     users = result.scalars().all()
-    return [
-        UserResponse(
+    responses: List[UserResponse] = []
+    for u in users:
+        memberships = await session.execute(
+            select(UserGroup)
+            .join(UserGroupMembership, UserGroupMembership.user_group_id == UserGroup.id)
+            .where(UserGroupMembership.user_id == u.id)
+        )
+        groups = memberships.scalars().all()
+        responses.append(UserResponse(
             id=u.id,
             email=u.email,
             is_active=u.is_active,
-            role=RoleRef(id=u.role.id, name=u.role.name) if u.role else None,
+            groups=[UserGroupRef(id=g.id, name=g.name) for g in groups],
             created_at=u.created_at
-        )
-        for u in users
-    ]
+        ))
+    return responses
 
 
 @router.get("/users/{user_id}", response_model=UserResponse)
 async def get_user(user_id: int, session: AsyncSession = Depends(get_session), admin: User = Depends(require_permission("users", "read"))):
     from sqlalchemy.orm import selectinload
-    from ..models.user import Role
+    from ..models.permissions import UserGroup, UserGroupMembership
     result = await session.execute(select(User).options(selectinload(User.role)).where(User.id == user_id))
     u = result.scalar_one_or_none()
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
+    memberships = await session.execute(
+        select(UserGroup)
+        .join(UserGroupMembership, UserGroupMembership.user_group_id == UserGroup.id)
+        .where(UserGroupMembership.user_id == u.id)
+    )
+    groups = memberships.scalars().all()
     return UserResponse(
         id=u.id,
         email=u.email,
         is_active=u.is_active,
-        role=RoleRef(id=u.role.id, name=u.role.name) if u.role else None,
+        groups=[UserGroupRef(id=g.id, name=g.name) for g in groups],
         created_at=u.created_at
     )
 
 
 @router.post("/users", response_model=UserResponse)
 async def create_user(body: UserCreate, session: AsyncSession = Depends(get_session), admin: User = Depends(require_permission("users", "create"))):
+    # Respect external user management setting
+    if settings.externally_managed_users:
+        raise HTTPException(status_code=403, detail="Users are managed externally; local creation is disabled")
     from ..core.auth import hash_password
     from ..models.user import Role
+    from ..models.permissions import UserGroup, UserGroupMembership
     from sqlalchemy.orm import selectinload
 
     # Check duplicate email
@@ -2708,12 +2727,14 @@ async def create_user(body: UserCreate, session: AsyncSession = Depends(get_sess
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Email already exists")
 
-    # Find role by name
-    role_result = await session.execute(select(Role).where(Role.name == body.role_name))
-    role = role_result.scalar_one_or_none()
-    if not role:
-        raise HTTPException(
-            status_code=400, detail=f"Role '{body.role_name}' not found")
+    # Determine role legacy (optional)
+    role_id = None
+    if body.role_name:
+        role_result = await session.execute(select(Role).where(Role.name == body.role_name))
+        role = role_result.scalar_one_or_none()
+        if not role:
+            raise HTTPException(status_code=400, detail=f"Role '{body.role_name}' not found")
+        role_id = role.id
 
     # Hash password
     hashed = hash_password(body.password)
@@ -2722,30 +2743,56 @@ async def create_user(body: UserCreate, session: AsyncSession = Depends(get_sess
         email=body.email,
         hashed_password=hashed,
         is_active=body.is_active,
-        role_id=role.id
+        role_id=role_id
     )
     session.add(new_user)
+    await session.flush()
+
+    # Handle user group memberships
+    group_ids = body.user_group_ids or []
+    if not group_ids:
+        # Ensure default 'Users' group exists; assign by default
+        users_group = (await session.execute(select(UserGroup).where(UserGroup.name == "Users"))).scalars().first()
+        if not users_group:
+            users_group = UserGroup(name="Users", description="Default users group", is_admin=False)
+            session.add(users_group)
+            await session.flush()
+        group_ids = [users_group.id]
+
+    # Validate and add memberships
+    valid_groups = (await session.execute(select(UserGroup).where(UserGroup.id.in_(group_ids)))).scalars().all()
+    for g in valid_groups:
+        session.add(UserGroupMembership(user_id=new_user.id, user_group_id=g.id))
+
     await session.commit()
     await session.refresh(new_user)
 
-    # Reload with role
-    result = await session.execute(select(User).options(selectinload(User.role)).where(User.id == new_user.id))
-    u = result.scalar_one()
+    # Load groups for response
+    memberships = await session.execute(
+        select(UserGroup)
+        .join(UserGroupMembership, UserGroupMembership.user_group_id == UserGroup.id)
+        .where(UserGroupMembership.user_id == new_user.id)
+    )
+    groups = memberships.scalars().all()
 
     return UserResponse(
-        id=u.id,
-        email=u.email,
-        is_active=u.is_active,
-        role=RoleRef(id=u.role.id, name=u.role.name) if u.role else None,
-        created_at=u.created_at
+        id=new_user.id,
+        email=new_user.email,
+        is_active=new_user.is_active,
+        groups=[UserGroupRef(id=g.id, name=g.name) for g in groups],
+        created_at=new_user.created_at
     )
 
 
 @router.put("/users/{user_id}", response_model=UserResponse)
 async def update_user(user_id: int, body: UserUpdate, session: AsyncSession = Depends(get_session), admin: User = Depends(require_permission("users", "update"))):
+    # Respect external user management setting
+    if settings.externally_managed_users:
+        raise HTTPException(status_code=403, detail="Users are managed externally; local editing is disabled")
     from ..core.auth import hash_password
     from sqlalchemy.orm import selectinload
     from ..models.user import Role
+    from ..models.permissions import UserGroup, UserGroupMembership
 
     result = await session.execute(select(User).options(selectinload(User.role)).where(User.id == user_id))
     u = result.scalar_one_or_none()
@@ -2773,25 +2820,64 @@ async def update_user(user_id: int, body: UserUpdate, session: AsyncSession = De
     if body.is_active is not None:
         u.is_active = body.is_active
 
+    # Update group memberships if provided
+    if body.user_group_ids is not None:
+        # Remove existing memberships not in new set; add missing ones
+        current_memberships = (await session.execute(
+            select(UserGroupMembership).where(UserGroupMembership.user_id == u.id)
+        )).scalars().all()
+        current_ids = {m.user_group_id for m in current_memberships}
+        new_ids = set(body.user_group_ids)
+
+        # Prevent removing last administrator membership
+        # If removing from Administrators would leave zero, block
+        admins_group = (await session.execute(select(UserGroup).where(UserGroup.name == "Administrators"))).scalars().first()
+        if admins_group and admins_group.id in current_ids and admins_group.id not in new_ids:
+            # Count admins
+            admin_count = (await session.execute(
+                select(func.count(UserGroupMembership.id)).where(UserGroupMembership.user_group_id == admins_group.id)
+            )).scalar()
+            if admin_count <= 1:
+                raise HTTPException(status_code=409, detail="Cannot remove the last administrator. Add another admin first.")
+
+        # Delete memberships not in new_ids
+        for m in current_memberships:
+            if m.user_group_id not in new_ids:
+                await session.delete(m)
+        # Add memberships for ids not currently present
+        if new_ids:
+            valid_groups = (await session.execute(select(UserGroup).where(UserGroup.id.in_(list(new_ids))))).scalars().all()
+            valid_ids = {g.id for g in valid_groups}
+            for gid in valid_ids:
+                if gid not in current_ids:
+                    session.add(UserGroupMembership(user_id=u.id, user_group_id=gid))
+
     await session.commit()
     await session.refresh(u)
 
-    # Reload with role
-    result = await session.execute(select(User).options(selectinload(User.role)).where(User.id == user_id))
-    u = result.scalar_one()
+    # Load groups for response
+    memberships = await session.execute(
+        select(UserGroup)
+        .join(UserGroupMembership, UserGroupMembership.user_group_id == UserGroup.id)
+        .where(UserGroupMembership.user_id == u.id)
+    )
+    groups = memberships.scalars().all()
 
     return UserResponse(
         id=u.id,
         email=u.email,
         is_active=u.is_active,
-        role=RoleRef(id=u.role.id, name=u.role.name) if u.role else None,
+        groups=[UserGroupRef(id=g.id, name=g.name) for g in groups],
         created_at=u.created_at
     )
 
 
 @router.delete("/users/{user_id}")
 async def delete_user(user_id: int, session: AsyncSession = Depends(get_session), admin: User = Depends(require_permission("users", "delete"))):
-    from ..models.permissions import UserGroupMembership
+    # Respect external user management setting
+    if settings.externally_managed_users:
+        raise HTTPException(status_code=403, detail="Users are managed externally; local deletion is disabled")
+    from ..models.permissions import UserGroup, UserGroupMembership
 
     result = await session.execute(select(User).where(User.id == user_id))
     u = result.scalar_one_or_none()
@@ -3105,16 +3191,24 @@ async def list_group_members(
     )
     members = result.scalars().all()
 
-    return [
-        UserResponse(
+    responses: List[UserResponse] = []
+    for u in members:
+        # Load all groups for each user
+        memberships = await session.execute(
+            select(UserGroup)
+            .join(UserGroupMembership, UserGroupMembership.user_group_id == UserGroup.id)
+            .where(UserGroupMembership.user_id == u.id)
+        )
+        groups = memberships.scalars().all()
+        responses.append(UserResponse(
             id=u.id,
             email=u.email,
             is_active=u.is_active,
-            role=RoleRef(id=u.role.id, name=u.role.name) if u.role else None,
+            groups=[UserGroupRef(id=g.id, name=g.name) for g in groups],
             created_at=u.created_at
-        )
-        for u in members
-    ]
+        ))
+
+    return responses
 
 
 @router.post("/user-groups/{group_id}/members")
