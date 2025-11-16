@@ -12,7 +12,7 @@ from getpass import getpass
 sys.path.insert(0, os.path.dirname(__file__))
 
 from app.db import AsyncSessionLocal
-from app.models.user import User, Role
+from app.models.user import User
 from app.models.client import Client, Group, ClientToken, IPAssignment, IPPool, IPGroup, FirewallRuleset, FirewallRule, client_groups, client_firewall_rulesets, ruleset_rules
 from app.models.permissions import UserGroup, UserGroupMembership, GroupPermission, ClientPermission
 from app.models.ca import CACertificate
@@ -38,22 +38,10 @@ async def create_admin_user(email: str, password: str):
             print(f"❌ User with email '{email}' already exists!")
             return False
         
-        # Ensure admin role exists (legacy)
-        admin_role = (await session.execute(
-            select(Role).where(Role.name == "admin")
-        )).scalars().first()
-        
-        if not admin_role:
-            print("Creating admin role...")
-            admin_role = Role(name="admin")
-            session.add(admin_role)
-            await session.flush()
-        
         # Create user
         user = User(
             email=email,
             hashed_password=hash_password(password),
-            role_id=admin_role.id,
             is_active=True
         )
         session.add(user)
@@ -66,12 +54,13 @@ async def create_admin_user(email: str, password: str):
             session.add(admins)
             await session.flush()
 
-        # Add user to Administrators group
+        # Add user to Administrators group (required for admin access)
         session.add(UserGroupMembership(user_id=user.id, user_group_id=admins.id))
 
         await session.commit()
         
         print(f"✅ Admin user created successfully: {email}")
+        print(f"✅ User added to Administrators group for admin access")
         return True
 
 
@@ -119,7 +108,7 @@ async def list_users():
 
 
 async def make_admin(email: str):
-    """Make an existing user an admin: add to Administrators group (and legacy role)."""
+    """Make an existing user an admin: add to Administrators group."""
     async with AsyncSessionLocal() as session:
         user = (await session.execute(
             select(User).where(User.email == email)
@@ -128,19 +117,6 @@ async def make_admin(email: str):
         if not user:
             print(f"❌ User with email '{email}' not found!")
             return False
-        
-        # Ensure admin role exists (legacy)
-        admin_role = (await session.execute(
-            select(Role).where(Role.name == "admin")
-        )).scalars().first()
-        
-        if not admin_role:
-            print("Creating admin role...")
-            admin_role = Role(name="admin")
-            session.add(admin_role)
-            await session.flush()
-        
-        user.role_id = admin_role.id
 
         # Ensure Administrators group exists
         admins = (await session.execute(select(UserGroup).where(UserGroup.name == "Administrators"))).scalars().first()
@@ -148,16 +124,21 @@ async def make_admin(email: str):
             admins = UserGroup(name="Administrators", description="Administrators with full access", is_admin=True)
             session.add(admins)
             await session.flush()
+        
         # Add membership if missing
         existing = (await session.execute(
             select(UserGroupMembership).where(UserGroupMembership.user_id == user.id, UserGroupMembership.user_group_id == admins.id)
         )).scalars().first()
-        if not existing:
-            session.add(UserGroupMembership(user_id=user.id, user_group_id=admins.id))
-
+        
+        if existing:
+            print(f"ℹ️  User '{email}' is already an admin (member of Administrators group)")
+            return True
+        
+        session.add(UserGroupMembership(user_id=user.id, user_group_id=admins.id))
         await session.commit()
         
         print(f"✅ User '{email}' is now an admin!")
+        print(f"✅ Added to Administrators group")
         return True
 
 
@@ -172,44 +153,42 @@ async def create_demo_data():
         if existing_clients > 0:
             print("⚠️  Demo data may already exist. Continuing anyway...")
         
-        # 1. Create demo users and roles
+        # 1. Create demo users
         print("👥 Creating demo users...")
         
-        # Ensure roles exist
-        admin_role = (await session.execute(select(Role).where(Role.name == "admin"))).scalars().first()
-        if not admin_role:
-            admin_role = Role(name="admin")
-            session.add(admin_role)
-            await session.flush()
-        
-        user_role = (await session.execute(select(Role).where(Role.name == "user"))).scalars().first()
-        if not user_role:
-            user_role = Role(name="user")
-            session.add(user_role)
+        # Ensure Administrators group exists
+        admins_group = (await session.execute(select(UserGroup).where(UserGroup.name == "Administrators"))).scalars().first()
+        if not admins_group:
+            admins_group = UserGroup(name="Administrators", description="Administrators with full access", is_admin=True)
+            session.add(admins_group)
             await session.flush()
         
         # Create demo users if they don't exist
         demo_users = [
-            ("admin@demo.com", "admin123", admin_role.id, "Demo Admin"),
-            ("alice@demo.com", "alice123", user_role.id, "Alice Johnson"),
-            ("bob@demo.com", "bob123", user_role.id, "Bob Smith"),
-            ("charlie@demo.com", "charlie123", user_role.id, "Charlie Brown"),
+            ("admin@demo.com", "admin123", True, "Demo Admin"),
+            ("alice@demo.com", "alice123", False, "Alice Johnson"),
+            ("bob@demo.com", "bob123", False, "Bob Smith"),
+            ("charlie@demo.com", "charlie123", False, "Charlie Brown"),
         ]
         
         created_users = {}
-        for email, password, role_id, name in demo_users:
+        for email, password, is_admin, name in demo_users:
             existing = (await session.execute(select(User).where(User.email == email))).scalars().first()
             if not existing:
                 user = User(
                     email=email,
                     hashed_password=hash_password(password),
-                    role_id=role_id,
                     is_active=True
                 )
                 session.add(user)
                 await session.flush()
                 created_users[email] = user
-                print(f"  ✅ Created user: {email} (password: {password})")
+                
+                # Add admin user to Administrators group
+                if is_admin:
+                    session.add(UserGroupMembership(user_id=user.id, user_group_id=admins_group.id))
+                
+                print(f"  ✅ Created user: {email} (password: {password}{'  [admin]' if is_admin else ''})")
             else:
                 created_users[email] = existing
                 print(f"  ℹ️  User exists: {email}")
