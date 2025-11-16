@@ -1,6 +1,7 @@
 [Unit]
 Description=Managed Nebula Frontend (Docker Compose)
-After=network-online.target docker.service
+Requires=managed-nebula-server.service
+After=network-online.target docker.service managed-nebula-server.service
 Wants=network-online.target
 
 [Service]
