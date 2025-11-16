@@ -46,6 +46,7 @@ class CertManager:
             )
         ).scalars().all()
         for c in cas:
+            c.is_active = False
             c.is_previous = True
             c.include_in_config = True
             await self.session.flush()
@@ -214,13 +215,59 @@ class CertManager:
         return pem_cert, now, not_after
 
     async def import_existing_ca(self, name: str, pem_cert: str, pem_key: str) -> CACertificate:
+        """Import a CA certificate with its private key, extracting real validity dates from the PEM."""
         now = datetime.utcnow()
+        nb = now
+        na = now + timedelta(days=settings.ca_default_validity_days)
+        # Try to parse validity from nebula-cert print -json
+        try:
+            import json as _json, tempfile as _tf, os as _os, subprocess as _sp
+            with _tf.TemporaryDirectory() as td:
+                p = _os.path.join(td, "ca.crt")
+                with open(p, "w") as f:
+                    f.write(pem_cert.strip() + "\n")
+                out = _sp.check_output(["nebula-cert", "print", "-json", "-path", p])
+                info = _json.loads(out.decode())
+                print(f"[import_existing_ca] nebula-cert output: {info}")
+                # notBefore/notAfter may be in details object or at top level
+                details = info.get("details", {})
+                nb_s = details.get("notBefore") or details.get("NotBefore") or info.get("notBefore") or info.get("NotBefore")
+                na_s = details.get("notAfter") or details.get("NotAfter") or info.get("notAfter") or info.get("NotAfter")
+                print(f"[import_existing_ca] Extracted dates: nb_s={nb_s}, na_s={na_s}")
+                from datetime import datetime as _dt
+                for v, attr in [(nb_s, "nb"), (na_s, "na")]:
+                    if isinstance(v, str):
+                        try:
+                            # Nebula uses RFC3339 style
+                            dt = _dt.fromisoformat(v.replace("Z", "+00:00")).replace(tzinfo=None)
+                            if attr == "nb":
+                                nb = dt
+                            else:
+                                na = dt
+                        except Exception as e:
+                            print(f"[import_existing_ca] Failed to parse {attr}: {e}")
+                print(f"[import_existing_ca] Final dates: nb={nb}, na={na}")
+        except Exception as e:
+            print(f"[import_existing_ca] Failed to extract dates: {e}")
+        
+        # Mark existing active signing CAs as previous
+        active_cas = (
+            await self.session.execute(
+                select(CACertificate).where(CACertificate.is_active == True, CACertificate.can_sign == True)
+            )
+        ).scalars().all()
+        for c in active_cas:
+            c.is_active = False
+            c.is_previous = True
+            c.include_in_config = True
+            await self.session.flush()
+        
         ca = CACertificate(
             name=name,
             pem_cert=pem_cert.encode(),
             pem_key=pem_key.encode(),
-            not_before=now,
-            not_after=now + timedelta(days=settings.ca_default_validity_days),
+            not_before=nb,
+            not_after=na,
             is_active=True,
             is_previous=False,
             can_sign=True,
@@ -246,9 +293,10 @@ class CertManager:
                     f.write(pem_cert.strip() + "\n")
                 out = _sp.check_output(["nebula-cert", "print", "-json", "-path", p])
                 info = _json.loads(out.decode())
-                # notBefore/notAfter may be strings
-                nb_s = info.get("notBefore") or info.get("NotBefore")
-                na_s = info.get("notAfter") or info.get("NotAfter")
+                # notBefore/notAfter may be in details object or at top level
+                details = info.get("details", {})
+                nb_s = details.get("notBefore") or details.get("NotBefore") or info.get("notBefore") or info.get("NotBefore")
+                na_s = details.get("notAfter") or details.get("NotAfter") or info.get("notAfter") or info.get("NotAfter")
                 from datetime import datetime as _dt
                 for v, attr in [(nb_s, "nb"), (na_s, "na")]:
                     if isinstance(v, str):

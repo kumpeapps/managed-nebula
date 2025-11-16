@@ -80,14 +80,14 @@ router = APIRouter(prefix="/v1", tags=["api"])
 async def build_client_response(client: Client, session: AsyncSession, user: User, include_token: bool = False) -> ClientResponse:
     """Build ClientResponse with owner, IP, groups, rulesets, and optional token."""
     from sqlalchemy.orm import selectinload
-    
+
     # Get client token if requested
     token_value = None
     if include_token:
         is_admin = bool(user.role and user.role.name == "admin")
         is_owner = client.owner_user_id == user.id
         can_view_token = False
-        
+
         # Check if user has can_view_token permission
         if not is_admin and not is_owner:
             perm_result = await session.execute(
@@ -99,20 +99,21 @@ async def build_client_response(client: Client, session: AsyncSession, user: Use
             )
             perm = perm_result.scalar_one_or_none()
             can_view_token = perm is not None
-        
+
         if is_admin or is_owner or can_view_token:
             token_result = await session.execute(
-                select(ClientToken).where(ClientToken.client_id == client.id, ClientToken.is_active == True)
+                select(ClientToken).where(ClientToken.client_id ==
+                                          client.id, ClientToken.is_active == True)
             )
             token_obj = token_result.scalar_one_or_none()
             token_value = token_obj.token if token_obj else None
-    
+
     # Get IP assignment
     ip_result = await session.execute(
         select(IPAssignment).where(IPAssignment.client_id == client.id)
     )
     ip_assignment = ip_result.scalar_one_or_none()
-    
+
     # Get owner info
     owner_ref = None
     if client.owner_user_id:
@@ -122,7 +123,7 @@ async def build_client_response(client: Client, session: AsyncSession, user: Use
         owner = owner_result.scalar_one_or_none()
         if owner:
             owner_ref = UserRef(id=owner.id, email=owner.email)
-    
+
     return ClientResponse(
         id=client.id,
         name=client.name,
@@ -137,7 +138,8 @@ async def build_client_response(client: Client, session: AsyncSession, user: Use
         last_config_download_at=client.last_config_download_at,
         owner=owner_ref,
         groups=[GroupRef(id=g.id, name=g.name) for g in client.groups],
-        firewall_rulesets=[FirewallRulesetRef(id=rs.id, name=rs.name) for rs in client.firewall_rulesets],
+        firewall_rulesets=[FirewallRulesetRef(
+            id=rs.id, name=rs.name) for rs in client.firewall_rulesets],
         token=token_value
     )
 
@@ -164,6 +166,7 @@ async def get_settings(session: AsyncSession = Depends(get_session), user: User 
         docker_compose_template=row.docker_compose_template
     )
 
+
 @router.put("/settings", response_model=SettingsResponse)
 async def update_settings(body: SettingsUpdate, session: AsyncSession = Depends(get_session), user: User = Depends(require_permission("settings", "update"))):
     row = (await session.execute(select(GlobalSettings))).scalars().first()
@@ -181,15 +184,21 @@ async def update_settings(body: SettingsUpdate, session: AsyncSession = Depends(
         try:
             # Replace common placeholders with dummy values for validation
             validation_template = body.docker_compose_template
-            validation_template = validation_template.replace("{{CLIENT_NAME}}", "test-client")
-            validation_template = validation_template.replace("{{CLIENT_TOKEN}}", "dummy-token")
-            validation_template = validation_template.replace("{{SERVER_URL}}", "http://localhost:8080")
-            validation_template = validation_template.replace("{{CLIENT_DOCKER_IMAGE}}", "test-image:latest")
-            validation_template = validation_template.replace("{{POLL_INTERVAL_HOURS}}", "24")
-            
+            validation_template = validation_template.replace(
+                "{{CLIENT_NAME}}", "test-client")
+            validation_template = validation_template.replace(
+                "{{CLIENT_TOKEN}}", "dummy-token")
+            validation_template = validation_template.replace(
+                "{{SERVER_URL}}", "http://localhost:8080")
+            validation_template = validation_template.replace(
+                "{{CLIENT_DOCKER_IMAGE}}", "test-image:latest")
+            validation_template = validation_template.replace(
+                "{{POLL_INTERVAL_HOURS}}", "24")
+
             yaml.safe_load(validation_template)
         except yaml.YAMLError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid YAML: {str(e)}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid YAML: {str(e)}")
         row.docker_compose_template = body.docker_compose_template
     await session.commit()
     await session.refresh(row)
@@ -204,7 +213,7 @@ async def update_settings(body: SettingsUpdate, session: AsyncSession = Depends(
 # ============ Docker Compose Template Settings ============
 @router.get("/settings/docker-compose-template", response_model=DockerComposeTemplateResponse)
 async def get_docker_compose_template(
-    session: AsyncSession = Depends(get_session), 
+    session: AsyncSession = Depends(get_session),
     user: User = Depends(require_permission("settings", "docker_compose"))
 ):
     """Retrieve the current docker-compose template (admin-only)."""
@@ -229,25 +238,30 @@ async def update_docker_compose_template(
     try:
         # Replace common placeholders with dummy values for validation
         validation_template = body.template
-        validation_template = validation_template.replace("{{CLIENT_NAME}}", "test-client")
-        validation_template = validation_template.replace("{{CLIENT_TOKEN}}", "dummy-token")
-        validation_template = validation_template.replace("{{SERVER_URL}}", "http://localhost:8080")
-        validation_template = validation_template.replace("{{CLIENT_DOCKER_IMAGE}}", "test-image:latest")
-        validation_template = validation_template.replace("{{POLL_INTERVAL_HOURS}}", "24")
-        
+        validation_template = validation_template.replace(
+            "{{CLIENT_NAME}}", "test-client")
+        validation_template = validation_template.replace(
+            "{{CLIENT_TOKEN}}", "dummy-token")
+        validation_template = validation_template.replace(
+            "{{SERVER_URL}}", "http://localhost:8080")
+        validation_template = validation_template.replace(
+            "{{CLIENT_DOCKER_IMAGE}}", "test-image:latest")
+        validation_template = validation_template.replace(
+            "{{POLL_INTERVAL_HOURS}}", "24")
+
         yaml.safe_load(validation_template)
     except yaml.YAMLError as e:
         raise HTTPException(status_code=400, detail=f"Invalid YAML: {str(e)}")
-    
+
     row = (await session.execute(select(GlobalSettings))).scalars().first()
     if not row:
         row = GlobalSettings()
         session.add(row)
-    
+
     row.docker_compose_template = body.template
     await session.commit()
     await session.refresh(row)
-    
+
     return DockerComposeTemplateResponse(template=row.docker_compose_template)
 
 
@@ -299,7 +313,8 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
         select(Client)
         .options(
             selectinload(Client.groups),
-            selectinload(Client.firewall_rulesets).selectinload(FirewallRuleset.rules).selectinload(FirewallRule.groups)
+            selectinload(Client.firewall_rulesets).selectinload(
+                FirewallRuleset.rules).selectinload(FirewallRule.groups)
         )
         .where(Client.id == token.client_id)
     )
@@ -308,7 +323,8 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
     q2 = await session.execute(select(IPAssignment).where(IPAssignment.client_id == client.id))
     ip_assignment = q2.scalar_one_or_none()
     if not ip_assignment:
-        raise HTTPException(status_code=409, detail="Client has no IP assignment")
+        raise HTTPException(
+            status_code=409, detail="Client has no IP assignment")
 
     # Load settings and active CA(s)
     settings = (await session.execute(select(GlobalSettings))).scalars().first()
@@ -329,7 +345,8 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
     import ipaddress
     if ip_assignment.pool_id:
         pool = (await session.execute(select(IPPool).where(IPPool.id == ip_assignment.pool_id))).scalars().first()
-        cidr = pool.cidr if pool else (settings.default_cidr_pool if settings else "10.100.0.0/16")
+        cidr = pool.cidr if pool else (
+            settings.default_cidr_pool if settings else "10.100.0.0/16")
     else:
         cidr = settings.default_cidr_pool if settings else "10.100.0.0/16"
     try:
@@ -365,13 +382,14 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
             continue
         if not lh.public_ip:
             continue
-        
+
         # Only include lighthouse if it's in the same pool as the client (or both have no pool)
         if lh_ip_row.pool_id != ip_assignment.pool_id:
             continue
-        
+
         lh_hosts.append(lh_ip_row.ip_address)
-        static_map[lh_ip_row.ip_address] = [f"{lh.public_ip}:{settings.lighthouse_port if settings else 4242}"]
+        static_map[lh_ip_row.ip_address] = [
+            f"{lh.public_ip}:{settings.lighthouse_port if settings else 4242}"]
 
     # Build inline CA bundle (concatenated PEMs)
     ca_bundle = "".join([(c.pem_cert.decode().rstrip() + "\n") for c in cas])
@@ -415,7 +433,7 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
     return {
         "config": config_yaml,
         "client_cert_pem": client_cert_pem,
-    "ca_chain_pems": [c.pem_cert.decode() for c in cas],
+        "ca_chain_pems": [c.pem_cert.decode() for c in cas],
         "cert_not_before": not_before.isoformat(),
         "cert_not_after": not_after.isoformat(),
         "lighthouse": client.is_lighthouse,
@@ -432,12 +450,12 @@ async def list_clients(
 ):
     """List all clients visible to the user (admin sees all, others see owned/shared)."""
     from sqlalchemy.orm import selectinload
-    
+
     query = select(Client).options(
         selectinload(Client.groups),
         selectinload(Client.firewall_rulesets)
     )
-    
+
     # Non-admins only see clients they own or have permissions for
     is_admin = bool(user.role and user.role.name == "admin")
     if not is_admin:
@@ -449,20 +467,20 @@ async def list_clients(
             )
         )
         permitted_ids = [row[0] for row in perm_result.all()]
-        
+
         # Filter to owned or permitted clients
         query = query.where(
             (Client.owner_user_id == user.id) | (Client.id.in_(permitted_ids))
         )
-    
+
     result = await session.execute(query)
     clients = result.scalars().all()
-    
+
     # Build responses using helper
     response = []
     for client in clients:
         response.append(await build_client_response(client, session, user, include_token=is_admin))
-    
+
     return response
 
 
@@ -475,7 +493,7 @@ async def create_client(
     """Create a new client with token and IP assignment (admin-only)."""
     from sqlalchemy.orm import selectinload
     from ..models.client import FirewallRuleset
-    
+
     # Validate groups
     if body.group_ids:
         groups_result = await session.execute(
@@ -483,21 +501,24 @@ async def create_client(
         )
         groups = groups_result.scalars().all()
         if len(groups) != len(body.group_ids):
-            raise HTTPException(status_code=400, detail="One or more group IDs not found")
+            raise HTTPException(
+                status_code=400, detail="One or more group IDs not found")
     else:
         groups = []
-    
+
     # Validate firewall rulesets
     if body.firewall_ruleset_ids:
         rulesets_result = await session.execute(
-            select(FirewallRuleset).where(FirewallRuleset.id.in_(body.firewall_ruleset_ids))
+            select(FirewallRuleset).where(
+                FirewallRuleset.id.in_(body.firewall_ruleset_ids))
         )
         rulesets = rulesets_result.scalars().all()
         if len(rulesets) != len(body.firewall_ruleset_ids):
-            raise HTTPException(status_code=400, detail="One or more firewall ruleset IDs not found")
+            raise HTTPException(
+                status_code=400, detail="One or more firewall ruleset IDs not found")
     else:
         rulesets = []
-    
+
     # Create client
     client = Client(
         name=body.name,
@@ -512,12 +533,12 @@ async def create_client(
     session.add(client)
     await session.commit()
     await session.refresh(client)
-    
+
     # Generate token
     token_value = secrets.token_urlsafe(32)
     token = ClientToken(client_id=client.id, token=token_value, is_active=True)
     session.add(token)
-    
+
     # Handle IP allocation
     pool_id = body.pool_id
     if not pool_id:
@@ -536,7 +557,7 @@ async def create_client(
         pool = pool_result.scalars().first()
         if not pool:
             raise HTTPException(status_code=404, detail="IP pool not found")
-    
+
     # Determine IP address
     if body.ip_address:
         # Manual IP assignment - validate it's available and in pool/group range
@@ -546,37 +567,43 @@ async def create_client(
         try:
             ip_obj = ipaddress.ip_address(allocated_ip)
             if ip_obj not in network:
-                raise HTTPException(status_code=400, detail="IP address not in pool CIDR")
+                raise HTTPException(
+                    status_code=400, detail="IP address not in pool CIDR")
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid IP address format")
-        
+            raise HTTPException(
+                status_code=400, detail="Invalid IP address format")
+
         # Check if IP already assigned
         existing = await session.execute(
             select(IPAssignment).where(IPAssignment.ip_address == allocated_ip)
         )
         if existing.scalar_one_or_none():
-            raise HTTPException(status_code=409, detail="IP address already assigned")
-        
+            raise HTTPException(
+                status_code=409, detail="IP address already assigned")
+
         # If IP group specified, validate IP is in range
         if body.ip_group_id:
             group_result = await session.execute(
-                select(IPGroup).where(IPGroup.id == body.ip_group_id, IPGroup.pool_id == pool_id)
+                select(IPGroup).where(IPGroup.id ==
+                                      body.ip_group_id, IPGroup.pool_id == pool_id)
             )
             group = group_result.scalar_one_or_none()
             if not group:
-                raise HTTPException(status_code=404, detail="IP group not found or doesn't belong to selected pool")
-            
+                raise HTTPException(
+                    status_code=404, detail="IP group not found or doesn't belong to selected pool")
+
             start_ip = ipaddress.ip_address(group.start_ip)
             end_ip = ipaddress.ip_address(group.end_ip)
             if not (start_ip <= ip_obj <= end_ip):
-                raise HTTPException(status_code=400, detail="IP address not in selected IP group range")
+                raise HTTPException(
+                    status_code=400, detail="IP address not in selected IP group range")
     else:
         # Auto-allocate IP
         try:
             allocated_ip = await allocate_ip_from_pool(session, pool)
         except ValueError as e:
             raise HTTPException(status_code=409, detail=str(e))
-    
+
     ip_assignment = IPAssignment(
         client_id=client.id,
         pool_id=pool_id,
@@ -586,7 +613,7 @@ async def create_client(
     session.add(ip_assignment)
     await session.commit()
     await session.refresh(client)
-    
+
     # Reload with relationships
     result = await session.execute(
         select(Client)
@@ -594,7 +621,7 @@ async def create_client(
         .where(Client.id == client.id)
     )
     client = result.scalar_one()
-    
+
     # Use the helper to build response with token
     return await build_client_response(client, session, user, include_token=True)
 
@@ -607,21 +634,21 @@ async def get_client(
 ):
     """Get a single client by ID with access control check."""
     from sqlalchemy.orm import selectinload
-    
+
     result = await session.execute(
         select(Client)
         .options(selectinload(Client.groups), selectinload(Client.firewall_rulesets))
         .where(Client.id == client_id)
     )
     client = result.scalar_one_or_none()
-    
+
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    
+
     # Access control: admins see all, others only see owned/shared
     is_admin = bool(user.role and user.role.name == "admin")
     is_owner = client.owner_user_id == user.id
-    
+
     if not is_admin and not is_owner:
         # Check if user has view permission
         perm_result = await session.execute(
@@ -634,7 +661,7 @@ async def get_client(
         perm = perm_result.scalar_one_or_none()
         if not perm:
             raise HTTPException(status_code=403, detail="Access denied")
-    
+
     return await build_client_response(client, session, user, include_token=(is_admin or is_owner))
 
 
@@ -647,7 +674,7 @@ async def update_client(
 ):
     """Update client fields and memberships."""
     from sqlalchemy.orm import selectinload
-    
+
     from ..models.client import FirewallRuleset
     result = await session.execute(
         select(Client)
@@ -655,14 +682,14 @@ async def update_client(
         .where(Client.id == client_id)
     )
     client = result.scalar_one_or_none()
-    
+
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    
+
     # Access control: admins can update all, others only owned or with can_update permission
     is_admin = bool(user.role and user.role.name == "admin")
     is_owner = client.owner_user_id == user.id
-    
+
     if not is_admin and not is_owner:
         # Check if user has update permission
         perm_result = await session.execute(
@@ -675,24 +702,24 @@ async def update_client(
         perm = perm_result.scalar_one_or_none()
         if not perm:
             raise HTTPException(status_code=403, detail="Access denied")
-    
+
     config_changed = False
-    
+
     # Update basic fields
     if body.name is not None and body.name != client.name:
         client.name = body.name
-    
+
     if body.is_lighthouse is not None and body.is_lighthouse != client.is_lighthouse:
         client.is_lighthouse = body.is_lighthouse
         config_changed = True
-    
+
     if body.public_ip is not None and body.public_ip != client.public_ip:
         client.public_ip = body.public_ip
         config_changed = True
-    
+
     if body.is_blocked is not None:
         client.is_blocked = body.is_blocked
-    
+
     # Update group memberships
     if body.group_ids is not None:
         # Fetch requested groups
@@ -700,28 +727,31 @@ async def update_client(
             select(Group).where(Group.id.in_(body.group_ids))
         )
         new_groups = groups_result.scalars().all()
-        
+
         if len(new_groups) != len(body.group_ids):
-            raise HTTPException(status_code=400, detail="One or more group IDs not found")
-        
+            raise HTTPException(
+                status_code=400, detail="One or more group IDs not found")
+
         if set(g.id for g in client.groups) != set(g.id for g in new_groups):
             client.groups = new_groups
             config_changed = True
-    
+
     # Update firewall ruleset associations
     if body.firewall_ruleset_ids is not None:
         rulesets_result = await session.execute(
-            select(FirewallRuleset).where(FirewallRuleset.id.in_(body.firewall_ruleset_ids))
+            select(FirewallRuleset).where(
+                FirewallRuleset.id.in_(body.firewall_ruleset_ids))
         )
         new_rulesets = rulesets_result.scalars().all()
-        
+
         if len(new_rulesets) != len(body.firewall_ruleset_ids):
-            raise HTTPException(status_code=400, detail="One or more firewall ruleset IDs not found")
-        
+            raise HTTPException(
+                status_code=400, detail="One or more firewall ruleset IDs not found")
+
         if set(r.id for r in client.firewall_rulesets) != set(r.id for r in new_rulesets):
             client.firewall_rulesets = new_rulesets
             config_changed = True
-    
+
     # Update IP assignment
     if body.ip_address is not None or body.pool_id is not None or body.ip_group_id is not None:
         # Get existing IP assignment
@@ -729,10 +759,11 @@ async def update_client(
             select(IPAssignment).where(IPAssignment.client_id == client_id)
         )
         ip_assignment = ip_result.scalar_one_or_none()
-        
+
         if not ip_assignment:
-            raise HTTPException(status_code=404, detail="Client has no IP assignment")
-        
+            raise HTTPException(
+                status_code=404, detail="Client has no IP assignment")
+
         # Update IP address if provided
         if body.ip_address is not None and body.ip_address != ip_assignment.ip_address:
             # Validate new IP is not already in use
@@ -743,11 +774,12 @@ async def update_client(
                 )
             )
             if existing_ip.scalar_one_or_none():
-                raise HTTPException(status_code=409, detail=f"IP address {body.ip_address} is already assigned")
-            
+                raise HTTPException(
+                    status_code=409, detail=f"IP address {body.ip_address} is already assigned")
+
             ip_assignment.ip_address = body.ip_address
             config_changed = True
-        
+
         # Update pool_id if provided
         if body.pool_id is not None and body.pool_id != ip_assignment.pool_id:
             # Validate pool exists
@@ -755,11 +787,12 @@ async def update_client(
                 select(IPPool).where(IPPool.id == body.pool_id)
             )
             if not pool_check.scalar_one_or_none():
-                raise HTTPException(status_code=404, detail=f"IP pool {body.pool_id} not found")
-            
+                raise HTTPException(
+                    status_code=404, detail=f"IP pool {body.pool_id} not found")
+
             ip_assignment.pool_id = body.pool_id
             config_changed = True
-        
+
         # Update ip_group_id if provided (allow setting to None to remove from group)
         if body.ip_group_id is not None:
             if body.ip_group_id != ip_assignment.ip_group_id:
@@ -769,18 +802,19 @@ async def update_client(
                     select(IPGroup).where(IPGroup.id == body.ip_group_id)
                 )
                 if not group_check.scalar_one_or_none():
-                    raise HTTPException(status_code=404, detail=f"IP group {body.ip_group_id} not found")
-                
+                    raise HTTPException(
+                        status_code=404, detail=f"IP group {body.ip_group_id} not found")
+
                 ip_assignment.ip_group_id = body.ip_group_id
                 config_changed = True
-    
+
     # Mark config changed timestamp if needed
     if config_changed:
         client.config_last_changed_at = datetime.utcnow()
-    
+
     await session.commit()
     await session.refresh(client)
-    
+
     # Reload with relationships
     result = await session.execute(
         select(Client)
@@ -788,7 +822,7 @@ async def update_client(
         .where(Client.id == client_id)
     )
     client = result.scalar_one()
-    
+
     return await build_client_response(client, session, user, include_token=(is_admin or is_owner))
 
 
@@ -803,15 +837,15 @@ async def delete_client(
         select(Client).where(Client.id == client_id)
     )
     client = result.scalar_one_or_none()
-    
+
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    
+
     # Delete related records (cascade should handle this, but explicit for clarity)
     # ClientToken, ClientCertificate, IPAssignment should cascade
     await session.delete(client)
     await session.commit()
-    
+
     return {"status": "deleted", "id": client_id}
 
 
@@ -826,7 +860,7 @@ async def update_client_owner(
 ):
     """Reassign client owner (admin-only)."""
     from sqlalchemy.orm import selectinload
-    
+
     # Get client
     result = await session.execute(
         select(Client)
@@ -836,7 +870,7 @@ async def update_client_owner(
     client = result.scalar_one_or_none()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    
+
     # Verify new owner exists
     owner_result = await session.execute(
         select(User).where(User.id == body.owner_user_id)
@@ -844,12 +878,12 @@ async def update_client_owner(
     new_owner = owner_result.scalar_one_or_none()
     if not new_owner:
         raise HTTPException(status_code=404, detail="New owner user not found")
-    
+
     # Update owner
     client.owner_user_id = body.owner_user_id
     await session.commit()
     await session.refresh(client)
-    
+
     return await build_client_response(client, session, user, include_token=True)
 
 
@@ -865,19 +899,20 @@ async def list_client_permissions(
     client = result.scalar_one_or_none()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    
+
     # Check access
     is_admin = bool(user.role and user.role.name == "admin")
     is_owner = client.owner_user_id == user.id
     if not is_admin and not is_owner:
-        raise HTTPException(status_code=403, detail="Only owner or admin can view permissions")
-    
+        raise HTTPException(
+            status_code=403, detail="Only owner or admin can view permissions")
+
     # Get permissions
     perm_result = await session.execute(
         select(ClientPermission).where(ClientPermission.client_id == client_id)
     )
     perms = perm_result.scalars().all()
-    
+
     # Build response with user info
     response = []
     for perm in perms:
@@ -893,7 +928,7 @@ async def list_client_permissions(
                 can_view_token=perm.can_view_token,
                 can_download_docker_config=perm.can_download_docker_config
             ))
-    
+
     return response
 
 
@@ -910,19 +945,20 @@ async def grant_client_permission(
     client = result.scalar_one_or_none()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    
+
     # Check access
     is_admin = bool(user.role and user.role.name == "admin")
     is_owner = client.owner_user_id == user.id
     if not is_admin and not is_owner:
-        raise HTTPException(status_code=403, detail="Only owner or admin can grant permissions")
-    
+        raise HTTPException(
+            status_code=403, detail="Only owner or admin can grant permissions")
+
     # Verify target user exists
     target_result = await session.execute(select(User).where(User.id == body.user_id))
     target_user = target_result.scalar_one_or_none()
     if not target_user:
         raise HTTPException(status_code=404, detail="Target user not found")
-    
+
     # Check if permission already exists
     existing_result = await session.execute(
         select(ClientPermission).where(
@@ -931,7 +967,7 @@ async def grant_client_permission(
         )
     )
     existing = existing_result.scalar_one_or_none()
-    
+
     if existing:
         # Update existing permission
         existing.can_view = body.can_view
@@ -952,10 +988,10 @@ async def grant_client_permission(
             can_download_docker_config=body.can_download_docker_config
         )
         session.add(perm)
-    
+
     await session.commit()
     await session.refresh(perm)
-    
+
     return ClientPermissionResponse(
         id=perm.id,
         user=UserRef(id=target_user.id, email=target_user.email),
@@ -980,13 +1016,14 @@ async def revoke_client_permission(
     client = result.scalar_one_or_none()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    
+
     # Check access
     is_admin = bool(user.role and user.role.name == "admin")
     is_owner = client.owner_user_id == user.id
     if not is_admin and not is_owner:
-        raise HTTPException(status_code=403, detail="Only owner or admin can revoke permissions")
-    
+        raise HTTPException(
+            status_code=403, detail="Only owner or admin can revoke permissions")
+
     # Get permission
     perm_result = await session.execute(
         select(ClientPermission).where(
@@ -997,10 +1034,10 @@ async def revoke_client_permission(
     perm = perm_result.scalar_one_or_none()
     if not perm:
         raise HTTPException(status_code=404, detail="Permission not found")
-    
+
     await session.delete(perm)
     await session.commit()
-    
+
     return {"status": "revoked", "permission_id": permission_id}
 
 
@@ -1014,13 +1051,13 @@ async def list_client_certificates(
 ):
     """List all certificates for a client (admin-only)."""
     from ..models.schemas import ClientCertificateResponse
-    
+
     # Verify client exists
     result = await session.execute(select(Client).where(Client.id == client_id))
     client = result.scalar_one_or_none()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    
+
     # Fetch certificates
     certs_result = await session.execute(
         select(ClientCertificate)
@@ -1028,7 +1065,7 @@ async def list_client_certificates(
         .order_by(ClientCertificate.created_at.desc())
     )
     certs = certs_result.scalars().all()
-    
+
     return [ClientCertificateResponse.model_validate(cert) for cert in certs]
 
 
@@ -1041,7 +1078,7 @@ async def reissue_client_certificate(
     """Manually reissue a client certificate (admin-only)."""
     from sqlalchemy.orm import selectinload
     from ..models.client import FirewallRuleset
-    
+
     # Fetch client with relationships
     result = await session.execute(
         select(Client)
@@ -1051,15 +1088,16 @@ async def reissue_client_certificate(
     client = result.scalar_one_or_none()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    
+
     # Get IP assignment
     ip_result = await session.execute(
         select(IPAssignment).where(IPAssignment.client_id == client_id)
     )
     ip_assignment = ip_result.scalar_one_or_none()
     if not ip_assignment:
-        raise HTTPException(status_code=409, detail="Client has no IP assignment")
-    
+        raise HTTPException(
+            status_code=409, detail="Client has no IP assignment")
+
     # Get active CA
     now_ts = datetime.utcnow()
     ca_result = await session.execute(
@@ -1072,7 +1110,7 @@ async def reissue_client_certificate(
     active_ca = ca_result.scalar_one_or_none()
     if not active_ca:
         raise HTTPException(status_code=503, detail="No active CA available")
-    
+
     # Determine CIDR from pool
     cidr = "10.100.0.0/16"  # default
     if ip_assignment.pool_id:
@@ -1082,7 +1120,7 @@ async def reissue_client_certificate(
         pool = pool_result.scalar_one_or_none()
         if pool:
             cidr = pool.cidr
-    
+
     # Issue new certificate
     cert_manager = CertManager(session)
     # Generate keypair for reissue (or use existing public key if available)
@@ -1090,20 +1128,20 @@ async def reissue_client_certificate(
     import subprocess
     import tempfile
     import os
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         key_path = os.path.join(tmpdir, "host.key")
         pub_path = os.path.join(tmpdir, "host.pub")
-        
+
         # Generate keypair
         subprocess.run(
             ["nebula-cert", "keygen", "-out-key", key_path, "-out-pub", pub_path],
             check=True
         )
-        
+
         with open(pub_path, "r") as f:
             public_key_pem = f.read()
-        
+
         # Issue certificate
         cert_pem = cert_manager.issue_or_rotate_client_cert(
             client=client,
@@ -1113,9 +1151,9 @@ async def reissue_client_certificate(
             active_ca=active_ca,
             session=session
         )
-    
+
     await session.commit()
-    
+
     return {
         "status": "reissued",
         "message": "Certificate reissued successfully. Client must download new config."
@@ -1138,18 +1176,19 @@ async def revoke_client_certificate(
         )
     )
     cert = result.scalar_one_or_none()
-    
+
     if not cert:
         raise HTTPException(status_code=404, detail="Certificate not found")
-    
+
     if cert.revoked:
-        raise HTTPException(status_code=400, detail="Certificate already revoked")
-    
+        raise HTTPException(
+            status_code=400, detail="Certificate already revoked")
+
     # Mark as revoked
     cert.revoked = True
     cert.revoked_at = datetime.utcnow()
     await session.commit()
-    
+
     return {
         "status": "revoked",
         "certificate_id": cert_id,
@@ -1168,24 +1207,25 @@ async def download_client_config(
     from ..models.client import FirewallRuleset
     from ..models.schemas import ClientConfigDownloadResponse
     import ipaddress
-    
+
     # Fetch client with relationships
     result = await session.execute(
         select(Client)
         .options(
             selectinload(Client.groups),
-            selectinload(Client.firewall_rulesets).selectinload(FirewallRuleset.rules).selectinload(FirewallRule.groups)
+            selectinload(Client.firewall_rulesets).selectinload(
+                FirewallRuleset.rules).selectinload(FirewallRule.groups)
         )
         .where(Client.id == client_id)
     )
     client = result.scalar_one_or_none()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    
+
     # Access control: admins, owners, or users with can_download_config permission
     is_admin = bool(user.role and user.role.name == "admin")
     is_owner = client.owner_user_id == user.id
-    
+
     if not is_admin and not is_owner:
         # Check if user has download permission
         perm_result = await session.execute(
@@ -1198,15 +1238,16 @@ async def download_client_config(
         perm = perm_result.scalar_one_or_none()
         if not perm:
             raise HTTPException(status_code=403, detail="Access denied")
-    
+
     # Get IP assignment
     ip_result = await session.execute(
         select(IPAssignment).where(IPAssignment.client_id == client_id)
     )
     ip_assignment = ip_result.scalar_one_or_none()
     if not ip_assignment:
-        raise HTTPException(status_code=409, detail="Client has no IP assignment")
-    
+        raise HTTPException(
+            status_code=409, detail="Client has no IP assignment")
+
     # Load settings and active CA(s)
     settings = (await session.execute(select(GlobalSettings))).scalars().first()
     now_ts = datetime.utcnow()
@@ -1220,21 +1261,22 @@ async def download_client_config(
     ).scalars().all()
     if not cas:
         raise HTTPException(status_code=503, detail="CA not configured")
-    
+
     # Determine IP/CIDR prefix for config
     if ip_assignment.pool_id:
         pool = (await session.execute(select(IPPool).where(IPPool.id == ip_assignment.pool_id))).scalars().first()
-        cidr = pool.cidr if pool else (settings.default_cidr_pool if settings else "10.100.0.0/16")
+        cidr = pool.cidr if pool else (
+            settings.default_cidr_pool if settings else "10.100.0.0/16")
     else:
         cidr = settings.default_cidr_pool if settings else "10.100.0.0/16"
-    
+
     try:
         prefix = ipaddress.ip_network(cidr, strict=False).prefixlen
     except Exception:
         prefix = 24
-    
+
     client_ip_cidr = f"{ip_assignment.ip_address}/{prefix}"
-    
+
     # Get latest non-revoked certificate
     cert_result = await session.execute(
         select(ClientCertificate)
@@ -1246,8 +1288,9 @@ async def download_client_config(
     )
     cert = cert_result.scalars().first()
     if not cert:
-        raise HTTPException(status_code=409, detail="No valid certificate found for client")
-    
+        raise HTTPException(
+            status_code=409, detail="No valid certificate found for client")
+
     # Build lighthouse maps: static_host_map {nebula_ip: ["public_ip:port"]} and hosts list of nebula IPs
     lighthouses = (
         await session.execute(select(Client).where(Client.is_lighthouse == True))
@@ -1261,11 +1304,12 @@ async def download_client_config(
         if not lh.public_ip:
             continue
         lh_hosts.append(ip_row.ip_address)
-        static_map[ip_row.ip_address] = [f"{lh.public_ip}:{settings.lighthouse_port if settings else 4242}"]
-    
+        static_map[ip_row.ip_address] = [
+            f"{lh.public_ip}:{settings.lighthouse_port if settings else 4242}"]
+
     # Build inline CA bundle (concatenated PEMs)
     ca_bundle = "".join([(c.pem_cert.decode().rstrip() + "\n") for c in cas])
-    
+
     # Collect revoked fingerprints to distribute
     now = datetime.utcnow()
     revoked_rows = (
@@ -1278,10 +1322,11 @@ async def download_client_config(
         )
     ).scalars().all()
     revoked_fps = [fp for fp in revoked_rows if fp]
-    
+
     # Decode cert PEM
-    cert_pem = cert.pem_cert.decode('utf-8') if isinstance(cert.pem_cert, bytes) else cert.pem_cert
-    
+    cert_pem = cert.pem_cert.decode(
+        'utf-8') if isinstance(cert.pem_cert, bytes) else cert.pem_cert
+
     # Build config YAML with full lighthouse/revocation info
     config_yaml = build_nebula_config(
         client=client,
@@ -1296,7 +1341,7 @@ async def download_client_config(
         inline_ca_pem=ca_bundle,
         inline_cert_pem=cert_pem,
     )
-    
+
     return ClientConfigDownloadResponse(
         config_yaml=config_yaml,
         client_cert_pem=cert_pem,
@@ -1312,17 +1357,17 @@ async def download_client_docker_compose(
 ):
     """Download docker-compose.yml for client with pre-filled token. Requires admin, owner, or can_download_docker_config permission."""
     from fastapi.responses import Response
-    
+
     # Fetch client
     result = await session.execute(select(Client).where(Client.id == client_id))
     client = result.scalar_one_or_none()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    
+
     # Access control: admins, owners, or users with can_download_docker_config permission
     is_admin = bool(user.role and user.role.name == "admin")
     is_owner = client.owner_user_id == user.id
-    
+
     if not is_admin and not is_owner:
         # Check if user has docker config download permission
         perm_result = await session.execute(
@@ -1335,22 +1380,24 @@ async def download_client_docker_compose(
         perm = perm_result.scalar_one_or_none()
         if not perm:
             raise HTTPException(status_code=403, detail="Access denied")
-    
+
     # Get client token
     token_result = await session.execute(
-        select(ClientToken).where(ClientToken.client_id == client_id, ClientToken.is_active == True)
+        select(ClientToken).where(ClientToken.client_id ==
+                                  client_id, ClientToken.is_active == True)
     )
     token = token_result.scalar_one_or_none()
     if not token:
-        raise HTTPException(status_code=409, detail="Client has no active token")
-    
+        raise HTTPException(
+            status_code=409, detail="Client has no active token")
+
     # Get settings for template and values
     settings = (await session.execute(select(GlobalSettings))).scalars().first()
     if not settings:
         settings = GlobalSettings()
         session.add(settings)
         await session.commit()
-    
+
     # Get template, fallback to default if None
     from ..models.settings import DEFAULT_DOCKER_COMPOSE_TEMPLATE
     template = settings.docker_compose_template
@@ -1359,14 +1406,16 @@ async def download_client_docker_compose(
         # Update the settings record to have the template for future use
         settings.docker_compose_template = template
         await session.commit()
-    
+
     # Replace placeholders
     compose_content = template.replace("{{CLIENT_NAME}}", client.name)
     compose_content = compose_content.replace("{{CLIENT_TOKEN}}", token.token)
-    compose_content = compose_content.replace("{{SERVER_URL}}", settings.server_url)
-    compose_content = compose_content.replace("{{CLIENT_DOCKER_IMAGE}}", settings.client_docker_image)
+    compose_content = compose_content.replace(
+        "{{SERVER_URL}}", settings.server_url)
+    compose_content = compose_content.replace(
+        "{{CLIENT_DOCKER_IMAGE}}", settings.client_docker_image)
     compose_content = compose_content.replace("{{POLL_INTERVAL_HOURS}}", "24")
-    
+
     # Return as downloadable file
     return Response(
         content=compose_content,
@@ -1383,10 +1432,11 @@ async def download_client_docker_compose(
 async def list_groups(session: AsyncSession = Depends(get_session), user: User = Depends(get_current_user)):
     from sqlalchemy.orm import selectinload
     result = await session.execute(
-        select(Group).options(selectinload(Group.clients), selectinload(Group.owner))
+        select(Group).options(selectinload(
+            Group.clients), selectinload(Group.owner))
     )
     groups = result.scalars().all()
-    
+
     response_groups = []
     for g in groups:
         # Determine parent and subgroup status
@@ -1395,11 +1445,11 @@ async def list_groups(session: AsyncSession = Depends(get_session), user: User =
         if ':' in g.name:
             is_subgroup = True
             parent_name = ':'.join(g.name.split(':')[:-1])
-        
+
         owner_ref = None
         if g.owner:
             owner_ref = UserRef(id=g.owner.id, email=g.owner.email)
-        
+
         response_groups.append(GroupResponse(
             id=g.id,
             name=g.name,
@@ -1409,30 +1459,32 @@ async def list_groups(session: AsyncSession = Depends(get_session), user: User =
             parent_name=parent_name,
             is_subgroup=is_subgroup
         ))
-    
+
     return response_groups
+
 
 @router.get("/groups/{group_id}", response_model=GroupResponse)
 async def get_group(group_id: int, session: AsyncSession = Depends(get_session), user: User = Depends(get_current_user)):
     from sqlalchemy.orm import selectinload
     result = await session.execute(
-        select(Group).options(selectinload(Group.clients), selectinload(Group.owner)).where(Group.id == group_id)
+        select(Group).options(selectinload(Group.clients),
+                              selectinload(Group.owner)).where(Group.id == group_id)
     )
     group = result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
-    
+
     # Determine parent and subgroup status
     parent_name = None
     is_subgroup = False
     if ':' in group.name:
         is_subgroup = True
         parent_name = ':'.join(group.name.split(':')[:-1])
-    
+
     owner_ref = None
     if group.owner:
         owner_ref = UserRef(id=group.owner.id, email=group.owner.email)
-    
+
     return GroupResponse(
         id=group.id,
         name=group.name,
@@ -1443,29 +1495,32 @@ async def get_group(group_id: int, session: AsyncSession = Depends(get_session),
         is_subgroup=is_subgroup
     )
 
+
 @router.post("/groups", response_model=GroupResponse)
 async def create_group(body: GroupCreate, session: AsyncSession = Depends(get_session), user: User = Depends(get_current_user)):
     # Ensure unique name
     existing = await session.execute(select(Group).where(Group.name == body.name))
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Group name already exists")
-    
+        raise HTTPException(
+            status_code=409, detail="Group name already exists")
+
     # Check if this is a subgroup (contains colon)
     is_subgroup = ':' in body.name
     parent_name = None
-    
+
     if is_subgroup:
         parent_name = ':'.join(body.name.split(':')[:-1])
         # Verify parent exists
         parent_result = await session.execute(select(Group).where(Group.name == parent_name))
         parent_group = parent_result.scalar_one_or_none()
         if not parent_group:
-            raise HTTPException(status_code=400, detail=f"Parent group '{parent_name}' does not exist")
-        
+            raise HTTPException(
+                status_code=400, detail=f"Parent group '{parent_name}' does not exist")
+
         # Check if user has permission to create subgroups of parent (unless admin)
         is_admin = bool(user.role and user.role.name == "admin")
         is_parent_owner = parent_group.owner_user_id == user.id
-        
+
         if not is_admin and not is_parent_owner:
             # Check if user has can_create_subgroup permission via GroupPermission
             from ..models.permissions import GroupPermission
@@ -1477,14 +1532,16 @@ async def create_group(body: GroupCreate, session: AsyncSession = Depends(get_se
                 )
             )
             if not perm_result.scalar_one_or_none():
-                raise HTTPException(status_code=403, detail="You don't have permission to create subgroups of this parent")
-    
+                raise HTTPException(
+                    status_code=403, detail="You don't have permission to create subgroups of this parent")
+
     # Create group with current user as owner
-    group = Group(name=body.name, owner_user_id=user.id, created_at=datetime.utcnow())
+    group = Group(name=body.name, owner_user_id=user.id,
+                  created_at=datetime.utcnow())
     session.add(group)
     await session.commit()
     await session.refresh(group)
-    
+
     owner_ref = UserRef(id=user.id, email=user.email)
     return GroupResponse(
         id=group.id,
@@ -1496,43 +1553,47 @@ async def create_group(body: GroupCreate, session: AsyncSession = Depends(get_se
         is_subgroup=is_subgroup
     )
 
+
 @router.put("/groups/{group_id}", response_model=GroupResponse)
 async def update_group(group_id: int, body: GroupUpdate, session: AsyncSession = Depends(get_session), user: User = Depends(get_current_user)):
     from sqlalchemy.orm import selectinload
     result = await session.execute(
-        select(Group).options(selectinload(Group.owner), selectinload(Group.clients)).where(Group.id == group_id)
+        select(Group).options(selectinload(Group.owner),
+                              selectinload(Group.clients)).where(Group.id == group_id)
     )
     group = result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
-    
+
     # Check permissions (admin or owner)
     is_admin = bool(user.role and user.role.name == "admin")
     is_owner = group.owner_user_id == user.id
-    
+
     if not is_admin and not is_owner:
-        raise HTTPException(status_code=403, detail="Only group owner or admin can update group")
-    
+        raise HTTPException(
+            status_code=403, detail="Only group owner or admin can update group")
+
     # Check duplicate name (other group)
     name_check = await session.execute(select(Group).where(Group.name == body.name, Group.id != group_id))
     if name_check.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Another group with that name exists")
-    
+        raise HTTPException(
+            status_code=409, detail="Another group with that name exists")
+
     group.name = body.name
     await session.commit()
     await session.refresh(group)
-    
+
     # Determine parent and subgroup status
     parent_name = None
     is_subgroup = False
     if ':' in group.name:
         is_subgroup = True
         parent_name = ':'.join(group.name.split(':')[:-1])
-    
+
     owner_ref = None
     if group.owner:
         owner_ref = UserRef(id=group.owner.id, email=group.owner.email)
-    
+
     return GroupResponse(
         id=group.id,
         name=group.name,
@@ -1543,6 +1604,7 @@ async def update_group(group_id: int, body: GroupUpdate, session: AsyncSession =
         is_subgroup=is_subgroup
     )
 
+
 @router.delete("/groups/{group_id}")
 async def delete_group(group_id: int, session: AsyncSession = Depends(get_session), user: User = Depends(get_current_user)):
     # Find group
@@ -1550,31 +1612,35 @@ async def delete_group(group_id: int, session: AsyncSession = Depends(get_sessio
     group = group_result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
-    
+
     # Check permissions (admin or owner)
     is_admin = bool(user.role and user.role.name == "admin")
     is_owner = group.owner_user_id == user.id
-    
+
     if not is_admin and not is_owner:
-        raise HTTPException(status_code=403, detail="Only group owner or admin can delete group")
-    
+        raise HTTPException(
+            status_code=403, detail="Only group owner or admin can delete group")
+
     # Check if any clients use this group
     clients_using = await session.execute(select(Client).join(client_groups).where(client_groups.c.group_id == group_id))
     if clients_using.scalars().first():
-        raise HTTPException(status_code=409, detail="Group still in use by one or more clients")
-    
+        raise HTTPException(
+            status_code=409, detail="Group still in use by one or more clients")
+
     # Check if this group has subgroups (any group with name starting with "groupname:")
     subgroups_check = await session.execute(
         select(Group).where(Group.name.like(f"{group.name}:%"))
     )
     if subgroups_check.scalars().first():
-        raise HTTPException(status_code=409, detail="Cannot delete group with subgroups. Delete subgroups first.")
-    
+        raise HTTPException(
+            status_code=409, detail="Cannot delete group with subgroups. Delete subgroups first.")
+
     await session.delete(group)
     await session.commit()
     return {"status": "deleted", "id": group_id}
 
 # ============ Group Permissions REST API ============
+
 
 @router.get("/groups/{group_id}/permissions", response_model=List[GroupPermissionResponse])
 async def list_group_permissions(
@@ -1585,22 +1651,24 @@ async def list_group_permissions(
     """List all permissions for a group (owner or admin only)"""
     from ..models.permissions import GroupPermission
     from sqlalchemy.orm import selectinload
-    
+
     # Get group with owner
     group_result = await session.execute(
-        select(Group).options(selectinload(Group.owner)).where(Group.id == group_id)
+        select(Group).options(selectinload(
+            Group.owner)).where(Group.id == group_id)
     )
     group = group_result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
-    
+
     # Check permissions (admin or owner)
     is_admin = bool(user.role and user.role.name == "admin")
     is_owner = group.owner_user_id == user.id
-    
+
     if not is_admin and not is_owner:
-        raise HTTPException(status_code=403, detail="Only group owner or admin can view permissions")
-    
+        raise HTTPException(
+            status_code=403, detail="Only group owner or admin can view permissions")
+
     # Get all permissions
     perms_result = await session.execute(
         select(GroupPermission).options(
@@ -1609,17 +1677,18 @@ async def list_group_permissions(
         ).where(GroupPermission.group_id == group_id)
     )
     permissions = perms_result.scalars().all()
-    
+
     response = []
     for perm in permissions:
         user_ref = None
         user_group_ref = None
-        
+
         if perm.user:
             user_ref = UserRef(id=perm.user.id, email=perm.user.email)
         if perm.user_group:
-            user_group_ref = UserGroupRef(id=perm.user_group.id, name=perm.user_group.name)
-        
+            user_group_ref = UserGroupRef(
+                id=perm.user_group.id, name=perm.user_group.name)
+
         response.append(GroupPermissionResponse(
             id=perm.id,
             group_id=perm.group_id,
@@ -1629,8 +1698,9 @@ async def list_group_permissions(
             can_remove_from_client=perm.can_remove_from_client,
             can_create_subgroup=perm.can_create_subgroup
         ))
-    
+
     return response
+
 
 @router.post("/groups/{group_id}/permissions", response_model=GroupPermissionResponse)
 async def grant_group_permission(
@@ -1642,50 +1712,58 @@ async def grant_group_permission(
     """Grant permission on a group (owner or admin only)"""
     from ..models.permissions import GroupPermission, UserGroup
     from sqlalchemy.orm import selectinload
-    
+
     # Get group with owner
     group_result = await session.execute(
-        select(Group).options(selectinload(Group.owner)).where(Group.id == group_id)
+        select(Group).options(selectinload(
+            Group.owner)).where(Group.id == group_id)
     )
     group = group_result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
-    
+
     # Check permissions (admin or owner)
     is_admin = bool(user.role and user.role.name == "admin")
     is_owner = group.owner_user_id == user.id
-    
+
     if not is_admin and not is_owner:
-        raise HTTPException(status_code=403, detail="Only group owner or admin can grant permissions")
-    
+        raise HTTPException(
+            status_code=403, detail="Only group owner or admin can grant permissions")
+
     # Validate: must have either user_id or user_group_id, not both or neither
     if (body.user_id is None and body.user_group_id is None) or \
        (body.user_id is not None and body.user_group_id is not None):
-        raise HTTPException(status_code=400, detail="Must specify either user_id or user_group_id, not both or neither")
-    
+        raise HTTPException(
+            status_code=400, detail="Must specify either user_id or user_group_id, not both or neither")
+
     # Verify user or user_group exists
     if body.user_id:
         target_user_result = await session.execute(select(User).where(User.id == body.user_id))
         target_user = target_user_result.scalar_one_or_none()
         if not target_user:
-            raise HTTPException(status_code=404, detail="Target user not found")
-    
+            raise HTTPException(
+                status_code=404, detail="Target user not found")
+
     if body.user_group_id:
         target_ug_result = await session.execute(select(UserGroup).where(UserGroup.id == body.user_group_id))
         target_ug = target_ug_result.scalar_one_or_none()
         if not target_ug:
-            raise HTTPException(status_code=404, detail="Target user group not found")
-    
+            raise HTTPException(
+                status_code=404, detail="Target user group not found")
+
     # Check for existing permission (upsert)
-    existing_perm_query = select(GroupPermission).where(GroupPermission.group_id == group_id)
+    existing_perm_query = select(GroupPermission).where(
+        GroupPermission.group_id == group_id)
     if body.user_id:
-        existing_perm_query = existing_perm_query.where(GroupPermission.user_id == body.user_id)
+        existing_perm_query = existing_perm_query.where(
+            GroupPermission.user_id == body.user_id)
     else:
-        existing_perm_query = existing_perm_query.where(GroupPermission.user_group_id == body.user_group_id)
-    
+        existing_perm_query = existing_perm_query.where(
+            GroupPermission.user_group_id == body.user_group_id)
+
     existing_perm_result = await session.execute(existing_perm_query)
     existing_perm = existing_perm_result.scalar_one_or_none()
-    
+
     if existing_perm:
         # Update
         existing_perm.can_add_to_client = body.can_add_to_client
@@ -1707,16 +1785,17 @@ async def grant_group_permission(
         session.add(perm)
         await session.commit()
         await session.refresh(perm, ['user', 'user_group'])
-    
+
     # Build response
     user_ref = None
     user_group_ref = None
-    
+
     if perm.user:
         user_ref = UserRef(id=perm.user.id, email=perm.user.email)
     if perm.user_group:
-        user_group_ref = UserGroupRef(id=perm.user_group.id, name=perm.user_group.name)
-    
+        user_group_ref = UserGroupRef(
+            id=perm.user_group.id, name=perm.user_group.name)
+
     return GroupPermissionResponse(
         id=perm.id,
         group_id=perm.group_id,
@@ -1726,6 +1805,7 @@ async def grant_group_permission(
         can_remove_from_client=perm.can_remove_from_client,
         can_create_subgroup=perm.can_create_subgroup
     )
+
 
 @router.delete("/groups/{group_id}/permissions/{permission_id}")
 async def revoke_group_permission(
@@ -1737,22 +1817,24 @@ async def revoke_group_permission(
     """Revoke a permission from a group (owner or admin only)"""
     from ..models.permissions import GroupPermission
     from sqlalchemy.orm import selectinload
-    
+
     # Get group with owner
     group_result = await session.execute(
-        select(Group).options(selectinload(Group.owner)).where(Group.id == group_id)
+        select(Group).options(selectinload(
+            Group.owner)).where(Group.id == group_id)
     )
     group = group_result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
-    
+
     # Check permissions (admin or owner)
     is_admin = bool(user.role and user.role.name == "admin")
     is_owner = group.owner_user_id == user.id
-    
+
     if not is_admin and not is_owner:
-        raise HTTPException(status_code=403, detail="Only group owner or admin can revoke permissions")
-    
+        raise HTTPException(
+            status_code=403, detail="Only group owner or admin can revoke permissions")
+
     # Get permission
     perm_result = await session.execute(
         select(GroupPermission).where(
@@ -1763,13 +1845,14 @@ async def revoke_group_permission(
     perm = perm_result.scalar_one_or_none()
     if not perm:
         raise HTTPException(status_code=404, detail="Permission not found")
-    
+
     await session.delete(perm)
     await session.commit()
-    
+
     return {"status": "revoked", "id": permission_id}
 
 # ============ Firewall Rulesets REST API ============
+
 
 @router.get("/firewall-rulesets", response_model=List[FirewallRulesetResponse])
 async def list_firewall_rulesets(session: AsyncSession = Depends(get_session), user: User = Depends(get_current_user)):
@@ -1777,12 +1860,13 @@ async def list_firewall_rulesets(session: AsyncSession = Depends(get_session), u
     from ..models.client import FirewallRuleset
     result = await session.execute(
         select(FirewallRuleset).options(
-            selectinload(FirewallRuleset.rules).selectinload(FirewallRule.groups),
+            selectinload(FirewallRuleset.rules).selectinload(
+                FirewallRule.groups),
             selectinload(FirewallRuleset.clients)
         )
     )
     rulesets = result.scalars().all()
-    
+
     responses = []
     for rs in rulesets:
         rule_responses = [
@@ -1816,14 +1900,16 @@ async def get_firewall_ruleset(ruleset_id: int, session: AsyncSession = Depends(
     from ..models.client import FirewallRuleset
     result = await session.execute(
         select(FirewallRuleset).options(
-            selectinload(FirewallRuleset.rules).selectinload(FirewallRule.groups),
+            selectinload(FirewallRuleset.rules).selectinload(
+                FirewallRule.groups),
             selectinload(FirewallRuleset.clients)
         ).where(FirewallRuleset.id == ruleset_id)
     )
     rs = result.scalar_one_or_none()
     if not rs:
-        raise HTTPException(status_code=404, detail="Firewall ruleset not found")
-    
+        raise HTTPException(
+            status_code=404, detail="Firewall ruleset not found")
+
     rule_responses = [
         FirewallRuleResponse(
             id=r.id,
@@ -1854,18 +1940,21 @@ async def create_firewall_ruleset(body: FirewallRulesetCreate, session: AsyncSes
     # Check duplicate name
     existing = await session.execute(select(FirewallRuleset).where(FirewallRuleset.name == body.name))
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Firewall ruleset name already exists")
-    
+        raise HTTPException(
+            status_code=409, detail="Firewall ruleset name already exists")
+
     # Validate and create rules
     rules_to_add = []
     for rule_data in body.rules:
         # Validate direction
         if rule_data.direction not in ("inbound", "outbound"):
-            raise HTTPException(status_code=400, detail=f"Invalid direction: {rule_data.direction}")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid direction: {rule_data.direction}")
         # Validate proto
         if rule_data.proto not in ("any", "tcp", "udp", "icmp"):
-            raise HTTPException(status_code=400, detail=f"Invalid proto: {rule_data.proto}")
-        
+            raise HTTPException(
+                status_code=400, detail=f"Invalid proto: {rule_data.proto}")
+
         rule = FirewallRule(
             direction=rule_data.direction,
             port=rule_data.port,
@@ -1876,18 +1965,19 @@ async def create_firewall_ruleset(body: FirewallRulesetCreate, session: AsyncSes
             ca_name=rule_data.ca_name,
             ca_sha=rule_data.ca_sha,
         )
-        
+
         # Assign groups if provided
         if rule_data.group_ids:
             groups_result = await session.execute(select(Group).where(Group.id.in_(rule_data.group_ids)))
             groups = groups_result.scalars().all()
             if len(groups) != len(rule_data.group_ids):
-                raise HTTPException(status_code=400, detail="One or more group IDs not found")
+                raise HTTPException(
+                    status_code=400, detail="One or more group IDs not found")
             rule.groups = groups
-        
+
         session.add(rule)
         rules_to_add.append(rule)
-    
+
     # Create ruleset
     ruleset = FirewallRuleset(
         name=body.name,
@@ -1897,7 +1987,7 @@ async def create_firewall_ruleset(body: FirewallRulesetCreate, session: AsyncSes
     session.add(ruleset)
     await session.commit()
     await session.refresh(ruleset)
-    
+
     # Build response without triggering async lazy-loads; use the in-memory rules we created
     rule_responses = [
         FirewallRuleResponse(
@@ -1929,41 +2019,47 @@ async def update_firewall_ruleset(ruleset_id: int, body: FirewallRulesetUpdate, 
     from ..models.client import FirewallRuleset
     result = await session.execute(
         select(FirewallRuleset).options(
-            selectinload(FirewallRuleset.rules).selectinload(FirewallRule.groups),
+            selectinload(FirewallRuleset.rules).selectinload(
+                FirewallRule.groups),
             selectinload(FirewallRuleset.clients)
         ).where(FirewallRuleset.id == ruleset_id)
     )
     ruleset = result.scalar_one_or_none()
     if not ruleset:
-        raise HTTPException(status_code=404, detail="Firewall ruleset not found")
-    
+        raise HTTPException(
+            status_code=404, detail="Firewall ruleset not found")
+
     # Update name if provided
     if body.name is not None:
         # Check duplicate name
         name_check = await session.execute(
-            select(FirewallRuleset).where(FirewallRuleset.name == body.name, FirewallRuleset.id != ruleset_id)
+            select(FirewallRuleset).where(FirewallRuleset.name ==
+                                          body.name, FirewallRuleset.id != ruleset_id)
         )
         if name_check.scalar_one_or_none():
-            raise HTTPException(status_code=409, detail="Another firewall ruleset with that name exists")
+            raise HTTPException(
+                status_code=409, detail="Another firewall ruleset with that name exists")
         ruleset.name = body.name
-    
+
     if body.description is not None:
         ruleset.description = body.description
-    
+
     # Replace rules if provided
     if body.rules is not None:
         # Delete old rules
         for old_rule in ruleset.rules:
             await session.delete(old_rule)
-        
+
         # Create new rules
         new_rules = []
         for rule_data in body.rules:
             if rule_data.direction not in ("inbound", "outbound"):
-                raise HTTPException(status_code=400, detail=f"Invalid direction: {rule_data.direction}")
+                raise HTTPException(
+                    status_code=400, detail=f"Invalid direction: {rule_data.direction}")
             if rule_data.proto not in ("any", "tcp", "udp", "icmp"):
-                raise HTTPException(status_code=400, detail=f"Invalid proto: {rule_data.proto}")
-            
+                raise HTTPException(
+                    status_code=400, detail=f"Invalid proto: {rule_data.proto}")
+
             rule = FirewallRule(
                 direction=rule_data.direction,
                 port=rule_data.port,
@@ -1974,22 +2070,23 @@ async def update_firewall_ruleset(ruleset_id: int, body: FirewallRulesetUpdate, 
                 ca_name=rule_data.ca_name,
                 ca_sha=rule_data.ca_sha,
             )
-            
+
             if rule_data.group_ids:
                 groups_result = await session.execute(select(Group).where(Group.id.in_(rule_data.group_ids)))
                 groups = groups_result.scalars().all()
                 if len(groups) != len(rule_data.group_ids):
-                    raise HTTPException(status_code=400, detail="One or more group IDs not found")
+                    raise HTTPException(
+                        status_code=400, detail="One or more group IDs not found")
                 rule.groups = groups
-            
+
             session.add(rule)
             new_rules.append(rule)
-        
+
         ruleset.rules = new_rules
-    
+
     await session.commit()
     await session.refresh(ruleset)
-    
+
     # Build response
     rule_responses = [
         FirewallRuleResponse(
@@ -2021,26 +2118,31 @@ async def delete_firewall_ruleset(ruleset_id: int, session: AsyncSession = Depen
     result = await session.execute(select(FirewallRuleset).where(FirewallRuleset.id == ruleset_id))
     ruleset = result.scalar_one_or_none()
     if not ruleset:
-        raise HTTPException(status_code=404, detail="Firewall ruleset not found")
-    
+        raise HTTPException(
+            status_code=404, detail="Firewall ruleset not found")
+
     # Check if any clients use this ruleset
     clients_using = await session.execute(
-        select(Client).join(client_firewall_rulesets).where(client_firewall_rulesets.c.firewall_ruleset_id == ruleset_id)
+        select(Client).join(client_firewall_rulesets).where(
+            client_firewall_rulesets.c.firewall_ruleset_id == ruleset_id)
     )
     if clients_using.scalars().first():
-        raise HTTPException(status_code=409, detail="Firewall ruleset still in use by one or more clients")
-    
+        raise HTTPException(
+            status_code=409, detail="Firewall ruleset still in use by one or more clients")
+
     await session.delete(ruleset)
     await session.commit()
     return {"status": "deleted", "id": ruleset_id}
 
 # ============ IP Pools REST API ============
 
+
 def _validate_cidr(cidr: str):
     try:
         ipaddress.ip_network(cidr, strict=True)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid CIDR: {e}")
+
 
 @router.get("/ip-pools", response_model=List[IPPoolResponse])
 async def list_ip_pools(session: AsyncSession = Depends(get_session), user: User = Depends(get_current_user)):
@@ -2050,8 +2152,10 @@ async def list_ip_pools(session: AsyncSession = Depends(get_session), user: User
     for pool in pools:
         count_result = await session.execute(select(IPAssignment).where(IPAssignment.pool_id == pool.id))
         allocated = len(count_result.scalars().all())
-        responses.append(IPPoolResponse(id=pool.id, cidr=pool.cidr, description=pool.description, allocated_count=allocated))
+        responses.append(IPPoolResponse(id=pool.id, cidr=pool.cidr,
+                         description=pool.description, allocated_count=allocated))
     return responses
+
 
 @router.get("/ip-pools/{pool_id}", response_model=IPPoolResponse)
 async def get_ip_pool(pool_id: int, session: AsyncSession = Depends(get_session), user: User = Depends(get_current_user)):
@@ -2063,18 +2167,21 @@ async def get_ip_pool(pool_id: int, session: AsyncSession = Depends(get_session)
     allocated = len(count_result.scalars().all())
     return IPPoolResponse(id=pool.id, cidr=pool.cidr, description=pool.description, allocated_count=allocated)
 
+
 @router.post("/ip-pools", response_model=IPPoolResponse)
 async def create_ip_pool_new(body: IPPoolCreate, session: AsyncSession = Depends(get_session), user: User = Depends(require_permission("ip_pools", "create"))):
     _validate_cidr(body.cidr)
     # Check duplicate CIDR
     existing = await session.execute(select(IPPool).where(IPPool.cidr == body.cidr))
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="IP pool CIDR already exists")
+        raise HTTPException(
+            status_code=409, detail="IP pool CIDR already exists")
     pool = IPPool(cidr=body.cidr, description=body.description)
     session.add(pool)
     await session.commit()
     await session.refresh(pool)
     return IPPoolResponse(id=pool.id, cidr=pool.cidr, description=pool.description, allocated_count=0)
+
 
 @router.put("/ip-pools/{pool_id}", response_model=IPPoolResponse)
 async def update_ip_pool(pool_id: int, body: IPPoolUpdate, session: AsyncSession = Depends(get_session), user: User = Depends(require_permission("ip_pools", "update"))):
@@ -2087,11 +2194,13 @@ async def update_ip_pool(pool_id: int, body: IPPoolUpdate, session: AsyncSession
         _validate_cidr(body.cidr)
         allocs = await session.execute(select(IPAssignment).where(IPAssignment.pool_id == pool.id))
         if allocs.scalars().first():
-            raise HTTPException(status_code=409, detail="Cannot change CIDR of a pool with allocated IPs")
+            raise HTTPException(
+                status_code=409, detail="Cannot change CIDR of a pool with allocated IPs")
         # Check duplicate CIDR
         other = await session.execute(select(IPPool).where(IPPool.cidr == body.cidr, IPPool.id != pool.id))
         if other.scalar_one_or_none():
-            raise HTTPException(status_code=409, detail="Another pool with this CIDR already exists")
+            raise HTTPException(
+                status_code=409, detail="Another pool with this CIDR already exists")
         pool.cidr = body.cidr
     if body.description is not None:
         pool.description = body.description
@@ -2100,6 +2209,7 @@ async def update_ip_pool(pool_id: int, body: IPPoolUpdate, session: AsyncSession
     count_result = await session.execute(select(IPAssignment).where(IPAssignment.pool_id == pool.id))
     allocated = len(count_result.scalars().all())
     return IPPoolResponse(id=pool.id, cidr=pool.cidr, description=pool.description, allocated_count=allocated)
+
 
 @router.delete("/ip-pools/{pool_id}")
 async def delete_ip_pool(pool_id: int, session: AsyncSession = Depends(get_session), user: User = Depends(require_permission("ip_pools", "delete"))):
@@ -2110,10 +2220,12 @@ async def delete_ip_pool(pool_id: int, session: AsyncSession = Depends(get_sessi
     # Check for allocations
     allocs = await session.execute(select(IPAssignment).where(IPAssignment.pool_id == pool.id))
     if allocs.scalars().first():
-        raise HTTPException(status_code=409, detail="IP pool has allocated IPs and cannot be deleted")
+        raise HTTPException(
+            status_code=409, detail="IP pool has allocated IPs and cannot be deleted")
     await session.delete(pool)
     await session.commit()
     return {"status": "deleted", "id": pool_id}
+
 
 @router.get("/ip-pools/{pool_id}/clients", response_model=List[ClientResponse])
 async def get_pool_clients(pool_id: int, session: AsyncSession = Depends(get_session), user: User = Depends(require_permission("ip_pools", "read"))):
@@ -2123,7 +2235,7 @@ async def get_pool_clients(pool_id: int, session: AsyncSession = Depends(get_ses
     pool = pool_result.scalar_one_or_none()
     if not pool:
         raise HTTPException(status_code=404, detail="IP pool not found")
-    
+
     # Get clients with IP assignments from this pool
     result = await session.execute(
         select(Client)
@@ -2132,14 +2244,15 @@ async def get_pool_clients(pool_id: int, session: AsyncSession = Depends(get_ses
         .options(selectinload(Client.groups), selectinload(Client.firewall_rulesets))
     )
     clients = result.scalars().unique().all()
-    
+
     # Build responses using helper
     is_admin = bool(user.role and user.role.name == "admin")
     responses = []
     for client in clients:
         responses.append(await build_client_response(client, session, user, include_token=is_admin))
-    
+
     return responses
+
 
 @router.get("/ip-pools/{pool_id}/available-ips", response_model=List[AvailableIPResponse])
 async def get_available_ips(
@@ -2150,33 +2263,35 @@ async def get_available_ips(
 ):
     """Get available IP addresses in a pool, optionally filtered by IP group."""
     import ipaddress
-    
+
     # Verify pool exists
     pool_result = await session.execute(select(IPPool).where(IPPool.id == pool_id))
     pool = pool_result.scalar_one_or_none()
     if not pool:
         raise HTTPException(status_code=404, detail="IP pool not found")
-    
+
     network = ipaddress.ip_network(pool.cidr)
-    
+
     # Get assigned IPs in this pool
     assigned_result = await session.execute(
         select(IPAssignment.ip_address).where(IPAssignment.pool_id == pool_id)
     )
     assigned_ips = {row[0] for row in assigned_result.all()}
-    
+
     # If IP group specified, filter by group range
     if ip_group_id:
         group_result = await session.execute(
-            select(IPGroup).where(IPGroup.id == ip_group_id, IPGroup.pool_id == pool_id)
+            select(IPGroup).where(IPGroup.id ==
+                                  ip_group_id, IPGroup.pool_id == pool_id)
         )
         group = group_result.scalar_one_or_none()
         if not group:
-            raise HTTPException(status_code=404, detail="IP group not found or doesn't belong to this pool")
-        
+            raise HTTPException(
+                status_code=404, detail="IP group not found or doesn't belong to this pool")
+
         start_ip = ipaddress.ip_address(group.start_ip)
         end_ip = ipaddress.ip_address(group.end_ip)
-        
+
         available = []
         for ip in network.hosts():
             if start_ip <= ip <= end_ip and str(ip) not in assigned_ips:
@@ -2191,7 +2306,7 @@ async def get_available_ips(
                 available.append(AvailableIPResponse(ip_address=str(ip)))
                 if len(available) >= 100:
                     break
-    
+
     return available
 
 
@@ -2205,7 +2320,7 @@ async def list_ip_groups(pool_id: Optional[int] = None, session: AsyncSession = 
         query = query.where(IPGroup.pool_id == pool_id)
     result = await session.execute(query)
     groups = result.scalars().all()
-    
+
     responses = []
     for group in groups:
         # Count clients using this IP group
@@ -2223,19 +2338,20 @@ async def list_ip_groups(pool_id: Optional[int] = None, session: AsyncSession = 
         ))
     return responses
 
+
 @router.get("/ip-groups/{group_id}", response_model=IPGroupResponse)
 async def get_ip_group(group_id: int, session: AsyncSession = Depends(get_session), user: User = Depends(require_permission("ip_groups", "read"))):
     result = await session.execute(select(IPGroup).where(IPGroup.id == group_id))
     group = result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="IP group not found")
-    
+
     # Count clients
     count_result = await session.execute(
         select(IPAssignment).where(IPAssignment.ip_group_id == group.id)
     )
     client_count = len(count_result.scalars().all())
-    
+
     return IPGroupResponse(
         id=group.id,
         pool_id=group.pool_id,
@@ -2245,29 +2361,32 @@ async def get_ip_group(group_id: int, session: AsyncSession = Depends(get_sessio
         client_count=client_count
     )
 
+
 @router.post("/ip-groups", response_model=IPGroupResponse)
 async def create_ip_group(body: IPGroupCreate, session: AsyncSession = Depends(get_session), user: User = Depends(require_permission("ip_groups", "create"))):
     import ipaddress
-    
+
     # Verify pool exists
     pool_result = await session.execute(select(IPPool).where(IPPool.id == body.pool_id))
     pool = pool_result.scalar_one_or_none()
     if not pool:
         raise HTTPException(status_code=404, detail="IP pool not found")
-    
+
     # Validate IP addresses are within pool CIDR
     try:
         network = ipaddress.ip_network(pool.cidr)
         start_ip = ipaddress.ip_address(body.start_ip)
         end_ip = ipaddress.ip_address(body.end_ip)
-        
+
         if start_ip not in network or end_ip not in network:
-            raise HTTPException(status_code=400, detail="IP range must be within pool CIDR")
+            raise HTTPException(
+                status_code=400, detail="IP range must be within pool CIDR")
         if start_ip > end_ip:
-            raise HTTPException(status_code=400, detail="start_ip must be less than or equal to end_ip")
+            raise HTTPException(
+                status_code=400, detail="start_ip must be less than or equal to end_ip")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid IP address: {e}")
-    
+
     group = IPGroup(
         pool_id=body.pool_id,
         name=body.name,
@@ -2277,7 +2396,7 @@ async def create_ip_group(body: IPGroupCreate, session: AsyncSession = Depends(g
     session.add(group)
     await session.commit()
     await session.refresh(group)
-    
+
     return IPGroupResponse(
         id=group.id,
         pool_id=group.pool_id,
@@ -2287,53 +2406,56 @@ async def create_ip_group(body: IPGroupCreate, session: AsyncSession = Depends(g
         client_count=0
     )
 
+
 @router.put("/ip-groups/{group_id}", response_model=IPGroupResponse)
 async def update_ip_group(group_id: int, body: IPGroupUpdate, session: AsyncSession = Depends(get_session), user: User = Depends(require_permission("ip_groups", "update"))):
     import ipaddress
-    
+
     result = await session.execute(select(IPGroup).where(IPGroup.id == group_id))
     group = result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="IP group not found")
-    
+
     # Get pool for validation
     pool_result = await session.execute(select(IPPool).where(IPPool.id == group.pool_id))
     pool = pool_result.scalar_one_or_none()
     network = ipaddress.ip_network(pool.cidr)
-    
+
     # Update fields
     if body.name is not None:
         group.name = body.name
-    
+
     start_ip_str = body.start_ip if body.start_ip is not None else group.start_ip
     end_ip_str = body.end_ip if body.end_ip is not None else group.end_ip
-    
+
     # Validate new range
     try:
         start_ip = ipaddress.ip_address(start_ip_str)
         end_ip = ipaddress.ip_address(end_ip_str)
-        
+
         if start_ip not in network or end_ip not in network:
-            raise HTTPException(status_code=400, detail="IP range must be within pool CIDR")
+            raise HTTPException(
+                status_code=400, detail="IP range must be within pool CIDR")
         if start_ip > end_ip:
-            raise HTTPException(status_code=400, detail="start_ip must be less than or equal to end_ip")
+            raise HTTPException(
+                status_code=400, detail="start_ip must be less than or equal to end_ip")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid IP address: {e}")
-    
+
     if body.start_ip is not None:
         group.start_ip = body.start_ip
     if body.end_ip is not None:
         group.end_ip = body.end_ip
-    
+
     await session.commit()
     await session.refresh(group)
-    
+
     # Count clients
     count_result = await session.execute(
         select(IPAssignment).where(IPAssignment.ip_group_id == group.id)
     )
     client_count = len(count_result.scalars().all())
-    
+
     return IPGroupResponse(
         id=group.id,
         pool_id=group.pool_id,
@@ -2343,23 +2465,26 @@ async def update_ip_group(group_id: int, body: IPGroupUpdate, session: AsyncSess
         client_count=client_count
     )
 
+
 @router.delete("/ip-groups/{group_id}")
 async def delete_ip_group(group_id: int, session: AsyncSession = Depends(get_session), user: User = Depends(require_permission("ip_groups", "delete"))):
     result = await session.execute(select(IPGroup).where(IPGroup.id == group_id))
     group = result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="IP group not found")
-    
+
     # Check for assignments
     assignments = await session.execute(
         select(IPAssignment).where(IPAssignment.ip_group_id == group.id)
     )
     if assignments.scalars().first():
-        raise HTTPException(status_code=409, detail="IP group has assigned IPs and cannot be deleted")
-    
+        raise HTTPException(
+            status_code=409, detail="IP group has assigned IPs and cannot be deleted")
+
     await session.delete(group)
     await session.commit()
     return {"status": "deleted", "id": group_id}
+
 
 @router.get("/ip-groups/{group_id}/clients", response_model=List[ClientResponse])
 async def get_group_clients(group_id: int, session: AsyncSession = Depends(get_session), user: User = Depends(require_permission("ip_groups", "read"))):
@@ -2369,7 +2494,7 @@ async def get_group_clients(group_id: int, session: AsyncSession = Depends(get_s
     group = group_result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="IP group not found")
-    
+
     # Get clients with IP assignments from this group
     result = await session.execute(
         select(Client)
@@ -2378,13 +2503,13 @@ async def get_group_clients(group_id: int, session: AsyncSession = Depends(get_s
         .options(selectinload(Client.groups), selectinload(Client.firewall_rulesets))
     )
     clients = result.scalars().unique().all()
-    
+
     # Build responses using helper
     is_admin = bool(user.role and user.role.name == "admin")
     responses = []
     for client in clients:
         responses.append(await build_client_response(client, session, user, include_token=is_admin))
-    
+
     return responses
 
 
@@ -2400,6 +2525,7 @@ def _classify_ca_status(ca: CACertificate) -> str:
         return "current"
     else:
         return "inactive"
+
 
 @router.get("/ca", response_model=List[CAResponse])
 async def list_cas(session: AsyncSession = Depends(get_session), user: User = Depends(get_current_user)):
@@ -2421,19 +2547,21 @@ async def list_cas(session: AsyncSession = Depends(get_session), user: User = De
         for ca in cas
     ]
 
+
 @router.post("/ca/create", response_model=CAResponse)
 async def create_ca(body: CACreate, session: AsyncSession = Depends(get_session), user: User = Depends(require_permission("ca", "create"))):
     # Use CertManager to create CA
     cert_manager = CertManager(session)
     ca_name = body.name
-    
+
     try:
         ca = await cert_manager.create_new_ca(ca_name)
         await session.commit()
         await session.refresh(ca)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create CA: {e}")
-    
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create CA: {e}")
+
     return CAResponse(
         id=ca.id,
         name=ca.name,
@@ -2447,25 +2575,59 @@ async def create_ca(body: CACreate, session: AsyncSession = Depends(get_session)
         status=_classify_ca_status(ca)
     )
 
+
 @router.post("/ca/import", response_model=CAResponse)
 async def import_ca(body: CAImport, session: AsyncSession = Depends(get_session), user: User = Depends(require_permission("ca", "create"))):
-    # Parse PEM to extract validity dates (simplified - would need actual cert parsing)
-    # For now, use placeholder dates
-    now = datetime.utcnow()
-    not_after = now.replace(year=now.year + 1)
-    
-    ca = CACertificate(
-        name=body.name,
-        pem_cert=body.pem_cert.encode('utf-8'),
-        pem_key=body.pem_key.encode('utf-8') if body.pem_key else b'',
-        not_before=now,
-        not_after=not_after,
-        is_active=False,
-        is_previous=False,
-        can_sign=bool(body.pem_key),
-        include_in_config=True
+    """
+    Import a CA certificate (with or without private key), extracting real validity dates from the PEM.
+    """
+    cert_manager = CertManager(session)
+    if body.pem_key:
+        ca = await cert_manager.import_existing_ca(body.name, body.pem_cert, body.pem_key)
+    else:
+        ca = await cert_manager.import_public_ca(body.name, body.pem_cert)
+    await session.refresh(ca)
+    return CAResponse(
+        id=ca.id,
+        name=ca.name,
+        not_before=ca.not_before,
+        not_after=ca.not_after,
+        is_active=ca.is_active,
+        is_previous=ca.is_previous,
+        can_sign=ca.can_sign,
+        include_in_config=ca.include_in_config,
+        created_at=ca.created_at,
+        status=_classify_ca_status(ca)
     )
-    session.add(ca)
+
+
+@router.post("/ca/{ca_id}/set-signing", response_model=CAResponse)
+async def set_signing_ca(ca_id: int, session: AsyncSession = Depends(get_session), user: User = Depends(require_permission("ca", "update"))):
+    """Set a CA as the active signing CA. Current active CAs will be marked as previous."""
+    result = await session.execute(select(CACertificate).where(CACertificate.id == ca_id))
+    ca = result.scalar_one_or_none()
+    if not ca:
+        raise HTTPException(status_code=404, detail="CA not found")
+    
+    if not ca.can_sign:
+        raise HTTPException(status_code=400, detail="This CA cannot be used for signing (no private key)")
+    
+    # Mark all current active signing CAs as previous
+    active_cas = (await session.execute(
+        select(CACertificate).where(CACertificate.is_active == True, CACertificate.can_sign == True)
+    )).scalars().all()
+    
+    for active_ca in active_cas:
+        if active_ca.id != ca_id:
+            active_ca.is_active = False
+            active_ca.is_previous = True
+            active_ca.include_in_config = True
+    
+    # Set this CA as active
+    ca.is_active = True
+    ca.is_previous = False
+    ca.include_in_config = True
+    
     await session.commit()
     await session.refresh(ca)
     
@@ -2488,11 +2650,11 @@ async def delete_ca(ca_id: int, session: AsyncSession = Depends(get_session), us
     ca = result.scalar_one_or_none()
     if not ca:
         raise HTTPException(status_code=404, detail="CA not found")
-    
+
     # Prevent deletion of active CA
     if ca.is_active:
-        raise HTTPException(status_code=409, detail="Cannot delete active CA")
-    
+        raise HTTPException(status_code=409, detail="Cannot delete active CA. Please deactivate it first by setting another CA as the signing CA.")
+
     await session.delete(ca)
     await session.commit()
     return {"status": "deleted", "id": ca_id}
@@ -2517,6 +2679,7 @@ async def list_users(session: AsyncSession = Depends(get_session), user: User = 
         for u in users
     ]
 
+
 @router.get("/users/{user_id}", response_model=UserResponse)
 async def get_user(user_id: int, session: AsyncSession = Depends(get_session), admin: User = Depends(require_permission("users", "read"))):
     from sqlalchemy.orm import selectinload
@@ -2533,26 +2696,28 @@ async def get_user(user_id: int, session: AsyncSession = Depends(get_session), a
         created_at=u.created_at
     )
 
+
 @router.post("/users", response_model=UserResponse)
 async def create_user(body: UserCreate, session: AsyncSession = Depends(get_session), admin: User = Depends(require_permission("users", "create"))):
     from ..core.auth import hash_password
     from ..models.user import Role
     from sqlalchemy.orm import selectinload
-    
+
     # Check duplicate email
     existing = await session.execute(select(User).where(User.email == body.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Email already exists")
-    
+
     # Find role by name
     role_result = await session.execute(select(Role).where(Role.name == body.role_name))
     role = role_result.scalar_one_or_none()
     if not role:
-        raise HTTPException(status_code=400, detail=f"Role '{body.role_name}' not found")
-    
+        raise HTTPException(
+            status_code=400, detail=f"Role '{body.role_name}' not found")
+
     # Hash password
     hashed = hash_password(body.password)
-    
+
     new_user = User(
         email=body.email,
         hashed_password=hashed,
@@ -2562,11 +2727,11 @@ async def create_user(body: UserCreate, session: AsyncSession = Depends(get_sess
     session.add(new_user)
     await session.commit()
     await session.refresh(new_user)
-    
+
     # Reload with role
     result = await session.execute(select(User).options(selectinload(User.role)).where(User.id == new_user.id))
     u = result.scalar_one()
-    
+
     return UserResponse(
         id=u.id,
         email=u.email,
@@ -2574,45 +2739,47 @@ async def create_user(body: UserCreate, session: AsyncSession = Depends(get_sess
         role=RoleRef(id=u.role.id, name=u.role.name) if u.role else None,
         created_at=u.created_at
     )
+
 
 @router.put("/users/{user_id}", response_model=UserResponse)
 async def update_user(user_id: int, body: UserUpdate, session: AsyncSession = Depends(get_session), admin: User = Depends(require_permission("users", "update"))):
     from ..core.auth import hash_password
     from sqlalchemy.orm import selectinload
     from ..models.user import Role
-    
+
     result = await session.execute(select(User).options(selectinload(User.role)).where(User.id == user_id))
     u = result.scalar_one_or_none()
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     if body.email is not None and body.email != u.email:
         # Check duplicate
         dup = await session.execute(select(User).where(User.email == body.email, User.id != user_id))
         if dup.scalar_one_or_none():
             raise HTTPException(status_code=409, detail="Email already exists")
         u.email = body.email
-    
+
     if body.password is not None:
         u.hashed_password = hash_password(body.password)
-    
+
     if body.role_name is not None:
         role_result = await session.execute(select(Role).where(Role.name == body.role_name))
         role = role_result.scalar_one_or_none()
         if not role:
-            raise HTTPException(status_code=400, detail=f"Role '{body.role_name}' not found")
+            raise HTTPException(
+                status_code=400, detail=f"Role '{body.role_name}' not found")
         u.role_id = role.id
-    
+
     if body.is_active is not None:
         u.is_active = body.is_active
-    
+
     await session.commit()
     await session.refresh(u)
-    
+
     # Reload with role
     result = await session.execute(select(User).options(selectinload(User.role)).where(User.id == user_id))
     u = result.scalar_one()
-    
+
     return UserResponse(
         id=u.id,
         email=u.email,
@@ -2621,25 +2788,27 @@ async def update_user(user_id: int, body: UserUpdate, session: AsyncSession = De
         created_at=u.created_at
     )
 
+
 @router.delete("/users/{user_id}")
 async def delete_user(user_id: int, session: AsyncSession = Depends(get_session), admin: User = Depends(require_permission("users", "delete"))):
     from ..models.permissions import UserGroupMembership
-    
+
     result = await session.execute(select(User).where(User.id == user_id))
     u = result.scalar_one_or_none()
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     # Prevent self-deletion
     if u.id == admin.id:
-        raise HTTPException(status_code=409, detail="Cannot delete your own account")
-    
+        raise HTTPException(
+            status_code=409, detail="Cannot delete your own account")
+
     # Check if this is the last admin
     admins_group_result = await session.execute(
         select(UserGroup).where(UserGroup.name == "Administrators")
     )
     admins_group = admins_group_result.scalar_one_or_none()
-    
+
     if admins_group:
         # Check if user is in admins group
         user_in_admins = await session.execute(
@@ -2660,7 +2829,7 @@ async def delete_user(user_id: int, session: AsyncSession = Depends(get_session)
                     status_code=409,
                     detail="Cannot delete the last administrator. Add another admin first."
                 )
-    
+
     await session.delete(u)
     await session.commit()
     return {"status": "deleted", "id": user_id}
@@ -2675,10 +2844,10 @@ async def list_permissions(
 ):
     """List all available permissions in the system (requires users:read permission)."""
     from ..models.permissions import Permission
-    
+
     result = await session.execute(select(Permission).order_by(Permission.resource, Permission.action))
     permissions = result.scalars().all()
-    
+
     return [
         PermissionResponse(
             id=p.id,
@@ -2699,7 +2868,7 @@ async def list_user_groups(
 ):
     """List all user groups with member and permission counts (requires users:read permission)."""
     from sqlalchemy.orm import selectinload
-    
+
     result = await session.execute(
         select(UserGroup).options(
             selectinload(UserGroup.owner),
@@ -2707,7 +2876,7 @@ async def list_user_groups(
         )
     )
     groups = result.scalars().all()
-    
+
     # Get member counts for each group
     responses = []
     for group in groups:
@@ -2717,19 +2886,20 @@ async def list_user_groups(
             )
         )
         member_count = member_count_result.scalar()
-        
+
         responses.append(UserGroupResponse(
             id=group.id,
             name=group.name,
             description=group.description,
             is_admin=group.is_admin,
-            owner=UserRef(id=group.owner.id, email=group.owner.email) if group.owner else None,
+            owner=UserRef(id=group.owner.id,
+                          email=group.owner.email) if group.owner else None,
             created_at=group.created_at,
             updated_at=group.updated_at,
             member_count=member_count,
             permission_count=len(group.permissions) if group.permissions else 0
         ))
-    
+
     return responses
 
 
@@ -2741,17 +2911,17 @@ async def get_user_group(
 ):
     """Get user group details with members and permissions (requires users:read permission)."""
     from sqlalchemy.orm import selectinload
-    
+
     result = await session.execute(
         select(UserGroup)
         .options(selectinload(UserGroup.owner), selectinload(UserGroup.permissions))
         .where(UserGroup.id == group_id)
     )
     group = result.scalar_one_or_none()
-    
+
     if not group:
         raise HTTPException(status_code=404, detail="User group not found")
-    
+
     # Get member count
     member_count_result = await session.execute(
         select(func.count(UserGroupMembership.id)).where(
@@ -2759,13 +2929,14 @@ async def get_user_group(
         )
     )
     member_count = member_count_result.scalar()
-    
+
     return UserGroupResponse(
         id=group.id,
         name=group.name,
         description=group.description,
         is_admin=group.is_admin,
-        owner=UserRef(id=group.owner.id, email=group.owner.email) if group.owner else None,
+        owner=UserRef(id=group.owner.id,
+                      email=group.owner.email) if group.owner else None,
         created_at=group.created_at,
         updated_at=group.updated_at,
         member_count=member_count,
@@ -2783,8 +2954,9 @@ async def create_user_group(
     # Check for duplicate name
     existing = await session.execute(select(UserGroup).where(UserGroup.name == body.name))
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="User group with this name already exists")
-    
+        raise HTTPException(
+            status_code=409, detail="User group with this name already exists")
+
     # Create group
     group = UserGroup(
         name=body.name,
@@ -2794,11 +2966,11 @@ async def create_user_group(
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow()
     )
-    
+
     session.add(group)
     await session.commit()
     await session.refresh(group)
-    
+
     return UserGroupResponse(
         id=group.id,
         name=group.name,
@@ -2821,44 +2993,45 @@ async def update_user_group(
 ):
     """Update user group (requires users:update permission)."""
     from sqlalchemy.orm import selectinload
-    
+
     result = await session.execute(
         select(UserGroup)
         .options(selectinload(UserGroup.owner), selectinload(UserGroup.permissions))
         .where(UserGroup.id == group_id)
     )
     group = result.scalar_one_or_none()
-    
+
     if not group:
         raise HTTPException(status_code=404, detail="User group not found")
-    
+
     # Prevent changing is_admin on Administrators group
     if group.name == "Administrators" and body.is_admin is not None and not body.is_admin:
         raise HTTPException(
             status_code=409,
             detail="Cannot remove admin status from Administrators group"
         )
-    
+
     # Update fields
     if body.name is not None:
         # Check for duplicate name
         if body.name != group.name:
             existing = await session.execute(select(UserGroup).where(UserGroup.name == body.name))
             if existing.scalar_one_or_none():
-                raise HTTPException(status_code=409, detail="User group with this name already exists")
+                raise HTTPException(
+                    status_code=409, detail="User group with this name already exists")
         group.name = body.name
-    
+
     if body.description is not None:
         group.description = body.description
-    
+
     if body.is_admin is not None and group.name != "Administrators":
         group.is_admin = body.is_admin
-    
+
     group.updated_at = datetime.utcnow()
-    
+
     await session.commit()
     await session.refresh(group)
-    
+
     # Get member count
     member_count_result = await session.execute(
         select(func.count(UserGroupMembership.id)).where(
@@ -2866,13 +3039,14 @@ async def update_user_group(
         )
     )
     member_count = member_count_result.scalar()
-    
+
     return UserGroupResponse(
         id=group.id,
         name=group.name,
         description=group.description,
         is_admin=group.is_admin,
-        owner=UserRef(id=group.owner.id, email=group.owner.email) if group.owner else None,
+        owner=UserRef(id=group.owner.id,
+                      email=group.owner.email) if group.owner else None,
         created_at=group.created_at,
         updated_at=group.updated_at,
         member_count=member_count,
@@ -2889,20 +3063,20 @@ async def delete_user_group(
     """Delete user group (requires users:delete permission). Cannot delete Administrators group."""
     result = await session.execute(select(UserGroup).where(UserGroup.id == group_id))
     group = result.scalar_one_or_none()
-    
+
     if not group:
         raise HTTPException(status_code=404, detail="User group not found")
-    
+
     # Prevent deletion of Administrators group
     if group.name == "Administrators":
         raise HTTPException(
             status_code=409,
             detail="Cannot delete the Administrators group"
         )
-    
+
     await session.delete(group)
     await session.commit()
-    
+
     return {"status": "deleted", "id": group_id}
 
 
@@ -2916,12 +3090,12 @@ async def list_group_members(
 ):
     """List all members of a user group (requires users:read permission)."""
     from sqlalchemy.orm import selectinload
-    
+
     # Verify group exists
     group_result = await session.execute(select(UserGroup).where(UserGroup.id == group_id))
     if not group_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="User group not found")
-    
+
     # Get members
     result = await session.execute(
         select(User)
@@ -2930,7 +3104,7 @@ async def list_group_members(
         .where(UserGroupMembership.user_group_id == group_id)
     )
     members = result.scalars().all()
-    
+
     return [
         UserResponse(
             id=u.id,
@@ -2948,7 +3122,8 @@ async def add_group_member(
     group_id: int,
     user_id: int,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(require_permission("user_groups", "manage_members"))
+    current_user: User = Depends(
+        require_permission("user_groups", "manage_members"))
 ):
     """Add user to group (requires users:update permission)."""
     # Verify group exists
@@ -2956,12 +3131,12 @@ async def add_group_member(
     group = group_result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="User group not found")
-    
+
     # Verify user exists
     user_result = await session.execute(select(User).where(User.id == user_id))
     if not user_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     # Check if already a member
     existing = await session.execute(
         select(UserGroupMembership).where(
@@ -2970,8 +3145,9 @@ async def add_group_member(
         )
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="User is already a member of this group")
-    
+        raise HTTPException(
+            status_code=409, detail="User is already a member of this group")
+
     # Add membership
     membership = UserGroupMembership(
         user_id=user_id,
@@ -2980,7 +3156,7 @@ async def add_group_member(
     )
     session.add(membership)
     await session.commit()
-    
+
     return {"status": "added", "user_id": user_id, "group_id": group_id}
 
 
@@ -2989,7 +3165,8 @@ async def remove_group_member(
     group_id: int,
     user_id: int,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(require_permission("user_groups", "manage_members"))
+    current_user: User = Depends(
+        require_permission("user_groups", "manage_members"))
 ):
     """Remove user from group (requires users:update permission). Cannot remove last admin."""
     # Verify group exists
@@ -2997,7 +3174,7 @@ async def remove_group_member(
     group = group_result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="User group not found")
-    
+
     # Find membership
     membership_result = await session.execute(
         select(UserGroupMembership).where(
@@ -3007,8 +3184,9 @@ async def remove_group_member(
     )
     membership = membership_result.scalar_one_or_none()
     if not membership:
-        raise HTTPException(status_code=404, detail="User is not a member of this group")
-    
+        raise HTTPException(
+            status_code=404, detail="User is not a member of this group")
+
     # Prevent removing last admin from Administrators group
     if group.name == "Administrators":
         admin_count = await session.execute(
@@ -3021,10 +3199,10 @@ async def remove_group_member(
                 status_code=409,
                 detail="Cannot remove the last administrator. Add another admin first."
             )
-    
+
     await session.delete(membership)
     await session.commit()
-    
+
     return {"status": "removed", "user_id": user_id, "group_id": group_id}
 
 
@@ -3034,21 +3212,22 @@ async def remove_group_member(
 async def list_group_permissions(
     group_id: int,
     session: AsyncSession = Depends(get_session),
-    user: User = Depends(require_permission("user_groups", "manage_permissions"))
+    user: User = Depends(require_permission(
+        "user_groups", "manage_permissions"))
 ):
     """List permissions granted to a user group (requires users:read permission)."""
     from sqlalchemy.orm import selectinload
-    
+
     result = await session.execute(
         select(UserGroup)
         .options(selectinload(UserGroup.permissions))
         .where(UserGroup.id == group_id)
     )
     group = result.scalar_one_or_none()
-    
+
     if not group:
         raise HTTPException(status_code=404, detail="User group not found")
-    
+
     # If group is admin, return all permissions
     if group.is_admin:
         all_perms_result = await session.execute(select(Permission))
@@ -3062,7 +3241,7 @@ async def list_group_permissions(
             )
             for p in all_perms
         ]
-    
+
     return [
         PermissionResponse(
             id=p.id,
@@ -3079,11 +3258,12 @@ async def grant_group_permission(
     group_id: int,
     body: PermissionGrantRequest,
     session: AsyncSession = Depends(get_session),
-    user: User = Depends(require_permission("user_groups", "manage_permissions"))
+    user: User = Depends(require_permission(
+        "user_groups", "manage_permissions"))
 ):
     """Grant permission to group (requires users:update permission)."""
     from sqlalchemy.orm import selectinload
-    
+
     # Verify group exists
     result = await session.execute(
         select(UserGroup)
@@ -3093,11 +3273,11 @@ async def grant_group_permission(
     group = result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="User group not found")
-    
+
     # If group is admin, permissions are automatic (no need to grant)
     if group.is_admin:
         return {"status": "ignored", "message": "Admin groups automatically have all permissions"}
-    
+
     # Find permission
     permission = None
     if body.permission_id:
@@ -3118,19 +3298,20 @@ async def grant_group_permission(
             status_code=400,
             detail="Either permission_id or both resource and action must be provided"
         )
-    
+
     if not permission:
         raise HTTPException(status_code=404, detail="Permission not found")
-    
+
     # Check if already granted
     if permission in group.permissions:
-        raise HTTPException(status_code=409, detail="Permission already granted to this group")
-    
+        raise HTTPException(
+            status_code=409, detail="Permission already granted to this group")
+
     # Grant permission
     group.permissions.append(permission)
     group.updated_at = datetime.utcnow()
     await session.commit()
-    
+
     return {"status": "granted", "permission_id": permission.id, "group_id": group_id}
 
 
@@ -3139,11 +3320,12 @@ async def revoke_group_permission(
     group_id: int,
     permission_id: int,
     session: AsyncSession = Depends(get_session),
-    user: User = Depends(require_permission("user_groups", "manage_permissions"))
+    user: User = Depends(require_permission(
+        "user_groups", "manage_permissions"))
 ):
     """Revoke permission from group (requires users:update permission)."""
     from sqlalchemy.orm import selectinload
-    
+
     # Verify group exists
     result = await session.execute(
         select(UserGroup)
@@ -3153,11 +3335,11 @@ async def revoke_group_permission(
     group = result.scalar_one_or_none()
     if not group:
         raise HTTPException(status_code=404, detail="User group not found")
-    
+
     # If group is admin, cannot revoke permissions (they have all)
     if group.is_admin:
         return {"status": "ignored", "message": "Cannot revoke permissions from admin groups"}
-    
+
     # Find permission
     perm_result = await session.execute(
         select(Permission).where(Permission.id == permission_id)
@@ -3165,14 +3347,15 @@ async def revoke_group_permission(
     permission = perm_result.scalar_one_or_none()
     if not permission:
         raise HTTPException(status_code=404, detail="Permission not found")
-    
+
     # Check if permission is granted
     if permission not in group.permissions:
-        raise HTTPException(status_code=404, detail="Permission not granted to this group")
-    
+        raise HTTPException(
+            status_code=404, detail="Permission not granted to this group")
+
     # Revoke permission
     group.permissions.remove(permission)
     group.updated_at = datetime.utcnow()
     await session.commit()
-    
+
     return {"status": "revoked", "permission_id": permission_id, "group_id": group_id}

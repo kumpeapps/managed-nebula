@@ -241,6 +241,10 @@ export class ApiService {
     return this.http.delete<void>(`${this.apiUrl}/ca/${id}`, { withCredentials: true });
   }
 
+  setSigningCA(id: number): Observable<CACertificate> {
+    return this.http.post<CACertificate>(`${this.apiUrl}/ca/${id}/set-signing`, {}, { withCredentials: true });
+  }
+
   // User endpoints
   getUsers(): Observable<User[]> {
     return this.http.get<User[]>(`${this.apiUrl}/users`, { withCredentials: true });
