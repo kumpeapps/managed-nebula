@@ -1957,6 +1957,20 @@ async def create_firewall_ruleset(body: FirewallRulesetCreate, session: AsyncSes
         if rule_data.proto not in ("any", "tcp", "udp", "icmp"):
             raise HTTPException(
                 status_code=400, detail=f"Invalid proto: {rule_data.proto}")
+        # Validate at least one targeting field
+        has_target = (
+            rule_data.host or
+            rule_data.cidr or
+            rule_data.local_cidr or
+            rule_data.ca_name or
+            rule_data.ca_sha or
+            (rule_data.group_ids and len(rule_data.group_ids) > 0)
+        )
+        if not has_target:
+            raise HTTPException(
+                status_code=400,
+                detail="Each rule must specify at least one of: host, cidr, local_cidr, ca_name, ca_sha, or groups"
+            )
 
         rule = FirewallRule(
             direction=rule_data.direction,
@@ -2065,6 +2079,20 @@ async def update_firewall_ruleset(ruleset_id: int, body: FirewallRulesetUpdate, 
             if rule_data.proto not in ("any", "tcp", "udp", "icmp"):
                 raise HTTPException(
                     status_code=400, detail=f"Invalid proto: {rule_data.proto}")
+            # Validate at least one targeting field
+            has_target = (
+                rule_data.host or
+                rule_data.cidr or
+                rule_data.local_cidr or
+                rule_data.ca_name or
+                rule_data.ca_sha or
+                (rule_data.group_ids and len(rule_data.group_ids) > 0)
+            )
+            if not has_target:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Each rule must specify at least one of: host, cidr, local_cidr, ca_name, ca_sha, or groups"
+                )
 
             rule = FirewallRule(
                 direction=rule_data.direction,
