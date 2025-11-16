@@ -39,7 +39,7 @@ class MeUpdateRequest(BaseModel):
 async def api_login(body: JsonLoginRequest, request: Request, session: AsyncSession = Depends(get_session)):
     user = (
         await session.execute(
-            select(User).options(selectinload(User.role)).where(User.email == body.email)
+            select(User).where(User.email == body.email)
         )
     ).scalars().first()
     if not user or not verify_password(body.password, user.hashed_password):
@@ -47,13 +47,13 @@ async def api_login(body: JsonLoginRequest, request: Request, session: AsyncSess
     if not user.is_active:
         raise HTTPException(status_code=403, detail="User inactive")
     request.session["user_id"] = user.id
-    # Determine admin via group membership (is_admin=True) or legacy role fallback
+    # Determine admin via group membership (is_admin=True)
     admins_membership = await session.execute(
         select(UserGroupMembership)
         .join(UserGroup, UserGroup.id == UserGroupMembership.user_group_id)
         .where(UserGroupMembership.user_id == user.id, UserGroup.is_admin == True)
     )
-    is_admin = admins_membership.scalars().first() is not None or bool(user.role and user.role.name == "admin")
+    is_admin = admins_membership.scalars().first() is not None
     return {
         "id": user.id,
         "email": user.email,
@@ -75,7 +75,7 @@ async def api_me(user: User = Depends(get_current_user), session: AsyncSession =
         .join(UserGroup, UserGroup.id == UserGroupMembership.user_group_id)
         .where(UserGroupMembership.user_id == user.id, UserGroup.is_admin == True)
     )
-    is_admin = admins_membership.scalars().first() is not None or bool(user.role and user.role.name == "admin")
+    is_admin = admins_membership.scalars().first() is not None
     return MeResponse(
         id=user.id,
         email=user.email,
@@ -128,7 +128,7 @@ async def api_update_me(
         .join(UserGroup, UserGroup.id == UserGroupMembership.user_group_id)
         .where(UserGroupMembership.user_id == db_user.id, UserGroup.is_admin == True)
     )
-    is_admin = admins_membership.scalars().first() is not None or bool(db_user.role and db_user.role.name == "admin")
+    is_admin = admins_membership.scalars().first() is not None
 
     return MeResponse(
         id=db_user.id,
