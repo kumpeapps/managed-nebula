@@ -1857,7 +1857,7 @@ async def revoke_group_permission(
 # ============ Firewall Rulesets REST API ============
 
 
-@router.get("/firewall-rulesets", response_model=List[FirewallRulesetResponse])
+@router.get("/firewall-rulesets", response_model=List[FirewallRulesetResponse], response_model_exclude_none=True)
 async def list_firewall_rulesets(session: AsyncSession = Depends(get_session), user: User = Depends(get_current_user)):
     from sqlalchemy.orm import selectinload
     from ..models.client import FirewallRuleset
@@ -1883,7 +1883,7 @@ async def list_firewall_rulesets(session: AsyncSession = Depends(get_session), u
                 local_cidr=r.local_cidr,
                 ca_name=r.ca_name,
                 ca_sha=r.ca_sha,
-                groups=[GroupRef(id=g.id, name=g.name) for g in r.groups]
+                groups=[GroupRef(id=g.id, name=g.name) for g in r.groups] if r.groups else None
             )
             for r in rs.rules
         ]
@@ -1897,7 +1897,7 @@ async def list_firewall_rulesets(session: AsyncSession = Depends(get_session), u
     return responses
 
 
-@router.get("/firewall-rulesets/{ruleset_id}", response_model=FirewallRulesetResponse)
+@router.get("/firewall-rulesets/{ruleset_id}", response_model=FirewallRulesetResponse, response_model_exclude_none=True)
 async def get_firewall_ruleset(ruleset_id: int, session: AsyncSession = Depends(get_session), user: User = Depends(get_current_user)):
     from sqlalchemy.orm import selectinload
     from ..models.client import FirewallRuleset
@@ -1924,7 +1924,7 @@ async def get_firewall_ruleset(ruleset_id: int, session: AsyncSession = Depends(
             local_cidr=r.local_cidr,
             ca_name=r.ca_name,
             ca_sha=r.ca_sha,
-            groups=[GroupRef(id=g.id, name=g.name) for g in r.groups]
+            groups=[GroupRef(id=g.id, name=g.name) for g in r.groups] if r.groups else None
         )
         for r in rs.rules
     ]
@@ -1937,7 +1937,7 @@ async def get_firewall_ruleset(ruleset_id: int, session: AsyncSession = Depends(
     )
 
 
-@router.post("/firewall-rulesets", response_model=FirewallRulesetResponse)
+@router.post("/firewall-rulesets", response_model=FirewallRulesetResponse, response_model_exclude_none=True)
 async def create_firewall_ruleset(body: FirewallRulesetCreate, session: AsyncSession = Depends(get_session), user: User = Depends(require_permission("firewall_rules", "create"))):
     from ..models.client import FirewallRuleset
     # Check duplicate name
@@ -1977,6 +1977,9 @@ async def create_firewall_ruleset(body: FirewallRulesetCreate, session: AsyncSes
                 raise HTTPException(
                     status_code=400, detail="One or more group IDs not found")
             rule.groups = groups
+        else:
+            # Explicitly set empty list to avoid async lazy-load on access
+            rule.groups = []
 
         session.add(rule)
         rules_to_add.append(rule)
@@ -2003,7 +2006,7 @@ async def create_firewall_ruleset(body: FirewallRulesetCreate, session: AsyncSes
             local_cidr=r.local_cidr,
             ca_name=r.ca_name,
             ca_sha=r.ca_sha,
-            groups=[GroupRef(id=g.id, name=g.name) for g in (r.groups or [])]
+            groups=[GroupRef(id=g.id, name=g.name) for g in r.groups] if r.groups else None
         )
         for r in rules_to_add
     ]
@@ -2016,7 +2019,7 @@ async def create_firewall_ruleset(body: FirewallRulesetCreate, session: AsyncSes
     )
 
 
-@router.put("/firewall-rulesets/{ruleset_id}", response_model=FirewallRulesetResponse)
+@router.put("/firewall-rulesets/{ruleset_id}", response_model=FirewallRulesetResponse, response_model_exclude_none=True)
 async def update_firewall_ruleset(ruleset_id: int, body: FirewallRulesetUpdate, session: AsyncSession = Depends(get_session), user: User = Depends(require_permission("firewall_rules", "update"))):
     from sqlalchemy.orm import selectinload
     from ..models.client import FirewallRuleset
@@ -2081,6 +2084,9 @@ async def update_firewall_ruleset(ruleset_id: int, body: FirewallRulesetUpdate, 
                     raise HTTPException(
                         status_code=400, detail="One or more group IDs not found")
                 rule.groups = groups
+            else:
+                # Explicitly set empty list to avoid async lazy-load on access
+                rule.groups = []
 
             session.add(rule)
             new_rules.append(rule)
@@ -2102,7 +2108,7 @@ async def update_firewall_ruleset(ruleset_id: int, body: FirewallRulesetUpdate, 
             local_cidr=r.local_cidr,
             ca_name=r.ca_name,
             ca_sha=r.ca_sha,
-            groups=[GroupRef(id=g.id, name=g.name) for g in r.groups]
+            groups=[GroupRef(id=g.id, name=g.name) for g in r.groups] if r.groups else None
         )
         for r in ruleset.rules
     ]
