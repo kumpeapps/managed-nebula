@@ -114,6 +114,9 @@ def build_nebula_config(
             "disabled": False,
             "dev": "nebula0",
             # ip removed (Nebula derives host IP from certificate to avoid duplication)
+            "drop_local_broadcast": False,
+            "drop_multicast": False,
+            "tx_queue": 500,
             "mtu": 1300,
         },
         "firewall": {
@@ -126,13 +129,29 @@ def build_nebula_config(
         },
     }
 
-    # Optional punchy block
+    # Optional punchy block - critical for NAT traversal
     try:
         if settings and getattr(settings, "punchy_enabled", False):
-            cfg["punchy"] = {"punch": True, "punch_back": True, "respond": True}
+            cfg["punchy"] = {
+                "punch": True,
+                "punch_back": True,
+                "respond": True,
+                "delay": "1s",  # Delay before responding to punches (helps with misbehaving NATs)
+                "respond_delay": "5s",  # Delay before punch_back response
+            }
     except Exception:
         # If settings is None or missing attribute, ignore punchy
         pass
+
+    # Add relay configuration for NAT traversal
+    # Non-lighthouse clients can use lighthouses as relays if direct connection fails
+    cfg["relay"] = {
+        "am_relay": client.is_lighthouse,  # Lighthouses act as relays
+        "use_relays": not client.is_lighthouse,  # Non-lighthouses can use relays
+    }
+    # If not a lighthouse and we have lighthouse IPs, list them as potential relays
+    if not client.is_lighthouse and (lighthouse_host_ips or lh_hosts):
+        cfg["relay"]["relays"] = lighthouse_host_ips or lh_hosts
 
     # Build firewall rules from assigned rulesets
     try:
