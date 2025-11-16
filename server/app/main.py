@@ -131,7 +131,7 @@ async def bootstrap_defaults():
     # Optional admin bootstrap from env
     try:
         async with AsyncSessionLocal() as session:
-            from .models.user import User, Role
+            from .models.user import User
             from .models.permissions import UserGroup, UserGroupMembership
             import os
             
@@ -152,28 +152,25 @@ async def bootstrap_defaults():
             
             print(f"[bootstrap] No users found, creating initial admin user: {admin_email}")
             
-            admin_role = (await session.execute(select(Role).where(Role.name == "admin"))).scalars().first()
-            if not admin_role:
-                print("[bootstrap] Creating admin role")
-                admin_role = Role(name="admin")
-                session.add(admin_role)
-                await session.flush()
-            
             from .core.auth import hash_password
             u = User(
                 email=admin_email, 
                 hashed_password=hash_password(admin_password), 
-                role_id=admin_role.id,
                 is_active=True
             )
             session.add(u)
             await session.flush()
-            # Add to Administrators group as well
+            
+            # Add to Administrators group (required for admin access)
             admins_group = (await session.execute(select(UserGroup).where(UserGroup.name == "Administrators"))).scalars().first()
             if admins_group:
                 session.add(UserGroupMembership(user_id=u.id, user_group_id=admins_group.id))
+            else:
+                print("[bootstrap] WARNING: Administrators group not found, user will not have admin access")
+            
             await session.commit()
             print(f"[bootstrap] ✅ Admin user created successfully: {admin_email}")
+            print(f"[bootstrap] User added to Administrators group for admin access")
             
     except Exception as e:
         print(f"[bootstrap] ❌ Failed to create admin user: {e}")
