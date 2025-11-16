@@ -208,7 +208,7 @@ docker compose exec server python manage.py create-admin admin@example.com
 docker exec -it managed-nebula-server python manage.py create-admin admin@example.com
 
 # Non-interactive (useful for scripts)
-docker exec managed-nebula-server python manage.py create-admin admin@example.com MySecurePassword123
+docker exec managed-nebula-server python manage.py create-admin admin@example.com MySecurePassword1234
 ```
 
 Open your browser to **http://localhost** (frontend) or **https://localhost/api/docs** (API docs) and log in with your admin credentials, then:
