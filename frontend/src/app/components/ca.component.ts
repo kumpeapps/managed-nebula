@@ -64,6 +64,7 @@ import { CACertificate } from '../models';
           <tr>
             <th>Name</th>
             <th>Status</th>
+            <th>Can Sign</th>
             <th>Validity</th>
             <th>Actions</th>
           </tr>
@@ -73,10 +74,15 @@ import { CACertificate } from '../models';
             <td>{{ ca.name }}</td>
             <td>
               <span class="badge" [ngClass]="statusClass(ca.status)">{{ ca.status }}</span>
+              <span *ngIf="ca.is_active && ca.can_sign" class="badge badge-signing">Signing</span>
             </td>
-            <td>{{ ca.not_before | date:'shortDate' }} → {{ ca.not_after | date:'shortDate' }}</td>
             <td>
-              <button class="btn btn-sm btn-danger" (click)="deleteCA(ca.id)" [disabled]="ca.is_active">Delete</button>
+              <span class="badge" [ngClass]="ca.can_sign ? 'badge-yes' : 'badge-no'">{{ ca.can_sign ? 'Yes' : 'No' }}</span>
+            </td>
+            <td>{{ ca.not_before | date:'short' }} → {{ ca.not_after | date:'short' }}</td>
+            <td class="actions-cell">
+              <button *ngIf="ca.can_sign && !ca.is_active" class="btn btn-sm btn-primary" (click)="setSigningCA(ca.id)">Set as Signing</button>
+              <button class="btn btn-sm btn-danger" (click)="deleteCA(ca.id)" [disabled]="ca.is_active" [title]="ca.is_active ? 'Cannot delete active CA' : 'Delete CA'">Delete</button>
             </td>
           </tr>
         </tbody>
@@ -94,6 +100,10 @@ import { CACertificate } from '../models';
     .badge-previous { background:#fff3cd; color:#856404; }
     .badge-expired { background:#f8d7da; color:#721c24; }
     .badge-inactive { background:#e2e3e5; color:#383d41; }
+    .badge-signing { background:#007bff; color:#fff; margin-left:0.5rem; }
+    .badge-yes { background:#d4edda; color:#155724; }
+    .badge-no { background:#f8d7da; color:#721c24; }
+    .actions-cell { display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; }
     .modal { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; }
     .modal-content { background:#fff; padding:1.5rem; width:600px; max-width:95%; border-radius:8px; }
     .form-group { margin-bottom:1rem; }
@@ -166,11 +176,30 @@ export class CAComponent implements OnInit {
     });
   }
 
+  setSigningCA(id: number): void {
+    if (!confirm('Set this CA as the active signing CA? The current signing CA will be marked as previous.')) return;
+    this.api.setSigningCA(id).subscribe({
+      next: () => this.load(),
+      error: (e: any) => alert('Failed to set signing CA: ' + (e.error?.detail || 'Unknown error'))
+    });
+  }
+
   deleteCA(id: number): void {
-    if (!confirm('Delete this CA? (Cannot delete active)')) return;
+    const ca = this.cas.find(c => c.id === id);
+    if (ca?.is_active) {
+      alert('Cannot delete active CA. Please set another CA as the signing CA first.');
+      return;
+    }
+    if (!confirm(`Delete CA "${ca?.name}"? This action cannot be undone.`)) return;
     this.api.deleteCA(id).subscribe({
-      next: () => (this.cas = this.cas.filter(c => c.id !== id)),
-      error: (e: any) => alert('Delete failed: ' + (e.error?.detail || 'Unknown error'))
+      next: () => {
+        this.cas = this.cas.filter(c => c.id !== id);
+        console.log(`CA ${id} deleted successfully`);
+      },
+      error: (e: any) => {
+        console.error('Delete CA error:', e);
+        alert('Delete failed: ' + (e.error?.detail || 'Unknown error'));
+      }
     });
   }
 
