@@ -305,7 +305,7 @@ export class FirewallRulesComponent implements OnInit {
         local_cidr: r.local_cidr || undefined,
         ca_name: r.ca_name || undefined,
         ca_sha: r.ca_sha || undefined,
-        group_ids: r.groups.map(g => g.id)
+        group_ids: r.groups ? r.groups.map(g => g.id) : []
       }))
     };
     this.showForm = true;
@@ -326,6 +326,24 @@ export class FirewallRulesComponent implements OnInit {
 
   saveRuleset(): void {
     if (!this.formData.name || this.formData.rules.length === 0) return;
+    
+    // Validate each rule has at least one targeting field
+    for (let i = 0; i < this.formData.rules.length; i++) {
+      const rule = this.formData.rules[i];
+      const hasTarget = 
+        rule.host ||
+        rule.cidr ||
+        rule.local_cidr ||
+        rule.ca_name ||
+        rule.ca_sha ||
+        (rule.group_ids && rule.group_ids.length > 0);
+      
+      if (!hasTarget) {
+        alert(`Rule ${i + 1}: At least one of host, cidr, local_cidr, ca_name, ca_sha, or groups must be provided`);
+        return;
+      }
+    }
+    
     this.saving = true;
 
     const payload = {
