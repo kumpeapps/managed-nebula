@@ -31,7 +31,7 @@ def ensure_keypair() -> tuple[str, str]:
 
 
 def fetch_config(token: str, server_url: str, public_key: str) -> dict:
-    url = server_url.rstrip("/") + "/api/v1/client/config"
+    url = server_url.rstrip("/") + "/v1/client/config"
     with httpx.Client(timeout=30) as client:
         r = client.post(url, json={"token": token, "public_key": public_key})
         r.raise_for_status()
