@@ -6,8 +6,29 @@ from sqlalchemy.orm import selectinload
 from ..db import get_session
 from ..models.user import User, Role
 
-# Use bcrypt_sha256 to avoid bcrypt's 72-byte password truncation/limit and backend quirks
-pwd_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
+"""Authentication helpers and password hashing/verification.
+
+We continue to hash new/updated passwords with bcrypt_sha256 to avoid bcrypt's
+72-byte truncation behavior. For compatibility with existing/legacy users, we
+allow verification against multiple common schemes supported by passlib.
+"""
+
+# Preferred scheme remains bcrypt_sha256. Enable several legacy schemes for verification only.
+# Passlib auto-detects the right hasher based on the stored hash format.
+pwd_context = CryptContext(
+    schemes=[
+        "bcrypt_sha256",   # preferred
+        "bcrypt",          # legacy bcrypt
+        "pbkdf2_sha256",   # common in many frameworks
+        "sha256_crypt",    # legacy
+        "sha512_crypt",    # legacy
+        "md5_crypt",       # legacy/weak
+        "phpass",          # WordPress/Drupal style
+    ],
+    deprecated=[
+        "bcrypt", "pbkdf2_sha256", "sha256_crypt", "sha512_crypt", "md5_crypt", "phpass"
+    ],
+)
 
 
 def hash_password(password: str) -> str:

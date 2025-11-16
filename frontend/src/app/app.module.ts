@@ -19,6 +19,7 @@ import { UsersComponent } from './components/users.component';
 import { UserGroupsComponent } from './components/user-groups.component';
 import { PermissionsComponent } from './components/permissions.component';
 import { SettingsComponent } from './components/settings.component';
+import { ProfileComponent } from './components/profile.component';
 import { NavbarComponent } from './components/navbar.component';
 import { NotificationsComponent } from './components/notifications.component';
 
@@ -44,6 +45,7 @@ import { AuthInterceptor } from './interceptors/auth.interceptor';
     UserGroupsComponent,
     PermissionsComponent,
     SettingsComponent,
+    ProfileComponent,
     NavbarComponent,
     NotificationsComponent
   ],

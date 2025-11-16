@@ -275,6 +275,11 @@ export class ApiService {
     return this.http.put<Settings>(`${this.apiUrl}/settings`, settings, { withCredentials: true });
   }
 
+  // Self-service: update current user (email/password)
+  updateMe(payload: { email?: string; current_password: string; new_password?: string }): Observable<User> {
+    return this.http.put<User>(`${this.apiUrl}/auth/me`, payload, { withCredentials: true });
+  }
+
   // Docker compose template endpoints
   getDockerComposeTemplate(): Observable<DockerComposeTemplate> {
     return this.http.get<DockerComposeTemplate>(`${this.apiUrl}/settings/docker-compose-template`, { withCredentials: true });

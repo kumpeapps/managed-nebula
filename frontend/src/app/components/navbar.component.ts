@@ -32,7 +32,7 @@ import { AuthService } from '../services/auth.service';
         <a routerLink="/user-groups" routerLinkActive="active" (click)="closeMobileMenu()">User Groups</a>
         <a routerLink="/permissions" routerLinkActive="active" *ngIf="isAdmin" (click)="closeMobileMenu()">Permissions</a>
         <a routerLink="/settings" routerLinkActive="active" *ngIf="isAdmin" (click)="closeMobileMenu()">Settings</a>
-        <span class="user-info">{{ currentUser?.email }}</span>
+        <a routerLink="/profile" class="user-info user-link" (click)="closeMobileMenu()" title="View profile">{{ currentUser?.email }}</a>
         <button (click)="logout()" class="btn btn-secondary">Logout</button>
       </div>
     </nav>
@@ -136,6 +136,14 @@ import { AuthService } from '../services/auth.service';
       padding: 0 1rem;
       border-left: 1px solid #ddd;
       font-size: 0.9rem;
+    }
+    .user-link {
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .user-link:hover {
+      text-decoration: underline;
+      color: #333;
     }
     
     .btn {

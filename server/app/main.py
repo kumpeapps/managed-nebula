@@ -108,10 +108,31 @@ async def bootstrap_defaults():
         if changed:
             await session.commit()
 
+    # Ensure default user groups exist (Administrators, Users)
+    try:
+        async with AsyncSessionLocal() as session:
+            from .models.permissions import UserGroup
+            # Administrators group (is_admin=True)
+            admins = (await session.execute(select(UserGroup).where(UserGroup.name == "Administrators"))).scalars().first()
+            if not admins:
+                admins = UserGroup(name="Administrators", description="Administrators with full access", is_admin=True)
+                session.add(admins)
+                await session.flush()
+            # Users group (default)
+            users_group = (await session.execute(select(UserGroup).where(UserGroup.name == "Users"))).scalars().first()
+            if not users_group:
+                users_group = UserGroup(name="Users", description="Default users group", is_admin=False)
+                session.add(users_group)
+                await session.flush()
+            await session.commit()
+    except Exception as e:
+        print(f"[bootstrap] Failed ensuring default user groups: {e}")
+
     # Optional admin bootstrap from env
     try:
         async with AsyncSessionLocal() as session:
             from .models.user import User, Role
+            from .models.permissions import UserGroup, UserGroupMembership
             import os
             
             admin_email = os.getenv("ADMIN_EMAIL")
@@ -146,6 +167,11 @@ async def bootstrap_defaults():
                 is_active=True
             )
             session.add(u)
+            await session.flush()
+            # Add to Administrators group as well
+            admins_group = (await session.execute(select(UserGroup).where(UserGroup.name == "Administrators"))).scalars().first()
+            if admins_group:
+                session.add(UserGroupMembership(user_id=u.id, user_group_id=admins_group.id))
             await session.commit()
             print(f"[bootstrap] ✅ Admin user created successfully: {admin_email}")
             
