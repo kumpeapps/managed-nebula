@@ -107,6 +107,8 @@ def build_nebula_config(
             "am_lighthouse": client.is_lighthouse,
             # Lighthouse clients should not list other lighthouses (only static_host_map)
             "hosts": [] if client.is_lighthouse else (lighthouse_host_ips or lh_hosts),
+            # Interval for non-lighthouse clients to check in (critical for NAT traversal)
+            "interval": 60,
         },
         "tun": {
             "disabled": False,
