@@ -794,8 +794,18 @@ async def update_client(
             config_changed = True
 
         # Update ip_group_id if provided (allow setting to None to remove from group)
-        if body.ip_group_id is not None:
-            if body.ip_group_id != ip_assignment.ip_group_id:
+        if body.ip_group_id is not None and body.ip_group_id != ip_assignment.ip_group_id:
+            from ..models.client import IPGroup
+            group_check = await session.execute(
+                select(IPGroup).where(IPGroup.id == body.ip_group_id)
+            )
+            if not group_check.scalar_one_or_none():
+                raise HTTPException(
+                    status_code=404, detail=f"IP group {body.ip_group_id} not found")
+
+            ip_assignment.ip_group_id = body.ip_group_id
+            config_changed = True
+
                 # Validate group exists if not None
                 from ..models.client import IPGroup
                 group_check = await session.execute(
