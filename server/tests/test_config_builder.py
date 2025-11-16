@@ -264,4 +264,38 @@ def test_tun_broadcast_and_multicast_settings():
     assert config["tun"]["drop_multicast"] is False
     assert config["tun"]["tx_queue"] == 500
     assert config["tun"]["mtu"] == 1300
-    assert "relays" not in config["relay"]
+
+
+def test_no_yaml_aliases_in_config():
+    """Test that config doesn't contain YAML aliases like &id001."""
+    # Create mock client
+    client = Mock()
+    client.name = "test-client"
+    client.is_lighthouse = False
+    client.is_blocked = False
+    client.firewall_rulesets = []
+    
+    # Create mock settings
+    settings = Mock()
+    settings.punchy_enabled = True
+    settings.lighthouse_port = 4242
+    settings.lighthouse_hosts = '["10.100.0.1", "10.100.0.2"]'
+    
+    lighthouse_ips = ["10.100.0.1", "10.100.0.2"]
+    
+    config_yaml = build_nebula_config(
+        client=client,
+        client_ip_cidr="10.100.0.10/16",
+        settings=settings,
+        static_host_map={},
+        lighthouse_host_ips=lighthouse_ips
+    )
+    
+    # Verify no YAML aliases in the output
+    assert "&id" not in config_yaml
+    assert "*id" not in config_yaml
+    
+    # Verify both lighthouse.hosts and relay.relays are properly set as separate lists
+    config = yaml.safe_load(config_yaml)
+    assert config["lighthouse"]["hosts"] == ["10.100.0.1", "10.100.0.2"]
+    assert config["relay"]["relays"] == ["10.100.0.1", "10.100.0.2"]

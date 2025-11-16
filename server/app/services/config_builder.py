@@ -150,8 +150,9 @@ def build_nebula_config(
         "use_relays": not client.is_lighthouse,  # Non-lighthouses can use relays
     }
     # If not a lighthouse and we have lighthouse IPs, list them as potential relays
+    # Use list() to create a copy and avoid YAML aliases
     if not client.is_lighthouse and (lighthouse_host_ips or lh_hosts):
-        cfg["relay"]["relays"] = lighthouse_host_ips or lh_hosts
+        cfg["relay"]["relays"] = list(lighthouse_host_ips or lh_hosts)
 
     # Build firewall rules from assigned rulesets
     try:
