@@ -1,17 +1,10 @@
 from __future__ import annotations
-from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, select
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import String, Integer, Boolean, DateTime, select, func
+from sqlalchemy.orm import Mapped, mapped_column
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from ..db import Base
-
-
-class Role(Base):
-    __tablename__ = "roles"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(50), unique=True, index=True)
 
 
 class User(Base):
@@ -21,25 +14,17 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    role_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("roles.id", ondelete="SET NULL"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-    role: Mapped[Optional[Role]] = relationship("Role")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
     
     async def has_permission(self, session: AsyncSession, resource: str, action: str) -> bool:
         """
-        Check if user has a specific permission through their group memberships or admin role.
+        Check if user has a specific permission through their group memberships.
         Returns True if:
-        - User has admin role (role.name == 'admin')
         - User belongs to any group with is_admin=True
         - User has the specific permission through any group
         """
-        from .permissions import UserGroup, UserGroupMembership, Permission, user_group_permissions
+        from .permissions import UserGroup, UserGroupMembership
         from sqlalchemy.orm import selectinload
-        
-        # Check if user has admin role (legacy admin system)
-        if self.role and self.role.name == 'admin':
-            return True
         
         # Get user's groups with their permissions
         result = await session.execute(

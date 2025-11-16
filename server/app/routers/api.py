@@ -34,7 +34,6 @@ from ..models.schemas import (
     CACreate,
     CAImport,
     CAResponse,
-    RoleRef,
     UserRef,
     UserGroupRef,
     UserCreate,
@@ -86,7 +85,7 @@ async def build_client_response(client: Client, session: AsyncSession, user: Use
     # Get client token if requested
     token_value = None
     if include_token:
-        is_admin = bool(user.role and user.role.name == "admin")
+        is_admin = await user.has_permission(session, "users", "delete")
         is_owner = client.owner_user_id == user.id
         can_view_token = False
 
@@ -462,7 +461,7 @@ async def list_clients(
     )
 
     # Non-admins only see clients they own or have permissions for
-    is_admin = bool(user.role and user.role.name == "admin")
+    is_admin = await user.has_permission(session, "users", "delete")
     if not is_admin:
         # Get client IDs user has access to (owned or shared)
         perm_result = await session.execute(
@@ -651,7 +650,7 @@ async def get_client(
         raise HTTPException(status_code=404, detail="Client not found")
 
     # Access control: admins see all, others only see owned/shared
-    is_admin = bool(user.role and user.role.name == "admin")
+    is_admin = await user.has_permission(session, "users", "delete")
     is_owner = client.owner_user_id == user.id
 
     if not is_admin and not is_owner:
@@ -692,7 +691,7 @@ async def update_client(
         raise HTTPException(status_code=404, detail="Client not found")
 
     # Access control: admins can update all, others only owned or with can_update permission
-    is_admin = bool(user.role and user.role.name == "admin")
+    is_admin = await user.has_permission(session, "users", "delete")
     is_owner = client.owner_user_id == user.id
 
     if not is_admin and not is_owner:
@@ -904,7 +903,7 @@ async def list_client_permissions(
         raise HTTPException(status_code=404, detail="Client not found")
 
     # Check access
-    is_admin = bool(user.role and user.role.name == "admin")
+    is_admin = await user.has_permission(session, "users", "delete")
     is_owner = client.owner_user_id == user.id
     if not is_admin and not is_owner:
         raise HTTPException(
@@ -950,7 +949,7 @@ async def grant_client_permission(
         raise HTTPException(status_code=404, detail="Client not found")
 
     # Check access
-    is_admin = bool(user.role and user.role.name == "admin")
+    is_admin = await user.has_permission(session, "users", "delete")
     is_owner = client.owner_user_id == user.id
     if not is_admin and not is_owner:
         raise HTTPException(
@@ -1021,7 +1020,7 @@ async def revoke_client_permission(
         raise HTTPException(status_code=404, detail="Client not found")
 
     # Check access
-    is_admin = bool(user.role and user.role.name == "admin")
+    is_admin = await user.has_permission(session, "users", "delete")
     is_owner = client.owner_user_id == user.id
     if not is_admin and not is_owner:
         raise HTTPException(
@@ -1226,7 +1225,7 @@ async def download_client_config(
         raise HTTPException(status_code=404, detail="Client not found")
 
     # Access control: admins, owners, or users with can_download_config permission
-    is_admin = bool(user.role and user.role.name == "admin")
+    is_admin = await user.has_permission(session, "users", "delete")
     is_owner = client.owner_user_id == user.id
 
     if not is_admin and not is_owner:
@@ -1368,7 +1367,7 @@ async def download_client_docker_compose(
         raise HTTPException(status_code=404, detail="Client not found")
 
     # Access control: admins, owners, or users with can_download_docker_config permission
-    is_admin = bool(user.role and user.role.name == "admin")
+    is_admin = await user.has_permission(session, "users", "delete")
     is_owner = client.owner_user_id == user.id
 
     if not is_admin and not is_owner:
@@ -1521,7 +1520,7 @@ async def create_group(body: GroupCreate, session: AsyncSession = Depends(get_se
                 status_code=400, detail=f"Parent group '{parent_name}' does not exist")
 
         # Check if user has permission to create subgroups of parent (unless admin)
-        is_admin = bool(user.role and user.role.name == "admin")
+        is_admin = await user.has_permission(session, "users", "delete")
         is_parent_owner = parent_group.owner_user_id == user.id
 
         if not is_admin and not is_parent_owner:
@@ -1569,7 +1568,7 @@ async def update_group(group_id: int, body: GroupUpdate, session: AsyncSession =
         raise HTTPException(status_code=404, detail="Group not found")
 
     # Check permissions (admin or owner)
-    is_admin = bool(user.role and user.role.name == "admin")
+    is_admin = await user.has_permission(session, "users", "delete")
     is_owner = group.owner_user_id == user.id
 
     if not is_admin and not is_owner:
@@ -1617,7 +1616,7 @@ async def delete_group(group_id: int, session: AsyncSession = Depends(get_sessio
         raise HTTPException(status_code=404, detail="Group not found")
 
     # Check permissions (admin or owner)
-    is_admin = bool(user.role and user.role.name == "admin")
+    is_admin = await user.has_permission(session, "users", "delete")
     is_owner = group.owner_user_id == user.id
 
     if not is_admin and not is_owner:
@@ -1665,7 +1664,7 @@ async def list_group_permissions(
         raise HTTPException(status_code=404, detail="Group not found")
 
     # Check permissions (admin or owner)
-    is_admin = bool(user.role and user.role.name == "admin")
+    is_admin = await user.has_permission(session, "users", "delete")
     is_owner = group.owner_user_id == user.id
 
     if not is_admin and not is_owner:
@@ -1726,7 +1725,7 @@ async def grant_group_permission(
         raise HTTPException(status_code=404, detail="Group not found")
 
     # Check permissions (admin or owner)
-    is_admin = bool(user.role and user.role.name == "admin")
+    is_admin = await user.has_permission(session, "users", "delete")
     is_owner = group.owner_user_id == user.id
 
     if not is_admin and not is_owner:
@@ -1831,7 +1830,7 @@ async def revoke_group_permission(
         raise HTTPException(status_code=404, detail="Group not found")
 
     # Check permissions (admin or owner)
-    is_admin = bool(user.role and user.role.name == "admin")
+    is_admin = await user.has_permission(session, "users", "delete")
     is_owner = group.owner_user_id == user.id
 
     if not is_admin and not is_owner:
@@ -2283,7 +2282,7 @@ async def get_pool_clients(pool_id: int, session: AsyncSession = Depends(get_ses
     clients = result.scalars().unique().all()
 
     # Build responses using helper
-    is_admin = bool(user.role and user.role.name == "admin")
+    is_admin = await user.has_permission(session, "users", "delete")
     responses = []
     for client in clients:
         responses.append(await build_client_response(client, session, user, include_token=is_admin))
@@ -2542,7 +2541,7 @@ async def get_group_clients(group_id: int, session: AsyncSession = Depends(get_s
     clients = result.scalars().unique().all()
 
     # Build responses using helper
-    is_admin = bool(user.role and user.role.name == "admin")
+    is_admin = await user.has_permission(session, "users", "delete")
     responses = []
     for client in clients:
         responses.append(await build_client_response(client, session, user, include_token=is_admin))
@@ -2703,7 +2702,7 @@ async def delete_ca(ca_id: int, session: AsyncSession = Depends(get_session), us
 async def list_users(session: AsyncSession = Depends(get_session), user: User = Depends(require_permission("users", "read"))):
     from sqlalchemy.orm import selectinload
     from ..models.permissions import UserGroup, UserGroupMembership
-    result = await session.execute(select(User).options(selectinload(User.role)))
+    result = await session.execute(select(User))
     users = result.scalars().all()
     responses: List[UserResponse] = []
     for u in users:
@@ -2727,7 +2726,7 @@ async def list_users(session: AsyncSession = Depends(get_session), user: User = 
 async def get_user(user_id: int, session: AsyncSession = Depends(get_session), admin: User = Depends(require_permission("users", "read"))):
     from sqlalchemy.orm import selectinload
     from ..models.permissions import UserGroup, UserGroupMembership
-    result = await session.execute(select(User).options(selectinload(User.role)).where(User.id == user_id))
+    result = await session.execute(select(User).where(User.id == user_id))
     u = result.scalar_one_or_none()
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
@@ -2752,7 +2751,6 @@ async def create_user(body: UserCreate, session: AsyncSession = Depends(get_sess
     if settings.externally_managed_users:
         raise HTTPException(status_code=403, detail="Users are managed externally; local creation is disabled")
     from ..core.auth import hash_password
-    from ..models.user import Role
     from ..models.permissions import UserGroup, UserGroupMembership
     from sqlalchemy.orm import selectinload
 
@@ -2761,23 +2759,13 @@ async def create_user(body: UserCreate, session: AsyncSession = Depends(get_sess
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Email already exists")
 
-    # Determine role legacy (optional)
-    role_id = None
-    if body.role_name:
-        role_result = await session.execute(select(Role).where(Role.name == body.role_name))
-        role = role_result.scalar_one_or_none()
-        if not role:
-            raise HTTPException(status_code=400, detail=f"Role '{body.role_name}' not found")
-        role_id = role.id
-
     # Hash password
     hashed = hash_password(body.password)
 
     new_user = User(
         email=body.email,
         hashed_password=hashed,
-        is_active=body.is_active,
-        role_id=role_id
+        is_active=body.is_active
     )
     session.add(new_user)
     await session.flush()
@@ -2825,10 +2813,9 @@ async def update_user(user_id: int, body: UserUpdate, session: AsyncSession = De
         raise HTTPException(status_code=403, detail="Users are managed externally; local editing is disabled")
     from ..core.auth import hash_password
     from sqlalchemy.orm import selectinload
-    from ..models.user import Role
     from ..models.permissions import UserGroup, UserGroupMembership
 
-    result = await session.execute(select(User).options(selectinload(User.role)).where(User.id == user_id))
+    result = await session.execute(select(User).where(User.id == user_id))
     u = result.scalar_one_or_none()
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
@@ -2842,14 +2829,6 @@ async def update_user(user_id: int, body: UserUpdate, session: AsyncSession = De
 
     if body.password is not None:
         u.hashed_password = hash_password(body.password)
-
-    if body.role_name is not None:
-        role_result = await session.execute(select(Role).where(Role.name == body.role_name))
-        role = role_result.scalar_one_or_none()
-        if not role:
-            raise HTTPException(
-                status_code=400, detail=f"Role '{body.role_name}' not found")
-        u.role_id = role.id
 
     if body.is_active is not None:
         u.is_active = body.is_active
@@ -3220,7 +3199,6 @@ async def list_group_members(
     result = await session.execute(
         select(User)
         .join(UserGroupMembership, UserGroupMembership.user_id == User.id)
-        .options(selectinload(User.role))
         .where(UserGroupMembership.user_group_id == group_id)
     )
     members = result.scalars().all()

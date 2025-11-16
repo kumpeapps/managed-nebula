@@ -1,4 +1,4 @@
-from .user import User, Role
+from .user import User
 from .client import Client, ClientToken, ClientCertificate, Group, FirewallRule, FirewallRuleset, IPPool, IPAssignment, IPGroup
 from .ca import CACertificate
 from .settings import GlobalSettings

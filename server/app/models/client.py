@@ -1,5 +1,5 @@
 from __future__ import annotations
-from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, Table, Column
+from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, Table, Column, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Optional
 from datetime import datetime
@@ -41,7 +41,7 @@ class Group(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), unique=True)  # Increased for hierarchical names like "parent:child:grandchild"
     owner_user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
     
     clients = relationship("Client", secondary=client_groups, back_populates="groups")
     owner = relationship("User", foreign_keys=[owner_user_id])
@@ -82,7 +82,7 @@ class Client(Base):
     name: Mapped[str] = mapped_column(String(100))
     is_lighthouse: Mapped[bool] = mapped_column(Boolean, default=False)
     public_ip: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
     # Ownership
     owner_user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     # Tracking config lifecycle
@@ -103,7 +103,7 @@ class ClientToken(Base):
     client_id: Mapped[int] = mapped_column(Integer, ForeignKey("clients.id", ondelete="CASCADE"))
     token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
     owner_user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     client: Mapped[Client] = relationship("Client")
@@ -119,7 +119,7 @@ class ClientCertificate(Base):
     # owner: Mapped["User" | None] = relationship("User")
     not_before: Mapped[datetime] = mapped_column(DateTime)
     not_after: Mapped[datetime] = mapped_column(DateTime)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
     # Metadata for lifecycle and revocation
     fingerprint: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     issued_for_ip_cidr: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
