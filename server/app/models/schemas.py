@@ -13,12 +13,6 @@ class GroupRef(BaseModel):
     name: str
 
 
-class RoleRef(BaseModel):
-    """Reference to a Role for nested responses (legacy)."""
-    id: int
-    name: str
-
-
 class UserRef(BaseModel):
     """Reference to a User for nested responses."""
     id: int
@@ -301,7 +295,6 @@ class UserCreate(BaseModel):
     password: str
     is_active: bool = True
     user_group_ids: List[int] = []  # Assign to these user groups at creation
-    role_name: Optional[str] = None  # Legacy compatibility (ignored if user_group_ids provided)
 
 
 class UserUpdate(BaseModel):
@@ -310,7 +303,6 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     is_active: Optional[bool] = None
     user_group_ids: Optional[List[int]] = None  # Replace memberships with these IDs
-    role_name: Optional[str] = None  # Legacy compatibility
 
 
 class UserResponse(BaseModel):

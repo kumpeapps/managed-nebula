@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, Boolean, DateTime, LargeBinary
+from sqlalchemy import String, Integer, Boolean, DateTime, LargeBinary, func
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
 from ..db import Base
@@ -19,4 +19,4 @@ class CACertificate(Base):
     can_sign: Mapped[bool] = mapped_column(Boolean, default=True)
     # Whether to include this CA cert in generated client configs (CA bundle)
     include_in_config: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())

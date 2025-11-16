@@ -1,5 +1,5 @@
 from __future__ import annotations
-from sqlalchemy import Integer, Boolean, ForeignKey, String, DateTime, Table, Column
+from sqlalchemy import Integer, Boolean, ForeignKey, String, DateTime, Table, Column, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Optional
 from datetime import datetime
@@ -53,8 +53,8 @@ class UserGroup(Base):
     description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     owner_user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())
     
     owner = relationship("User", foreign_keys=[owner_user_id])
     permissions = relationship("Permission", secondary=user_group_permissions)
@@ -67,7 +67,7 @@ class UserGroupMembership(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     user_group_id: Mapped[int] = mapped_column(Integer, ForeignKey("user_groups.id", ondelete="CASCADE"))
-    added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
 
     user = relationship("User")
     user_group = relationship("UserGroup")
