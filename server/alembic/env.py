@@ -13,7 +13,7 @@ from app.db import Base
 from app.core.config import settings
 # Import all models so they are registered with Base.metadata
 from app.models import (
-    User, Role,
+    User,
     Client, ClientToken, ClientCertificate, Group, FirewallRule, FirewallRuleset,
     IPPool, IPAssignment, IPGroup,
     CACertificate,
