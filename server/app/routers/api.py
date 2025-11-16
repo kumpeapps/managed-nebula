@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from datetime import datetime
 
 from ..db import get_session
@@ -806,18 +807,6 @@ async def update_client(
 
             ip_assignment.ip_group_id = body.ip_group_id
             config_changed = True
-
-                # Validate group exists if not None
-                from ..models.client import IPGroup
-                group_check = await session.execute(
-                    select(IPGroup).where(IPGroup.id == body.ip_group_id)
-                )
-                if not group_check.scalar_one_or_none():
-                    raise HTTPException(
-                        status_code=404, detail=f"IP group {body.ip_group_id} not found")
-
-                ip_assignment.ip_group_id = body.ip_group_id
-                config_changed = True
 
     # Mark config changed timestamp if needed
     if config_changed:
