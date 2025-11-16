@@ -171,7 +171,7 @@ class FirewallRuleResponse(BaseModel):
     local_cidr: Optional[str]
     ca_name: Optional[str]
     ca_sha: Optional[str]
-    groups: List[GroupRef]
+    groups: Optional[List[GroupRef]] = None
 
     model_config = ConfigDict(from_attributes=True)
 
