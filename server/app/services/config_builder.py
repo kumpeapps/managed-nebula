@@ -127,7 +127,7 @@ def build_nebula_config(
     # Optional punchy block
     try:
         if settings and getattr(settings, "punchy_enabled", False):
-            cfg["punchy"] = {"punch_back": True, "respond": True}
+            cfg["punchy"] = {"punch": True, "punch_back": True, "respond": True}
     except Exception:
         # If settings is None or missing attribute, ignore punchy
         pass

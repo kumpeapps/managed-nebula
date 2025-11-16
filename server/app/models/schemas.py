@@ -1,6 +1,6 @@
 """Pydantic schemas for API request/response models."""
 from __future__ import annotations
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from datetime import datetime
 from typing import List, Optional
 
@@ -140,6 +140,25 @@ class FirewallRuleCreate(BaseModel):
     ca_sha: Optional[str] = None
     group_ids: Optional[List[int]] = None  # List of group IDs for this rule
 
+    @field_validator('group_ids', mode='after')
+    @classmethod
+    def validate_targeting_fields(cls, v: Optional[List[int]], info) -> Optional[List[int]]:
+        """Ensure at least one targeting field is provided."""
+        values = info.data
+        has_target = (
+            values.get('host') or
+            values.get('cidr') or
+            values.get('local_cidr') or
+            values.get('ca_name') or
+            values.get('ca_sha') or
+            (v and len(v) > 0)
+        )
+        if not has_target:
+            raise ValueError(
+                'At least one of host, cidr, local_cidr, ca_name, ca_sha, or group_ids must be provided'
+            )
+        return v
+
 
 class FirewallRuleUpdate(BaseModel):
     """Update model for FirewallRule."""
@@ -165,7 +184,7 @@ class FirewallRuleResponse(BaseModel):
     local_cidr: Optional[str]
     ca_name: Optional[str]
     ca_sha: Optional[str]
-    groups: List[GroupRef]
+    groups: Optional[List[GroupRef]] = None
 
     model_config = ConfigDict(from_attributes=True)
 
