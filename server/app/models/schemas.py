@@ -14,7 +14,7 @@ class GroupRef(BaseModel):
 
 
 class RoleRef(BaseModel):
-    """Reference to a Role for nested responses."""
+    """Reference to a Role for nested responses (legacy)."""
     id: int
     name: str
 
@@ -299,16 +299,18 @@ class UserCreate(BaseModel):
     """Create model for User."""
     email: str
     password: str
-    role_name: str = "user"  # Default role
     is_active: bool = True
+    user_group_ids: List[int] = []  # Assign to these user groups at creation
+    role_name: Optional[str] = None  # Legacy compatibility (ignored if user_group_ids provided)
 
 
 class UserUpdate(BaseModel):
     """Update model for User."""
     email: Optional[str] = None
     password: Optional[str] = None
-    role_name: Optional[str] = None
     is_active: Optional[bool] = None
+    user_group_ids: Optional[List[int]] = None  # Replace memberships with these IDs
+    role_name: Optional[str] = None  # Legacy compatibility
 
 
 class UserResponse(BaseModel):
@@ -316,7 +318,7 @@ class UserResponse(BaseModel):
     id: int
     email: str
     is_active: bool
-    role: Optional[RoleRef]
+    groups: List[UserGroupRef] = []
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -362,6 +364,7 @@ class SettingsResponse(BaseModel):
     client_docker_image: str
     server_url: str
     docker_compose_template: str
+    externally_managed_users: bool
 
 class SettingsUpdate(BaseModel):
     punchy_enabled: Optional[bool] = None

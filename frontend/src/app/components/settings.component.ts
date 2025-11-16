@@ -446,7 +446,8 @@ export class SettingsComponent implements OnInit {
     punchy_enabled: false,
     client_docker_image: 'ghcr.io/kumpeapps/managed-nebula-client:latest',
     server_url: 'http://localhost:8080',
-    docker_compose_template: ''
+    docker_compose_template: '',
+    externally_managed_users: false
   };
   isAdmin = this.authService.isAdmin();
   placeholders: any[] = [];

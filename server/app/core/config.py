@@ -21,5 +21,8 @@ class Settings(BaseModel):
     # Schema auto-sync (disabled by default; use Alembic for production)
     enable_schema_autosync: bool = os.getenv("ENABLE_SCHEMA_AUTOSYNC", "false").lower() in ("true", "1", "yes")
 
+    # If true, users are managed externally and local add/edit/delete should be disabled
+    externally_managed_users: bool = os.getenv("EXTERNALLY_MANAGED_USERS", "false").lower() in ("true", "1", "yes")
+
 
 settings = Settings()
