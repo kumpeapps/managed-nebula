@@ -29,7 +29,7 @@ import { Settings } from '../models';
                   <strong>Enable Punchy</strong>
                   <span class="description">
                     Nebula "punchy" helps peers behind NAT maintain connectivity by sending periodic packets. 
-                    Enables punch_back and respond when active.
+                    Enables punch, punch_back, and respond when active.
                   </span>
                 </span>
               </label>
@@ -37,7 +37,7 @@ import { Settings } from '../models';
             
             <div class="info-box" *ngIf="settings.punchy_enabled">
               <p><strong>ℹ️ Punchy Enabled</strong></p>
-              <p>New client configs will include punchy settings with punch_back and respond set to true.</p>
+              <p>New client configs will include punchy settings with punch, punch_back, and respond set to true.</p>
             </div>
           </div>
           
