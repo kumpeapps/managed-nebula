@@ -41,7 +41,7 @@ ENV CLIENT_TOKEN="" \
     POLL_INTERVAL_HOURS=24
 
 VOLUME ["/etc/nebula", "/var/lib/nebula"]
-
+COPY install-systemd-service.sh /etc/nebula/install-systemd-service.sh
 # Provide systemd unit templates and installer script inside the image for host installation
 RUN mkdir -p /opt/managed-nebula/systemd
 COPY systemd/*.service.tpl /opt/managed-nebula/systemd/
