@@ -244,6 +244,32 @@ The web interface provides a "Download Docker Compose" button on each client's d
 - Join the Nebula mesh network
 - Poll for updates every 24 hours
 
+### 🍎 macOS Native Client
+
+For macOS users who need native TUN interface support (Docker networking limitations on macOS), a native menu bar application is available:
+
+```bash
+# Clone and install
+cd macos_client
+./install.sh
+
+# Or build manually
+make build
+sudo make install
+
+# Launch the application
+ManagedNebula
+```
+
+The macOS client provides:
+- **Native Nebula integration** - Direct TUN interface on macOS
+- **Menu bar application** - System tray icon with connection status
+- **Secure storage** - Client token stored in macOS Keychain
+- **Auto-updates** - Automatic configuration polling
+- **Easy setup** - Simple preferences UI
+
+See [`macos_client/README.md`](macos_client/README.md) and [`macos_client/QUICKSTART.md`](macos_client/QUICKSTART.md) for detailed documentation.
+
 ## 🏗️ Architecture
 
 ```
@@ -359,10 +385,17 @@ Admin recommendations:
 - **Deployment**: Nginx static hosting in Docker
 
 #### 📱 **Client** (`client/`)
-- **Runtime**: Lightweight Python agent
+- **Runtime**: Lightweight Python agent (Docker-based)
 - **Dependencies**: `httpx` for API calls, `nebula-cert` for keypair generation
 - **Lifecycle**: Poll server → Fetch config → Update certificates → Restart if needed
 - **Configuration**: Environment variables
+
+#### 🍎 **macOS Client** (`macos_client/`)
+- **Runtime**: Native Swift menu bar application
+- **Platform**: macOS 12+ (Intel & Apple Silicon)
+- **UI**: System tray icon with preferences window
+- **Security**: Keychain integration for token storage
+- **Features**: Native TUN interface, automatic config updates, launch at login
 
 ## ⚙️ Configuration
 
