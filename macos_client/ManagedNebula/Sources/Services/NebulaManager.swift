@@ -1,6 +1,5 @@
 import Foundation
 import CryptoKit
-import Darwin
 
 /// Manages Nebula binary execution and lifecycle
 class NebulaManager {
@@ -78,61 +77,30 @@ class NebulaManager {
         
         print("[NebulaManager] Configuration changed, writing new files")
         
-        // 1) Write user-viewable config and local certs
-        try writeUserConfig(response.config)
-        let caChain = response.caChainPems.joined(separator: "\n")
-        try writeCertificates(certPem: response.clientCertPem, caChain: caChain)
-
-        // 2) Stage root-owned copies for the helper daemon
-        try stageRootConfig(rawConfig: response.config, certPem: response.clientCertPem, caChain: caChain)
-        
-        return true
-    }
-
-    // MARK: - File writing helpers
-
-    private func writeUserConfig(_ raw: String) throws {
+        // Write config file
         try fileManager.writeSecure(
-            makeUserReadableConfig(from: raw),
+            response.config,
             to: FileManager.NebulaFiles.configFile,
             permissions: 0o644
         )
-    }
-
-    private func writeCertificates(certPem: String, caChain: String) throws {
+        
+        // Write client certificate
         try fileManager.writeSecure(
-            certPem,
+            response.clientCertPem,
             to: FileManager.NebulaFiles.certificate,
             permissions: 0o644
         )
+        
+        // Write CA certificate chain
+        let caChain = response.caChainPems.joined(separator: "\n")
         try fileManager.writeSecure(
             caChain,
             to: FileManager.NebulaFiles.caCertificate,
             permissions: 0o644
         )
-    }
-
-    private func stageRootConfig(rawConfig: String, certPem: String, caChain: String) throws {
-        let stagingDir = URL(fileURLWithPath: "/tmp/managed-nebula")
-        try? fileManager.createDirectory(at: stagingDir, withIntermediateDirectories: true)
-        let stagedConfig = stagingDir.appendingPathComponent("config.yml")
-        let stagedCert = stagingDir.appendingPathComponent("host.crt")
-        let stagedCA = stagingDir.appendingPathComponent("ca.crt")
-        let stagedKey = stagingDir.appendingPathComponent("host.key")
-
-        // Do not force a specific utun; allow Nebula to choose a free device
-        let rootConfig: String = stripTunDev(from: rawConfig)
-        try rootConfig.write(to: stagedConfig, atomically: true, encoding: .utf8)
-        try certPem.write(to: stagedCert, atomically: true, encoding: .utf8)
-        try caChain.write(to: stagedCA, atomically: true, encoding: .utf8)
-        if fileManager.fileExists(atPath: FileManager.NebulaFiles.privateKey.path) {
-            let keyData = try Data(contentsOf: FileManager.NebulaFiles.privateKey)
-            try keyData.write(to: stagedKey)
-        }
-    }
-
-    private func makeUserReadableConfig(from raw: String) -> String {
-        var config = raw
+        
+        // Update config.yml to use correct paths
+        var config = response.config
         config = config.replacingOccurrences(
             of: "/var/lib/nebula/host.key",
             with: FileManager.NebulaFiles.privateKey.path
@@ -145,59 +113,65 @@ class NebulaManager {
             of: "/etc/nebula/host.crt",
             with: FileManager.NebulaFiles.certificate.path
         )
-        return config
+        
+        try fileManager.writeSecure(
+            config,
+            to: FileManager.NebulaFiles.configFile,
+            permissions: 0o644
+        )
+        
+        return true
     }
-
-    private func stripTunDev(from raw: String) -> String {
-        return raw
-            .components(separatedBy: "\n")
-            .filter { line in
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                return !trimmed.hasPrefix("dev:")
-            }
-            .joined(separator: "\n")
-    }
-
-    // No explicit injection of dev: utunX; let Nebula allocate automatically
     
     /// Start Nebula daemon
     func startNebula() throws {
-        // Ensure config exists before asking helper to start
+        // Stop existing process if running
+        stopNebula()
+        
         let configPath = FileManager.NebulaFiles.configFile
         guard fileManager.fileExists(atPath: configPath.path) else {
             throw NebulaError.configNotFound
         }
-
-        // Ask the root helper daemon to start Nebula
-        let controlFile = "/tmp/nebula-control"
-        try? "start".write(toFile: controlFile, atomically: true, encoding: .utf8)
-
-        // Small delay to allow daemon to spawn process
-        usleep(500_000)
-        print("[NebulaManager] Sent start command to helper daemon")
+        
+        let logPath = FileManager.NebulaFiles.logFile
+        
+        process = Process()
+        process?.executableURL = URL(fileURLWithPath: nebulaBinaryPath)
+        process?.arguments = ["-config", configPath.path]
+        
+        // Redirect output to log file
+        let logFileHandle = try FileHandle(forWritingTo: logPath)
+        process?.standardOutput = logFileHandle
+        process?.standardError = logFileHandle
+        
+        try process?.run()
+        print("[NebulaManager] Nebula daemon started")
     }
     
     /// Stop Nebula daemon
     func stopNebula() {
-        // Ask the root helper daemon to stop Nebula
-        let controlFile = "/tmp/nebula-control"
-        try? "stop".write(toFile: controlFile, atomically: true, encoding: .utf8)
-        usleep(300_000)
+        guard let process = process, process.isRunning else {
+            return
+        }
+        
+        // Try graceful termination first
+        process.terminate()
+        
+        // Wait up to 2 seconds
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+            if process.isRunning {
+                // Force kill if still running
+                kill(process.processIdentifier, SIGKILL)
+            }
+        }
+        
         self.process = nil
-        print("[NebulaManager] Sent stop command to helper daemon")
+        print("[NebulaManager] Nebula daemon stopped")
     }
     
     /// Check if Nebula is running
     func isRunning() -> Bool {
-        // Check system processes for a running nebula daemon
-        let check = Process()
-        check.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-        check.arguments = ["-f", "nebula -config"]
-        let pipe = Pipe()
-        check.standardOutput = pipe
-        try? check.run()
-        check.waitUntilExit()
-        return check.terminationStatus == 0
+        return process?.isRunning ?? false
     }
     
     /// Restart Nebula daemon
