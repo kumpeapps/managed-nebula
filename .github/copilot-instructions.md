@@ -50,6 +50,47 @@ main (production)
         └── feature/client-8
 ```
 
+### Commit Message Format
+**CRITICAL: All commits must follow this format:**
+
+```
+[<branch-name>] <Short description>
+
+Resolves #<issue-number>
+
+<Detailed description of changes>
+- Bullet point 1
+- Bullet point 2
+...
+```
+
+**Examples:**
+```
+[feature/server-5] Add user authentication endpoint
+
+Resolves #5
+
+- Implement JWT token-based authentication
+- Add login/logout endpoints
+- Create auth middleware for protected routes
+```
+
+```
+[bugfix/frontend-12] Fix login form validation
+
+Resolves #12
+
+- Add email format validation
+- Fix password minimum length check
+- Update error messages for clarity
+```
+
+**Key rules:**
+- Start with `[<branch-name>]` prefix
+- Include `Resolves #<issue-number>` in commit body
+- Use present tense ("Add" not "Added")
+- Be descriptive but concise
+
 ### When Assigned an Issue
 1. Check if `dev` branch exists: `git branch -r | grep origin/dev`
 2. If `dev` doesn't exist: `git checkout -b dev origin/main && git push -u origin dev`
@@ -60,7 +101,7 @@ main (production)
    - Changes across multiple services → use `all`
 4. Create feature branch using format `<type>/<service>-<issue-number>`:
    - Example: `git checkout -b feature/server-5 origin/dev` (for issue #5 affecting server)
-5. Make changes and commit
+5. Make changes and commit with proper format (see Commit Message Format above)
 6. **Rebase branch against `dev` before requesting review**: `git fetch origin dev && git rebase origin/dev`
 7. Create PR with title format `[<branch-name>] Description` targeting `dev` branch
 
