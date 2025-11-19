@@ -36,25 +36,38 @@ The ManagedNebula macOS client provides a native macOS experience for connecting
 
 ## Installation
 
-### Pre-built Application (Recommended)
+### Option 1: PKG Installer (Recommended for Complete Installation)
 
-1. Download the latest `.app` bundle from the releases page
-2. Move `ManagedNebula.app` to `/Applications`
-3. Install Nebula binaries:
+The PKG installer includes everything you need: the ManagedNebula app, Nebula binaries, and automatic LaunchDaemon setup.
+
+1. **Download** the latest `.pkg` installer from [releases](https://github.com/kumpeapps/managed-nebula/releases)
+2. **Double-click** the PKG file to install
+3. **Follow** the installation wizard
+4. **Launch** ManagedNebula from Applications
+5. **Configure** your server URL and client token in the preferences
+
+The PKG installer will:
+- Install ManagedNebula.app to /Applications
+- Install Nebula binaries to /usr/local/bin
+- Create the LaunchDaemon for auto-start
+- Set up necessary directories and permissions
+
+### Option 2: DMG Installer (For Homebrew Users)
+
+If you already have Nebula installed via Homebrew, use the DMG:
+
+1. **Download** the latest `.dmg` from [releases](https://github.com/kumpeapps/managed-nebula/releases)
+2. **Open** the DMG file
+3. **Drag** ManagedNebula.app to the Applications folder
+4. **Install Nebula** via Homebrew if not already installed:
    ```bash
-   # Download Nebula for macOS
-   curl -LO https://github.com/slackhq/nebula/releases/latest/download/nebula-darwin.tar.gz
-   
-   # Extract binaries
-   tar xzf nebula-darwin.tar.gz
-   
-   # Install to /usr/local/bin
-   sudo mv nebula nebula-cert /usr/local/bin/
-   sudo chmod +x /usr/local/bin/nebula /usr/local/bin/nebula-cert
+   brew install nebula
    ```
-4. Launch `ManagedNebula.app`
+5. **Launch** ManagedNebula from Applications
 
-### Building from Source
+### Option 3: Build from Source
+
+For developers or those who want to build from source:
 
 1. **Clone the repository**:
    ```bash
@@ -62,22 +75,36 @@ The ManagedNebula macOS client provides a native macOS experience for connecting
    cd managed-nebula/macos_client
    ```
 
-2. **Install Nebula binaries** (see above)
-
-3. **Build with Swift Package Manager**:
+2. **Run the automated installer** (builds and installs everything):
    ```bash
+   ./install.sh
+   ```
+   
+   Or use Make targets:
+   ```bash
+   # Create app bundle only
+   make app-bundle
+   
+   # Create both PKG and DMG installers
+   make package
+   
+   # Create just the PKG installer
+   make pkg
+   
+   # Create just the DMG installer
+   make dmg
+   ```
+
+3. **Manual build steps**:
+   ```bash
+   # Build release binary
+   make build
+   
+   # Or with Swift directly
    swift build -c release
-   ```
-
-4. **Run the application**:
-   ```bash
+   
+   # Run the application
    .build/release/ManagedNebula
-   ```
-
-5. **Optional: Create .app bundle**:
-   ```bash
-   # Use Xcode to build and archive the application
-   # Or use swift build with appropriate flags
    ```
 
 ## Configuration

@@ -4,7 +4,7 @@
 set -e
 
 NEBULA_VERSION="v1.8.2"
-NEBULA_URL="https://github.com/slackhq/nebula/releases/download/${NEBULA_VERSION}/nebula-darwin.tar.gz"
+NEBULA_URL="https://github.com/slackhq/nebula/releases/download/${NEBULA_VERSION}/nebula-darwin.zip"
 INSTALL_DIR="/usr/local/bin"
 
 echo "=== ManagedNebula macOS Client Installer ==="
@@ -46,33 +46,33 @@ if command -v nebula &> /dev/null && command -v nebula-cert &> /dev/null; then
         echo "Skipping Nebula installation"
     else
         echo "Downloading Nebula ${NEBULA_VERSION}..."
-        curl -L -o /tmp/nebula-darwin.tar.gz "$NEBULA_URL"
+        curl -L -o /tmp/nebula-darwin.zip "$NEBULA_URL"
         
         echo "Extracting..."
         cd /tmp
-        tar xzf nebula-darwin.tar.gz
+        unzip -q nebula-darwin.zip
         
         echo "Installing to ${INSTALL_DIR} (requires sudo)..."
         sudo mv nebula nebula-cert "${INSTALL_DIR}/"
         sudo chmod +x "${INSTALL_DIR}/nebula" "${INSTALL_DIR}/nebula-cert"
         
         echo "✓ Nebula installed successfully"
-        rm -f /tmp/nebula-darwin.tar.gz
+        rm -f /tmp/nebula-darwin.zip
     fi
 else
     echo "Downloading Nebula ${NEBULA_VERSION}..."
-    curl -L -o /tmp/nebula-darwin.tar.gz "$NEBULA_URL"
+    curl -L -o /tmp/nebula-darwin.zip "$NEBULA_URL"
     
     echo "Extracting..."
     cd /tmp
-    tar xzf nebula-darwin.tar.gz
+    unzip -q nebula-darwin.zip
     
     echo "Installing to ${INSTALL_DIR} (requires sudo)..."
     sudo mv nebula nebula-cert "${INSTALL_DIR}/"
     sudo chmod +x "${INSTALL_DIR}/nebula" "${INSTALL_DIR}/nebula-cert"
     
     echo "✓ Nebula installed successfully"
-    rm -f /tmp/nebula-darwin.tar.gz
+    rm -f /tmp/nebula-darwin.zip
 fi
 
 # Verify installation
