@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:managed-nebula}/macos_client",
+            "name": "Debug ManagedNebula (macos_client)",
+            "target": "ManagedNebula",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug ManagedNebula (macos_client)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:managed-nebula}/macos_client",
+            "name": "Release ManagedNebula (macos_client)",
+            "target": "ManagedNebula",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release ManagedNebula (macos_client)"
+        }
+    ]
+}
