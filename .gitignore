@@ -394,3 +394,6 @@ pyvenv.cfg
 pip-selfcheck.json
 
 # End of https://www.toptal.com/developers/gitignore/api/node,python,venv,macos,linux
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md
