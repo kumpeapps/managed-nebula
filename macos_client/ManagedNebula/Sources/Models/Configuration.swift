@@ -6,16 +6,19 @@ struct Configuration: Codable {
     var pollIntervalHours: Int
     var isAutoStartEnabled: Bool
     var launchAtLogin: Bool
+    var isManuallyDisconnected: Bool?
     
     static let `default` = Configuration(
         serverURL: "",
         pollIntervalHours: 24,
         isAutoStartEnabled: true,
-        launchAtLogin: false
+        launchAtLogin: false,
+        isManuallyDisconnected: false
     )
     
     // UserDefaults key
     private static let configKey = "com.managednebula.configuration"
+        private static let hasLaunchedKey = "com.managednebula.hasLaunched"
     
     /// Load configuration from UserDefaults
     static func load() -> Configuration {
@@ -26,10 +29,22 @@ struct Configuration: Codable {
         return config
     }
     
+        /// Check if this is the first launch
+        static func isFirstLaunch() -> Bool {
+            let hasLaunched = UserDefaults.standard.bool(forKey: hasLaunchedKey)
+            if !hasLaunched {
+                UserDefaults.standard.set(true, forKey: hasLaunchedKey)
+                UserDefaults.standard.synchronize()
+            }
+            return !hasLaunched
+        }
+    
     /// Save configuration to UserDefaults
     func save() {
         if let data = try? JSONEncoder().encode(self) {
             UserDefaults.standard.set(data, forKey: Self.configKey)
+                UserDefaults.standard.synchronize()
+                print("[Configuration] Saved configuration: serverURL=\(serverURL), pollInterval=\(pollIntervalHours)")
         }
     }
 }

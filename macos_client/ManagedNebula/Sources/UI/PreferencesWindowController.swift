@@ -114,6 +114,7 @@ class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     }
     
     @objc private func savePreferences() {
+        print("[PreferencesWindow] Save pressed")
         // Validate inputs
         guard !serverURLField.stringValue.isEmpty else {
             showAlert(title: "Validation Error", message: "Server URL is required")
@@ -145,11 +146,12 @@ class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         onSave?(configuration)
         
         // Close window
-        close()
+        window?.performClose(nil)
     }
     
     @objc private func cancelPreferences() {
-        close()
+        print("[PreferencesWindow] Cancel pressed")
+        window?.performClose(nil)
     }
     
     private func showAlert(title: String, message: String) {
@@ -159,5 +161,9 @@ class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         alert.alertStyle = .warning
         alert.addButton(withTitle: "OK")
         alert.runModal()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        // Nothing extra for now; controller will be released by owner
     }
 }

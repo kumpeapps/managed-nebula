@@ -6,6 +6,7 @@ class PollingService {
     private let nebulaManager: NebulaManager
     private let keychainService: KeychainService
     private var configuration: Configuration
+    private var isManuallyDisconnected: Bool = false
     
     var onStatusChange: ((ConnectionStatus) -> Void)?
     
@@ -13,6 +14,7 @@ class PollingService {
         self.nebulaManager = nebulaManager
         self.keychainService = keychainService
         self.configuration = configuration
+        self.isManuallyDisconnected = configuration.isManuallyDisconnected ?? false
     }
     
     /// Start polling for configuration updates
@@ -39,6 +41,11 @@ class PollingService {
         timer = nil
         print("[PollingService] Stopped polling")
     }
+
+    /// Set manual disconnect state; when true, avoid auto (re)starts
+    func setManualDisconnect(_ value: Bool) {
+        isManuallyDisconnected = value
+    }
     
     /// Check for configuration updates
     func checkForUpdates() async {
@@ -62,25 +69,16 @@ class PollingService {
             
             // Write configuration and check if it changed
             let configChanged = try nebulaManager.writeConfiguration(response)
-            
-            // Restart Nebula if config changed
-            if configChanged {
-                print("[PollingService] Configuration changed, restarting Nebula")
-                try nebulaManager.restartNebula()
-            } else if !nebulaManager.isRunning() && configuration.isAutoStartEnabled {
-                print("[PollingService] Nebula not running, starting it")
-                try nebulaManager.startNebula()
-            }
-            
-            onStatusChange?(.connected)
+
+            try handlePostFetch(configChanged: configChanged)
             print("[PollingService] Configuration check completed successfully")
             
         } catch let error as APIError {
-            let message = error.localizedDescription ?? "Unknown API error"
+            let message = error.localizedDescription
             onStatusChange?(.error(message))
             print("[PollingService] API error: \(message)")
         } catch let error as NebulaError {
-            let message = error.localizedDescription ?? "Unknown Nebula error"
+            let message = error.localizedDescription
             onStatusChange?(.error(message))
             print("[PollingService] Nebula error: \(message)")
         } catch {
@@ -98,5 +96,25 @@ class PollingService {
             stopPolling()
             startPolling()
         }
+    }
+
+    // MARK: - Internal helpers
+    private func handlePostFetch(configChanged: Bool) throws {
+        if isManuallyDisconnected {
+            print("[PollingService] Manual disconnect active; skipping (re)start")
+            onStatusChange?(.disconnected)
+            return
+        }
+        if configChanged {
+            print("[PollingService] Configuration changed, restarting Nebula")
+            try nebulaManager.restartNebula()
+            onStatusChange?(.connected)
+            return
+        }
+        if !nebulaManager.isRunning() && configuration.isAutoStartEnabled {
+            print("[PollingService] Nebula not running, starting it")
+            try nebulaManager.startNebula()
+        }
+        onStatusChange?(.connected)
     }
 }
