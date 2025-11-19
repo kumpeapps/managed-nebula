@@ -1,0 +1,6 @@
+app_identifier("com.managednebula.client")
+apple_id(ENV["FASTLANE_APPLE_ID"] || "jakumpe@justinkumpe.net")
+team_id(ENV["FASTLANE_TEAM_ID"] || "2T42Z3DM34")
+
+# For more information about the Appfile, see:
+#     https://docs.fastlane.tools/advanced/#appfile

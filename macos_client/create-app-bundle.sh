@@ -4,7 +4,8 @@
 set -e
 
 APP_NAME="ManagedNebula"
-VERSION="1.0.0"
+# Use VERSION from environment if provided, otherwise default to 1.0.0
+VERSION="${VERSION:-1.0.0}"
 BUNDLE_ID="com.managednebula.client"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
@@ -27,7 +28,16 @@ echo ""
 # Create bundle structure
 echo "Step 2: Creating bundle structure..."
 BUNDLE_DIR="${SCRIPT_DIR}/${APP_NAME}.app"
-rm -rf "${BUNDLE_DIR}"
+# Robustly remove any previous bundle, even if created as root
+if [ -d "${BUNDLE_DIR}" ]; then
+    if ! rm -rf "${BUNDLE_DIR}" 2>/dev/null; then
+        chmod -R u+w "${BUNDLE_DIR}" 2>/dev/null || true
+        if ! rm -rf "${BUNDLE_DIR}" 2>/dev/null; then
+            echo "Permission denied removing existing app bundle; attempting sudo rm -rf..."
+            sudo rm -rf "${BUNDLE_DIR}"
+        fi
+    fi
+fi
 mkdir -p "${BUNDLE_DIR}/Contents/MacOS"
 mkdir -p "${BUNDLE_DIR}/Contents/Resources"
 
@@ -69,14 +79,18 @@ cat > "${BUNDLE_DIR}/Contents/Info.plist" << EOF
     <string>public.app-category.utilities</string>
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
+    <!-- Show Dock icon initially so user sees the app on first launch -->
     <key>LSUIElement</key>
-    <true/>
+    <false/>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2024 KumpeApps. All rights reserved.</string>
+    <string>Copyright © 2025 KumpeApps LLC. All rights reserved.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <!-- App Icon -->
+    <key>CFBundleIconFile</key>
+    <string>Icon</string>
 </dict>
 </plist>
 EOF
