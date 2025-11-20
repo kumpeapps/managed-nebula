@@ -98,8 +98,8 @@ class MenuBarController: NSObject, NSWindowDelegate {
         
         menu.addItem(NSMenuItem.separator())
         
-        // Check for updates
-        let updateMenuItem = NSMenuItem(title: "Check for Updates", action: #selector(checkForUpdates), keyEquivalent: "")
+        // Check for config updates
+        let updateMenuItem = NSMenuItem(title: "Check for Config Updates", action: #selector(checkForUpdates), keyEquivalent: "")
         updateMenuItem.target = self
         menu.addItem(updateMenuItem)
         
@@ -114,6 +114,11 @@ class MenuBarController: NSObject, NSWindowDelegate {
         let preferencesMenuItem = NSMenuItem(title: "Preferences...", action: #selector(openPreferences), keyEquivalent: ",")
         preferencesMenuItem.target = self
         menu.addItem(preferencesMenuItem)
+        
+        // Clear Configuration
+        let clearConfigMenuItem = NSMenuItem(title: "Clear Configuration...", action: #selector(clearConfiguration), keyEquivalent: "")
+        clearConfigMenuItem.target = self
+        menu.addItem(clearConfigMenuItem)
         
         menu.addItem(NSMenuItem.separator())
         
@@ -283,6 +288,63 @@ class MenuBarController: NSObject, NSWindowDelegate {
                 NSApp.setActivationPolicy(.regular)
             }
         }
+    }
+    
+    @objc private func clearConfiguration() {
+        let alert = NSAlert()
+        alert.messageText = "Clear All Configuration?"
+        alert.informativeText = "This will delete all saved settings, tokens, and configuration files. Nebula will be disconnected. This cannot be undone."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Clear All")
+        alert.addButton(withTitle: "Cancel")
+        
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else {
+            return
+        }
+        
+        print("[MenuBarController] Clearing all configuration")
+        
+        // Stop Nebula and polling
+        nebulaManager.stopNebula()
+        pollingService.stopPolling()
+        
+        // Delete keychain token
+        try? keychainService.deleteToken()
+        
+        // Clear configuration files
+        let fileManager = FileManager.default
+        let configFile = FileManager.NebulaFiles.configFile
+        let certFile = FileManager.NebulaFiles.certificate
+        let caFile = FileManager.NebulaFiles.caCertificate
+        let privateKey = FileManager.NebulaFiles.privateKey
+        let publicKey = FileManager.NebulaFiles.publicKey
+        let logFile = FileManager.NebulaFiles.logFile
+        
+        try? fileManager.removeItem(at: configFile)
+        try? fileManager.removeItem(at: certFile)
+        try? fileManager.removeItem(at: caFile)
+        try? fileManager.removeItem(at: privateKey)
+        try? fileManager.removeItem(at: publicKey)
+        try? fileManager.removeItem(at: logFile)
+        
+        // Clear UserDefaults
+        UserDefaults.standard.removeObject(forKey: "com.managednebula.configuration")
+        UserDefaults.standard.removeObject(forKey: "com.managednebula.hasLaunched")
+        UserDefaults.standard.synchronize()
+        
+        // Reset configuration to defaults
+        configuration = Configuration.default
+        isManuallyDisconnected = false
+        pollingService.setManualDisconnect(false)
+        
+        // Update UI
+        updateStatus(.disconnected)
+        
+        showAlert(title: "Configuration Cleared", message: "All configuration has been cleared. Please enter your settings again in Preferences.")
+        
+        // Open preferences to reconfigure
+        openPreferences(firstLaunch: true)
     }
     
     @objc private func quit() {
