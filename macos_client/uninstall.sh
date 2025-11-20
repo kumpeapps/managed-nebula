@@ -74,8 +74,16 @@ remove_config() {
 
 remove_user_data() {
   if $PURGE; then
-    # Get the actual user who invoked sudo
-    ACTUAL_USER="${SUDO_USER:-$USER}"
+    # Get the actual user who invoked sudo with fallback logic
+    # Try SUDO_USER first, then check who owns the parent process, finally fall back to USER
+    if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+      ACTUAL_USER="$SUDO_USER"
+    elif [ -n "$LOGNAME" ] && [ "$LOGNAME" != "root" ]; then
+      ACTUAL_USER="$LOGNAME"
+    else
+      # Fallback: get the user who owns the parent shell
+      ACTUAL_USER=$(stat -f '%Su' /dev/console 2>/dev/null || echo "$USER")
+    fi
     ACTUAL_HOME=$(eval echo ~$ACTUAL_USER)
     
     log "Removing user configuration for $ACTUAL_USER..."

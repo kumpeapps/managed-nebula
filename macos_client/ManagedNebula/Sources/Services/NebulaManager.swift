@@ -171,26 +171,35 @@ class NebulaManager {
         // Ask the root helper daemon to start Nebula
         let controlFile = "/tmp/nebula-control"
         do {
-            // Write directly to file without atomicity to avoid permission issues
+            // Write to temporary file, then atomically move to control file
+            // This ensures the helper daemon never reads partial/corrupted messages
             let fileURL = URL(fileURLWithPath: controlFile)
-            try "start".data(using: .utf8)?.write(to: fileURL, options: [])
-            print("[NebulaManager] Sent start command to helper daemon")
+            let tempFileURL = URL(fileURLWithPath: controlFile + ".tmp")
             
-            // Wait for Nebula to actually start and be running
-            // Poll for up to 10 seconds with 500ms intervals
-            var attempts = 0
-            let maxAttempts = 20 // 20 * 500ms = 10 seconds
-            while attempts < maxAttempts {
-                usleep(500_000) // 500ms
-                if isRunning() {
-                    print("[NebulaManager] Nebula is now running")
-                    break
-                }
-                attempts += 1
+            if let data = "start".data(using: .utf8) {
+                try data.write(to: tempFileURL, options: .atomic)
+                try fileManager.replaceItemAt(fileURL, withItemAt: tempFileURL)
+                print("[NebulaManager] Sent start command to helper daemon (atomic write)")
             }
             
-            if attempts >= maxAttempts {
-                print("[NebulaManager] Warning: Nebula didn't start within 10 seconds")
+            // Wait for Nebula to actually start and be running
+            // Poll on background thread to avoid blocking UI
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self = self else { return }
+                var attempts = 0
+                let maxAttempts = 20 // 20 * 500ms = 10 seconds
+                while attempts < maxAttempts {
+                    usleep(500_000) // 500ms
+                    if self.isRunning() {
+                        print("[NebulaManager] Nebula is now running")
+                        break
+                    }
+                    attempts += 1
+                }
+                
+                if attempts >= maxAttempts {
+                    print("[NebulaManager] Warning: Nebula didn't start within 10 seconds")
+                }
             }
         } catch {
             print("[NebulaManager] Failed to write start command: \(error)")
@@ -203,21 +212,28 @@ class NebulaManager {
         // Ask the root helper daemon to stop Nebula
         let controlFile = "/tmp/nebula-control"
         do {
-            // Write directly to file without atomicity to avoid permission issues
+            // Write to temporary file, then atomically move to control file
             let fileURL = URL(fileURLWithPath: controlFile)
-            try "stop".data(using: .utf8)?.write(to: fileURL, options: [])
-            print("[NebulaManager] Sent stop command to helper daemon")
+            let tempFileURL = URL(fileURLWithPath: controlFile + ".tmp")
+            
+            if let data = "stop".data(using: .utf8) {
+                try data.write(to: tempFileURL, options: .atomic)
+                try fileManager.replaceItemAt(fileURL, withItemAt: tempFileURL)
+                print("[NebulaManager] Sent stop command to helper daemon (atomic write)")
+            }
             
             // Wait for Nebula to actually stop
-            // Poll for up to 5 seconds with 500ms intervals
-            var attempts = 0
-            let maxAttempts = 10 // 10 * 500ms = 5 seconds
-            while attempts < maxAttempts {
-                usleep(500_000) // 500ms
-                if !isRunning() {
-                    print("[NebulaManager] Nebula has stopped")
-                    break
-                }
+            // Poll on background thread to avoid blocking UI
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self = self else { return }
+                var attempts = 0
+                let maxAttempts = 10 // 10 * 500ms = 5 seconds
+                while attempts < maxAttempts {
+                    usleep(500_000) // 500ms
+                    if !self.isRunning() {
+                        print("[NebulaManager] Nebula has stopped")
+                        break
+                    }
                 attempts += 1
             }
             
