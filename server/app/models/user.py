@@ -1,5 +1,5 @@
 from __future__ import annotations
-from sqlalchemy import String, Integer, Boolean, DateTime, select, func
+from sqlalchemy import String, Integer, Boolean, DateTime, select, func, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,12 +7,24 @@ from datetime import datetime
 from ..db import Base
 
 
+class Role(Base):
+    __tablename__ = "roles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+
 class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[Optional[str]] = mapped_column(String(100), unique=True, index=True, nullable=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    hashed_password: Mapped[str] = mapped_column(String(255))
+    # Maintain both field names for backward compatibility with tests expecting password_hash
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    hashed_password: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    role_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("roles.id"), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
     
