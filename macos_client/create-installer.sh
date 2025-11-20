@@ -328,6 +328,17 @@ chmod +x "${PKG_SCRIPTS}/postinstall"
 cat > "${PKG_SCRIPTS}/preinstall" << 'PREEOF'
 #!/bin/bash
 # Pre-installation script
+# Note: PKG installers run non-interactively, so we just upgrade in-place
+# Users should run the uninstaller app first if they want a clean install
+
+echo "Pre-installation: Stopping existing services..."
+
+# Check if ManagedNebula is already installed
+if [ -d "/Applications/ManagedNebula.app" ] || \
+   [ -f "/Library/LaunchDaemons/com.managednebula.helper.plist" ]; then
+    echo "Existing installation detected. Performing upgrade (preserves settings)."
+    echo "To perform a clean install, run 'Uninstall Managed Nebula.app' first."
+fi
 
 # Stop existing helper daemon if running
 launchctl unload /Library/LaunchDaemons/com.managednebula.helper.plist 2>/dev/null || true
@@ -375,7 +386,18 @@ echo "Step 8: Creating DMG installer..."
 DMG_DIR="${DIST_DIR}/dmg-contents"
 mkdir -p "${DMG_DIR}"
 
-# Copy app bundle
+# Copy PKG installer
+cp "${PKG_FILE}" "${DMG_DIR}/"
+
+# Copy uninstaller app if it exists
+if [ -d "${SCRIPT_DIR}/Uninstall ManagedNebula.app" ]; then
+    cp -R "${SCRIPT_DIR}/Uninstall ManagedNebula.app" "${DMG_DIR}/"
+    echo "✓ Uninstaller app included in DMG"
+else
+    echo "⚠ Uninstaller app not found, skipping..."
+fi
+
+# Copy app bundle (for manual installation option)
 cp -R "${SCRIPT_DIR}/${APP_NAME}.app" "${DMG_DIR}/"
 
 # Create symlink to Applications
@@ -386,43 +408,48 @@ cat > "${DMG_DIR}/README.txt" << 'READMEEOF'
 ManagedNebula Installation
 ==========================
 
-METHOD 1: Simple Installation (Recommended)
---------------------------------------------
-1. Drag ManagedNebula.app to the Applications folder
-2. Open ManagedNebula from Applications
-3. Enter your server URL and client token
-4. The app will run in your menu bar
+RECOMMENDED: Complete Installation (Using PKG)
+----------------------------------------------
+1. Double-click the ManagedNebula-[VERSION].pkg file to install
+2. Follow the installer prompts
+3. Open ManagedNebula from Applications
+4. Enter your server URL and client token
 
-NOTE: This method requires manual installation of Nebula binaries.
-Run this in Terminal after installation:
+The PKG installer includes:
+- ManagedNebula app
+- Nebula binaries (nebula, nebula-cert)
+- System LaunchDaemons for background operation
+- Uninstall script
+
+UPGRADING: Uninstall First
+--------------------------
+If you have a previous version installed:
+1. Double-click "Uninstall Managed Nebula.app"
+2. Choose "Uninstall Only" to keep your settings, or
+   "Uninstall + Settings" for a clean slate
+3. Then run the PKG installer
+
+ALTERNATIVE: Manual Installation
+---------------------------------
+Advanced users can drag ManagedNebula.app to Applications, but
+you'll need to install Nebula binaries separately:
   brew install nebula
 
-METHOD 2: Complete Installation (Using PKG)
--------------------------------------------
-Use the PKG installer instead of this DMG for a complete installation
-that includes Nebula binaries and LaunchDaemon setup.
+Uninstalling
+------------
+Use the included "Uninstall Managed Nebula.app" or run in Terminal:
 
-Manual Configuration
---------------------
-If you need to configure manually:
-1. Create /etc/nebula/config.json with your settings
-2. Run: launchctl load /Library/LaunchDaemons/com.managednebula.client.plist
+    sudo managednebula-uninstall
+
+To remove all settings and keychain data:
+
+    sudo managednebula-uninstall --purge
 
 Troubleshooting
 ---------------
 - Check logs: /var/log/nebula.log
-- Uninstall: Run `sudo managednebula-uninstall` (use `--purge` to remove configs/keys)
+- Check status: launchctl list | grep managednebula
 - Support: https://github.com/kumpeapps/managed-nebula
-
-Uninstalling
-------------
-After installing via the PKG, you can uninstall from Terminal:
-
-    sudo managednebula-uninstall
-
-To remove all configs and keys as well, run:
-
-    sudo managednebula-uninstall --purge
 
 READMEEOF
 
@@ -458,15 +485,21 @@ echo ""
 echo "Installer packages created in: ${DIST_DIR}/"
 echo ""
 echo "Files:"
-echo "  - ${APP_NAME}-${VERSION}.pkg (Complete installer with Nebula binaries)"
-echo "  - ${APP_NAME}-${VERSION}.dmg (App bundle only, requires Homebrew Nebula)"
+echo "  - ${APP_NAME}-${VERSION}.dmg (Contains PKG installer, uninstaller app, and manual app)"
+echo "  - ${APP_NAME}-${VERSION}.pkg (Standalone PKG installer with Nebula binaries)"
 echo ""
-echo "Distribution:"
-echo "  PKG: Recommended for enterprise deployment"
-echo "  DMG: Recommended for individual users with Homebrew"
+echo "DMG Contents:"
+echo "  - ${APP_NAME}-${VERSION}.pkg (Main installer)"
+echo "  - Uninstall Managed Nebula.app (GUI uninstaller)"
+echo "  - ${APP_NAME}.app (For manual installation)"
+echo "  - README.txt (Installation instructions)"
+echo ""
+echo "Recommended distribution: Use the DMG file"
 echo ""
 echo "Next steps for distribution:"
-echo "  1. Code sign: codesign --deep --force --verify --verbose --sign 'Developer ID' *.pkg"
-echo "  2. Notarize: xcrun notarytool submit *.pkg --wait"
-echo "  3. Staple: xcrun stapler staple *.pkg"
+echo "  1. Code sign PKG: codesign --deep --force --verify --verbose --sign 'Developer ID' ${PKG_FILE}"
+echo "  2. Code sign uninstaller: codesign --deep --force --sign 'Developer ID' 'Uninstall Managed Nebula.app'"
+echo "  3. Notarize PKG: xcrun notarytool submit ${PKG_FILE} --wait"
+echo "  4. Staple PKG: xcrun stapler staple ${PKG_FILE}"
+echo "  5. Distribute: ${DMG_FILE}"
 echo ""
