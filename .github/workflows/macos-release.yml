@@ -1,0 +1,105 @@
+name: Build and Release macOS Client
+permissions:
+  contents: write
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '3.2'
+        bundler-cache: true
+        working-directory: macos_client
+    
+    - name: Install Fastlane
+      run: |
+        cd macos_client
+        gem install fastlane
+    
+    - name: Setup Fastlane Match
+      env:
+        MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+        MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+      run: |
+        cd macos_client
+        # Configure git for match
+        git config --global user.email "ci@kumpeapps.com"
+        git config --global user.name "GitHub Actions"
+    
+    - name: Get version from release tag
+      id: get_version
+      run: |
+        # Extract version from release tag (strip 'v' prefix)
+        VERSION="${GITHUB_REF#refs/tags/v}"
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "Building version: $VERSION"
+    
+    - name: Build and Sign with Fastlane
+      env:
+        MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+        MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+        APPLE_APP_STORE_API_KEY_ID: ${{ secrets.APPLE_APP_STORE_API_KEY_ID }}
+        APPLE_APPSTORE_API_ISSUER_ID: ${{ secrets.APPLE_APPSTORE_API_ISSUER_ID }}
+        APPLE_APP_STORE_API_KEY: ${{ secrets.APPLE_APP_STORE_API_KEY }}
+        VERSION: ${{ steps.get_version.outputs.VERSION }}
+      run: |
+        cd macos_client
+        fastlane mac build_production
+    
+    - name: Verify notarization
+      run: |
+        cd macos_client
+        spctl -a -vv -t install dist/ManagedNebula-${{ steps.get_version.outputs.VERSION }}-signed.pkg
+        xcrun stapler validate dist/ManagedNebula-${{ steps.get_version.outputs.VERSION }}-signed.pkg
+    
+    - name: Upload to Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          macos_client/dist/*-signed.pkg
+          macos_client/dist/*-signed.dmg
+        body: |
+          # ManagedNebula macOS Client ${{ steps.get_version.outputs.VERSION }}
+          
+          ## Installation Options
+          
+          ### PKG Installer (Recommended)
+          - Complete installation with Nebula binaries and LaunchDaemon
+          - Download: `ManagedNebula-${{ steps.get_version.outputs.VERSION }}.pkg`
+          - Double-click to install
+          
+          ### DMG Installer
+          - For users who already have Nebula via Homebrew
+          - Download: `ManagedNebula-${{ steps.get_version.outputs.VERSION }}.dmg`
+          - Drag to Applications folder
+          
+          ## What's Included
+          - Native macOS menu bar application
+          - Nebula v1.8.2 binaries (PKG only)
+          - Automatic configuration updates
+          - Secure Keychain integration
+          - LaunchDaemon for auto-start (PKG only)
+          
+          ## System Requirements
+          - macOS 12 (Monterey) or later
+          - Intel or Apple Silicon Mac
+          
+          ## Quick Start
+          1. Install using PKG or DMG
+          2. Launch ManagedNebula from Applications
+          3. Enter your server URL and client token
+          4. Connect!
+          
+          For detailed documentation, see the [README](https://github.com/kumpeapps/managed-nebula/blob/main/macos_client/README.md)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

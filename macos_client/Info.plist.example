@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Bundle Information -->
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    
+    <key>CFBundleExecutable</key>
+    <string>ManagedNebula</string>
+    
+    <key>CFBundleIdentifier</key>
+    <string>com.managednebula.client</string>
+    
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    
+    <key>CFBundleName</key>
+    <string>ManagedNebula</string>
+    
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    
+    <!-- Application Category -->
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
+    
+    <!-- Minimum macOS Version -->
+    <key>LSMinimumSystemVersion</key>
+    <string>12.0</string>
+    
+    <!-- UI Element (menu bar only, no dock icon) -->
+    <key>LSUIElement</key>
+    <true/>
+    
+    <!-- High Resolution Display Support -->
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    
+    <!-- Human Readable Copyright -->
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2025 KumpeApps. All rights reserved.</string>
+    
+    <!-- Principal Class -->
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    
+    <!-- Network Client Entitlement (for outbound connections) -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <false/>
+        <key>NSExceptionDomains</key>
+        <dict>
+            <!-- Allow localhost for development -->
+            <key>localhost</key>
+            <dict>
+                <key>NSExceptionAllowsInsecureHTTPLoads</key>
+                <true/>
+            </dict>
+        </dict>
+    </dict>
+    
+    <!-- Required for accessing Keychain -->
+    <key>keychain-access-groups</key>
+    <array>
+        <string>$(AppIdentifierPrefix)com.managednebula.client</string>
+    </array>
+    
+    <!-- Required for creating network interfaces -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    
+    <!-- App Sandbox (disable for now as Nebula needs privileges) -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+    
+    <!-- URL Types (for future deep linking) -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.managednebula.client</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>managednebula</string>
+            </array>
+        </dict>
+    </array>
+    
+    <!-- Supported Architectures -->
+    <key>LSArchitecturePriority</key>
+    <array>
+        <string>arm64</string>
+        <string>x86_64</string>
+    </array>
+</dict>
+</plist>

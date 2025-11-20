@@ -112,8 +112,8 @@ def build_nebula_config(
         },
         "tun": {
             "disabled": False,
-            "dev": "nebula0",
-            # ip removed (Nebula derives host IP from certificate to avoid duplication)
+            # Do not specify a device name; Nebula will pick an appropriate one.
+            # On Darwin, a fixed utunX can conflict if already in use.
             "drop_local_broadcast": False,
             "drop_multicast": False,
             "tx_queue": 500,
