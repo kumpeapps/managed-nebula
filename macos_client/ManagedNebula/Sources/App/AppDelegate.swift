@@ -36,6 +36,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func applicationWillTerminate(_ notification: Notification) {
         print("[AppDelegate] ManagedNebula terminating")
+        // Note: MenuBarController.quit() should handle stopping Nebula before terminate is called
     }
     
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
