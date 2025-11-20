@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import LocalAuthentication
 
 /// Service for secure storage of client token in macOS Keychain
 class KeychainService {
@@ -18,13 +19,15 @@ class KeychainService {
         ]
         SecItemDelete(deleteQuery as CFDictionary)
         
-        // Add new item
+        // Add new item with accessibility that allows this app to access without prompts
+        // Uses WhenUnlockedThisDeviceOnly for security without constant authentication
         let addQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: tokenAccount,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            kSecAttrSynchronizable as String: false
         ]
         
         let status = SecItemAdd(addQuery as CFDictionary, nil)
@@ -39,7 +42,8 @@ class KeychainService {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: tokenAccount,
-            kSecReturnData as String: true
+            kSecReturnData as String: true,
+            kSecAttrSynchronizable as String: false
         ]
         
         var result: AnyObject?
@@ -77,6 +81,7 @@ enum KeychainError: Error {
     case saveFailed(OSStatus)
     case loadFailed(OSStatus)
     case deleteFailed(OSStatus)
+    case accessControlFailed(CFError?)
     
     var localizedDescription: String {
         switch self {
@@ -86,6 +91,11 @@ enum KeychainError: Error {
             return "Failed to load token from Keychain (status: \(status))"
         case .deleteFailed(let status):
             return "Failed to delete token from Keychain (status: \(status))"
+        case .accessControlFailed(let error):
+            if let error = error {
+                return "Failed to create keychain access control: \(error.localizedDescription)"
+            }
+            return "Failed to create keychain access control"
         }
     }
 }

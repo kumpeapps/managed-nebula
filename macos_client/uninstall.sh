@@ -72,6 +72,31 @@ remove_config() {
   fi
 }
 
+remove_user_data() {
+  if $PURGE; then
+    # Get the actual user who invoked sudo
+    ACTUAL_USER="${SUDO_USER:-$USER}"
+    ACTUAL_HOME=$(eval echo ~$ACTUAL_USER)
+    
+    log "Removing user configuration for $ACTUAL_USER..."
+    
+    # Remove user application support files
+    sudo -u "$ACTUAL_USER" rm -rf "$ACTUAL_HOME/Library/Application Support/ManagedNebula" 2>/dev/null || true
+    sudo -u "$ACTUAL_USER" rm -rf "$ACTUAL_HOME/Library/Logs/ManagedNebula" 2>/dev/null || true
+    sudo -u "$ACTUAL_USER" rm -rf "$ACTUAL_HOME/Library/Caches/com.managednebula.client" 2>/dev/null || true
+    sudo -u "$ACTUAL_USER" rm -rf "$ACTUAL_HOME/Library/Preferences/com.managednebula.client.plist" 2>/dev/null || true
+    
+    # Remove keychain item
+    log "Removing keychain data..."
+    sudo -u "$ACTUAL_USER" security delete-generic-password -s "com.managednebula.client" -a "client-token" 2>/dev/null || true
+    
+    # Clear user defaults
+    sudo -u "$ACTUAL_USER" defaults delete com.managednebula.client 2>/dev/null || true
+    
+    log "User data removed"
+  fi
+}
+
 forget_receipt() {
   pkgutil --forget "$PKG_ID" >/dev/null 2>&1 || true
 }
@@ -101,11 +126,21 @@ main() {
 
   log "Handling configuration (purge=${PURGE})..."
   remove_config
+  
+  log "Removing user data (purge=${PURGE})..."
+  remove_user_data
 
   log "Forgetting PKG receipt (if present)..."
   forget_receipt
 
   log "Done. A reboot is not required."
+  
+  if $PURGE; then
+    log "All configuration and user data has been removed."
+  else
+    log "User configuration and keys were preserved."
+    log "To remove all data, run: sudo $0 --purge"
+  fi
 }
 
 main "$@"
