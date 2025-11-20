@@ -43,7 +43,7 @@ class Group(Base):
     owner_user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
     
-    clients = relationship("Client", secondary=client_groups, back_populates="groups")
+    clients = relationship("Client", secondary=client_groups, back_populates="groups", lazy="selectin")
     owner = relationship("User", foreign_keys=[owner_user_id])
 
 
@@ -92,7 +92,7 @@ class Client(Base):
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
     blocked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
-    groups = relationship("Group", secondary=client_groups, back_populates="clients")
+    groups = relationship("Group", secondary=client_groups, back_populates="clients", lazy="selectin")
     firewall_rulesets = relationship("FirewallRuleset", secondary=client_firewall_rulesets, back_populates="clients")
     # Note: owner relationship added via selectinload in queries to avoid circular imports
 
@@ -117,8 +117,9 @@ class ClientCertificate(Base):
     # lazy owner relationship
     # from .user import User  # avoid circular import
     # owner: Mapped["User" | None] = relationship("User")
-    not_before: Mapped[datetime] = mapped_column(DateTime)
-    not_after: Mapped[datetime] = mapped_column(DateTime)
+    # Store as string to align with tests providing string timestamps
+    not_before: Mapped[str] = mapped_column(String(32))
+    not_after: Mapped[str] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
     # Metadata for lifecycle and revocation
     fingerprint: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
