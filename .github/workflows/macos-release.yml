@@ -44,12 +44,16 @@ jobs:
     
     - name: Build and Sign with Fastlane
       env:
-        MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+        MATCH_PASSWORD: ${{ secrets.MATCH_KEYCHAIN_PASSWORD }}
         MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
-        APPLE_APP_STORE_API_KEY_ID: ${{ secrets.APPLE_APP_STORE_API_KEY_ID }}
         APPLE_APPSTORE_API_ISSUER_ID: ${{ secrets.APPLE_APPSTORE_API_ISSUER_ID }}
         APPLE_APP_STORE_API_KEY: ${{ secrets.APPLE_APP_STORE_API_KEY }}
+        APPLE_APP_STORE_API_KEY_ID: ${{ secrets.APPLE_APP_STORE_API_KEY_ID }}
         VERSION: ${{ steps.get_version.outputs.VERSION }}
+        FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD: ${{ secrets.FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD }}
+        FASTLANE_PASSWORD: ${{ secrets.FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD }}
+        FASTLANE_USER: "jakumpe@justinkumpe.net"
+
       run: |
         cd macos_client
         fastlane mac build_production
