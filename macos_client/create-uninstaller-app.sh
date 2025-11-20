@@ -63,8 +63,13 @@ show_question() {
 
 # Check for admin privileges
 if [ "$EUID" -ne 0 ]; then
-    # Relaunch with admin privileges
-    osascript -e "do shell script \"'$0'\" with administrator privileges"
+    # Relaunch with admin privileges, preserving all arguments
+    # Properly escape arguments for shell script execution
+    ESCAPED_ARGS=""
+    for arg in "$@"; do
+        ESCAPED_ARGS="$ESCAPED_ARGS '$(echo "$arg" | sed "s/'/'\\\\''/g")'"
+    done
+    osascript -e "do shell script \"'$0'$ESCAPED_ARGS\" with administrator privileges"
     exit $?
 fi
 

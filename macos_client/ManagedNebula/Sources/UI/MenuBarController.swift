@@ -14,6 +14,7 @@ class MenuBarController: NSObject, NSWindowDelegate {
     private var connectMenuItem: NSMenuItem!
     private var preferencesWindowController: PreferencesWindowController?
     private var isManuallyDisconnected = false
+    private var connectionState: ConnectionStatus = .disconnected
     
     override init() {
         self.configuration = Configuration.load()
@@ -170,9 +171,10 @@ class MenuBarController: NSObject, NSWindowDelegate {
     }
     
     @objc private func toggleConnection() {
-        // Use the button title to determine action, not the actual process state
-        // This ensures UI consistency
-        if connectMenuItem.title == "Disconnect" || connectMenuItem.title == "Connecting..." {
+        // Use dedicated connection state variable instead of button title
+        // This prevents UI/process state desynchronization
+        switch connectionState {
+        case .connected, .connecting:
             // Currently connected or connecting - disconnect
             print("[MenuBarController] Disconnect requested")
             isManuallyDisconnected = true
@@ -182,8 +184,8 @@ class MenuBarController: NSObject, NSWindowDelegate {
             nebulaManager.stopNebula()
             pollingService.stopPolling()
             updateStatus(.disconnected)
-        } else {
-            // Currently disconnected - connect
+        case .disconnected, .error:
+            // Currently disconnected or error - connect
             print("[MenuBarController] Connect requested")
             if configuration.serverURL.isEmpty {
                 showAlert(title: "Configuration Required", message: "Please configure the server URL in Preferences.")
@@ -310,7 +312,17 @@ class MenuBarController: NSObject, NSWindowDelegate {
         pollingService.stopPolling()
         
         // Delete keychain token
-        try? keychainService.deleteToken()
+        do {
+            try keychainService.deleteToken()
+            print("[MenuBarController] Keychain token deleted successfully")
+        } catch {
+            print("[MenuBarController] Failed to delete keychain token: \(error.localizedDescription)")
+            let errorAlert = NSAlert()
+            errorAlert.messageText = "Warning: Failed to remove authentication token"
+            errorAlert.informativeText = "The keychain token could not be deleted: \(error.localizedDescription). You may need to remove it manually."
+            errorAlert.alertStyle = .warning
+            errorAlert.runModal()
+        }
         
         // Clear configuration files
         let fileManager = FileManager.default
