@@ -2,11 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime
+import logging
 
 from ..db import get_session
 from ..models import ClientToken, Client, IPAssignment, GlobalSettings, CACertificate, IPPool, Permission
 from ..models.client import ClientCertificate
+logger = logging.getLogger(__name__)
+
 from ..models.schemas import (
     ClientConfigRequest,
     GroupRef,
@@ -834,21 +838,61 @@ async def delete_client(
     session: AsyncSession = Depends(get_session),
     user: User = Depends(require_permission("clients", "delete"))
 ):
-    """Delete a client and related records (admin-only)."""
-    result = await session.execute(
-        select(Client).where(Client.id == client_id)
-    )
-    client = result.scalar_one_or_none()
+    """Delete a client and all associated records.
+    
+    Deletes the client and cascades to:
+    - ClientCertificate records
+    - ClientToken records
+    - IPAssignment records
+    - Association table entries (groups, firewall rulesets)
+    """
+    try:
+        # Eager load relationships to avoid lazy-load issues in async
+        stmt = (
+            select(Client)
+            .where(Client.id == client_id)
+            .options(
+                selectinload(Client.groups),
+                selectinload(Client.firewall_rulesets),
+            )
+        )
+        result = await session.execute(stmt)
+        client = result.scalar_one_or_none()
 
-    if not client:
-        raise HTTPException(status_code=404, detail="Client not found")
+        if not client:
+            raise HTTPException(status_code=404, detail=f"Client with id {client_id} not found")
 
-    # Delete related records (cascade should handle this, but explicit for clarity)
-    # ClientToken, ClientCertificate, IPAssignment should cascade
-    await session.delete(client)
-    await session.commit()
+        # Log deletion for audit trail
+        logger.info(
+            f"Deleting client {client_id} (name: {client.name}) by user {user.username} (id: {user.id})"
+        )
 
-    return {"status": "deleted", "id": client_id}
+        # Delete the client (CASCADE will handle related records)
+        await session.delete(client)
+        await session.commit()
+
+        logger.info(f"Successfully deleted client {client_id}")
+        return {"status": "deleted", "id": client_id, "message": f"Client {client_id} deleted successfully"}
+
+    except HTTPException:
+        # Re-raise HTTP exceptions (404, etc.)
+        raise
+    except IntegrityError as e:
+        # Handle any remaining FK constraint violations
+        logger.error(f"Integrity error deleting client {client_id}: {str(e)}", exc_info=True)
+        await session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete client due to database constraints. Please ensure all related records are removed first."
+        )
+    except Exception as e:
+        # Catch-all for unexpected errors
+        logger.error(f"Unexpected error deleting client {client_id}: {str(e)}", exc_info=True)
+        await session.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete client: {str(e)}"
+        )
 
 
 # ============ Client Ownership & Permissions ============

@@ -38,7 +38,7 @@ jobs:
           fi
 
           # Allow both manual branches and Copilot-generated branches
-          branch_regex='^((feature|bugfix|hotfix|docs|refactor)/(server|frontend|client|all)-[0-9]+|copilot/.*)$'
+          branch_regex='^((feature|bugfix|hotfix|docs|refactor)/(server|frontend|client|macos|ios|android|all)-[0-9]+|copilot/.*)$'
 
           if [[ "$BASE_REF" != "dev" ]]; then
             echo "::error::Pull requests must target 'dev' branch (found '$BASE_REF')." >&2
