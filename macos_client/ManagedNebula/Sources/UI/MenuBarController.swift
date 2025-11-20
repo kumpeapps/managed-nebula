@@ -29,6 +29,10 @@ class MenuBarController: NSObject, NSWindowDelegate {
         
         setupMenuBar()
         setupPollingService()
+        
+        // Check initial Nebula status and update UI accordingly
+        updateInitialStatus()
+        
         // First launch or missing config: show prefs (keep Dock icon visible)
         if Configuration.isFirstLaunch() || configuration.serverURL.isEmpty {
             NSApp.setActivationPolicy(.regular)
@@ -129,6 +133,15 @@ class MenuBarController: NSObject, NSWindowDelegate {
         }
     }
     
+    private func updateInitialStatus() {
+        // Check if Nebula is actually running and update UI accordingly
+        if nebulaManager.isRunning() {
+            updateStatus(.connected)
+        } else {
+            updateStatus(.disconnected)
+        }
+    }
+    
     private func updateStatus(_ status: ConnectionStatus) {
         statusMenuItem.title = "Status: \(status.displayText)"
         
@@ -152,8 +165,11 @@ class MenuBarController: NSObject, NSWindowDelegate {
     }
     
     @objc private func toggleConnection() {
-        if nebulaManager.isRunning() {
-            // Manual disconnect - stop everything
+        // Use the button title to determine action, not the actual process state
+        // This ensures UI consistency
+        if connectMenuItem.title == "Disconnect" || connectMenuItem.title == "Connecting..." {
+            // Currently connected or connecting - disconnect
+            print("[MenuBarController] Disconnect requested")
             isManuallyDisconnected = true
             configuration.isManuallyDisconnected = true
             configuration.save()
@@ -162,6 +178,8 @@ class MenuBarController: NSObject, NSWindowDelegate {
             pollingService.stopPolling()
             updateStatus(.disconnected)
         } else {
+            // Currently disconnected - connect
+            print("[MenuBarController] Connect requested")
             if configuration.serverURL.isEmpty {
                 showAlert(title: "Configuration Required", message: "Please configure the server URL in Preferences.")
                 return
@@ -268,8 +286,10 @@ class MenuBarController: NSObject, NSWindowDelegate {
     }
     
     @objc private func quit() {
+        print("[MenuBarController] Quit requested, stopping Nebula...")
         nebulaManager.stopNebula()
         pollingService.stopPolling()
+        print("[MenuBarController] Nebula stop command sent, terminating app")
         NSApplication.shared.terminate(self)
     }
     
