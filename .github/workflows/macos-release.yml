@@ -80,8 +80,8 @@ jobs:
     - name: Verify notarization
       run: |
         cd macos_client
-        spctl -a -vv -t install dist/ManagedNebula-${{ steps.get_version.outputs.VERSION }}-signed.pkg
-        xcrun stapler validate dist/ManagedNebula-${{ steps.get_version.outputs.VERSION }}-signed.pkg
+        spctl -a -vv -t install dist/ManagedNebula-macos-${{ steps.get_version.outputs.VERSION }}-signed.pkg
+        xcrun stapler validate dist/ManagedNebula-macos-${{ steps.get_version.outputs.VERSION }}-signed.pkg
     
     - name: Upload to Release
       uses: softprops/action-gh-release@v2
@@ -96,12 +96,12 @@ jobs:
           
           ### PKG Installer (Recommended)
           - Complete installation with Nebula binaries and LaunchDaemon
-          - Download: `ManagedNebula-${{ steps.get_version.outputs.VERSION }}.pkg`
+          - Download: `ManagedNebula-macos-${{ steps.get_version.outputs.VERSION }}-signed.pkg`
           - Double-click to install
           
           ### DMG Installer
           - For users who already have Nebula via Homebrew
-          - Download: `ManagedNebula-${{ steps.get_version.outputs.VERSION }}.dmg`
+          - Download: `ManagedNebula-macos-${{ steps.get_version.outputs.VERSION }}-signed.dmg`
           - Drag to Applications folder
           
           ## What's Included
