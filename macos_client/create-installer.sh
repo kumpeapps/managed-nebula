@@ -370,7 +370,7 @@ echo ""
 
 # Build PKG
 echo "Step 7: Building PKG installer..."
-PKG_FILE="${DIST_DIR}/${APP_NAME}-${VERSION}.pkg"
+PKG_FILE="${DIST_DIR}/${APP_NAME}-macos-${VERSION}.pkg"
 
 pkgbuild \
     --root "${PKG_ROOT}" \
@@ -460,7 +460,7 @@ Troubleshooting
 
 READMEEOF
 
-DMG_FILE="${DIST_DIR}/${APP_NAME}-${VERSION}.dmg"
+DMG_FILE="${DIST_DIR}/${APP_NAME}-macos-${VERSION}.dmg"
 
 hdiutil create \
     -volname "${APP_NAME}" \
