@@ -1,8 +1,9 @@
 name: Build and Release macOS Client
 
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - '**'
 
 jobs:
   build:
@@ -11,6 +12,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        ssh-key: ${{ secrets.MACOS_RELEASE_DEPLOY_KEY }}
       
     - name: Setup Ruby
       uses: ruby/setup-ruby@v1
@@ -24,28 +27,80 @@ jobs:
         cd macos_client
         gem install fastlane
     
-    - name: Setup Fastlane Match
+    - name: Setup SSH key for Fastlane Match
       env:
-        MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-        MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+        MATCH_DEPLOY_KEY: ${{ secrets.MACOS_RELEASE_DEPLOY_KEY }}
       run: |
-        cd macos_client
+        # Setup SSH key for Match certificates repo
+        mkdir -p ~/.ssh
+        echo "$MATCH_DEPLOY_KEY" > ~/.ssh/match_deploy_key
+        chmod 600 ~/.ssh/match_deploy_key
+        
+        # Add GitHub to known hosts
+        ssh-keyscan github.com >> ~/.ssh/known_hosts
+        
+        # Configure SSH to use the deploy key for Match repo
+        cat >> ~/.ssh/config <<EOF
+        Host github.com-match
+          HostName github.com
+          User git
+          IdentityFile ~/.ssh/match_deploy_key
+          IdentitiesOnly yes
+        EOF
+        
         # Configure git for match
         git config --global user.email "ci@kumpeapps.com"
         git config --global user.name "GitHub Actions"
     
+    - name: Check if main branch
+      id: branch_check
+      run: |
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          echo "is_main=true" >> $GITHUB_OUTPUT
+          echo "Running on main branch - will proceed with full build"
+        else
+          echo "is_main=false" >> $GITHUB_OUTPUT
+          echo "Not on main branch - testing Match setup"
+        fi
+    
+    - name: Test Fastlane Match Clone (non-main branches only)
+      if: steps.branch_check.outputs.is_main == 'false'
+      env:
+        MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+      run: |
+        cd macos_client
+        echo "Testing Match clone on non-main branch..."
+        
+        # Test SSH connection to Match repo
+        GIT_SSH_COMMAND="ssh -i ~/.ssh/match_deploy_key -o IdentitiesOnly=yes" \
+          git clone git@github.com:kumpeapps/fastlane_certs.git /tmp/test-certs-clone 2>&1 || {
+          echo "❌ Failed to clone certificates repo"
+          echo "Check MACOS_RELEASE_DEPLOY_KEY secret"
+          exit 1
+        }
+        echo "✅ Successfully cloned certificates repo via SSH"
+        rm -rf /tmp/test-certs-clone
+    
     - name: Get version from release tag
+      if: steps.branch_check.outputs.is_main == 'true'
       id: get_version
       run: |
-        # Extract version from release tag (strip 'v' prefix)
-        VERSION="${GITHUB_REF#refs/tags/v}"
+        # Extract version from latest git tag or use commit SHA
+        if git describe --tags --exact-match 2>/dev/null; then
+          VERSION=$(git describe --tags --exact-match | sed 's/^v//')
+        elif git tag | grep . >/dev/null; then
+          VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//')
+        else
+          VERSION="dev-$(git rev-parse --short HEAD)"
+        fi
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
         echo "Building version: $VERSION"
     
     - name: Build and Sign with Fastlane
+      if: steps.branch_check.outputs.is_main == 'true'
       env:
         MATCH_PASSWORD: ${{ secrets.MATCH_KEYCHAIN_PASSWORD }}
-        MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+        MATCH_GIT_PRIVATE_KEY: ${{ secrets.MACOS_RELEASE_DEPLOY_KEY }}
         APPLE_APPSTORE_API_ISSUER_ID: ${{ secrets.APPLE_APPSTORE_API_ISSUER_ID }}
         APPLE_APP_STORE_API_KEY: ${{ secrets.APPLE_APP_STORE_API_KEY }}
         APPLE_APP_STORE_API_KEY_ID: ${{ secrets.APPLE_APP_STORE_API_KEY_ID }}
@@ -59,12 +114,14 @@ jobs:
         fastlane mac build_production
     
     - name: Verify notarization
+      if: steps.branch_check.outputs.is_main == 'true'
       run: |
         cd macos_client
         spctl -a -vv -t install dist/ManagedNebula-${{ steps.get_version.outputs.VERSION }}-signed.pkg
         xcrun stapler validate dist/ManagedNebula-${{ steps.get_version.outputs.VERSION }}-signed.pkg
     
     - name: Upload to Release
+      if: steps.branch_check.outputs.is_main == 'true'
       uses: softprops/action-gh-release@v2
       with:
         files: |
