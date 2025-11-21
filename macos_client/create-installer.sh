@@ -6,6 +6,8 @@ set -e
 APP_NAME="ManagedNebula"
 # Use VERSION from environment if provided, otherwise default to 1.0.0
 VERSION="${VERSION:-1.0.0}"
+# PKG_VERSION is for pkgbuild (numeric only), strip any suffix after first dash
+PKG_VERSION="${VERSION%%-*}"
 BUNDLE_ID="com.managednebula.client"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 DIST_DIR="${SCRIPT_DIR}/dist"
@@ -369,7 +371,7 @@ pkgbuild \
     --root "${PKG_ROOT}" \
     --scripts "${PKG_SCRIPTS}" \
     --identifier "${BUNDLE_ID}" \
-    --version "${VERSION}" \
+    --version "${PKG_VERSION}" \
     --install-location "/" \
     "${PKG_FILE}"
 
