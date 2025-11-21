@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="logo/android/playstore-icon.png" alt="Managed Nebula Logo" width="200" height="200">
+<img src="logo/social-preview.png" alt="Managed Nebula Logo" width="200" height="200">
 
 # Managed Nebula
 

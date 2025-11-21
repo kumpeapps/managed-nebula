@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
+from pathlib import Path
+from starlette.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.exceptions import HTTPException
@@ -204,7 +206,7 @@ def create_app() -> FastAPI:
         <meta charset="utf-8"/>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link href="https://fonts.googleapis.com/css?family=Montserrat:300,400,700|Roboto:300,400,700" rel="stylesheet">
-        <link rel="shortcut icon" href="https://fastapi.tiangolo.com/img/favicon.png">
+        <link rel="shortcut icon" href="/static/favicon.png">
         <style>
           body { margin: 0; padding: 0; }
         </style>
@@ -253,3 +255,9 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+static_path = str(Path(__file__).resolve().parents[1] / "static")
+try:
+    # Mount a static files directory at /static (optional; created by update script)
+    app.mount("/static", StaticFiles(directory=static_path), name="static")
+except Exception:
+    pass
