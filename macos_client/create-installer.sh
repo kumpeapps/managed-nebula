@@ -3,6 +3,9 @@
 
 set -e
 
+# Add error handler to show which command failed
+trap 'echo "Error on line $LINENO: Command exited with status $?"' ERR
+
 APP_NAME="ManagedNebula"
 # Use VERSION from environment if provided, otherwise default to 1.0.0
 VERSION="${VERSION:-1.0.0}"
@@ -14,6 +17,8 @@ DIST_DIR="${SCRIPT_DIR}/dist"
 NEBULA_VERSION="v1.8.2"
 
 echo "=== ManagedNebula Installer Creator ==="
+echo "VERSION: ${VERSION}"
+echo "PKG_VERSION: ${PKG_VERSION}"
 echo ""
 
 # Clean previous builds
