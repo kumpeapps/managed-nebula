@@ -88,8 +88,10 @@ jobs:
         # Extract version from latest git tag or use commit SHA
         if git describe --tags --exact-match 2>/dev/null; then
           VERSION=$(git describe --tags --exact-match | sed 's/^v//')
+        elif git tag | grep . >/dev/null; then
+          VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//')
         else
-          VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "dev-$(git rev-parse --short HEAD)")
+          VERSION="dev-$(git rev-parse --short HEAD)"
         fi
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
         echo "Building version: $VERSION"
