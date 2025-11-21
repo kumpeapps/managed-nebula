@@ -45,8 +45,27 @@ jobs:
           echo "Running on main branch - will proceed with full build"
         else
           echo "is_main=false" >> $GITHUB_OUTPUT
-          echo "Not on main branch - stopping here"
+          echo "Not on main branch - testing Match setup"
         fi
+    
+    - name: Test Fastlane Match Clone (non-main branches only)
+      if: steps.branch_check.outputs.is_main == 'false'
+      env:
+        MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+        MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+      run: |
+        cd macos_client
+        echo "Testing Match clone on non-main branch..."
+        # This will attempt to clone the certificates repo to verify credentials
+        bundle exec fastlane run git_clone \
+          url:"https://github.com/kumpeapps/certificates.git" \
+          path:"/tmp/test-certs-clone" || {
+            echo "❌ Failed to clone certificates repo"
+            echo "Check MATCH_GIT_BASIC_AUTHORIZATION secret"
+            exit 1
+          }
+        echo "✅ Successfully cloned certificates repo"
+        rm -rf /tmp/test-certs-clone
     
     - name: Get version from release tag
       if: steps.branch_check.outputs.is_main == 'true'
