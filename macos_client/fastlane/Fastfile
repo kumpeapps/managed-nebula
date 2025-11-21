@@ -10,9 +10,6 @@
 #     https://docs.fastlane.tools/plugins/available-plugins
 #
 
-# (Disabled) Auto-update can cause permission prompts on system Ruby/Homebrew installs
-# update_fastlane
-
 default_platform(:ios)
 
 platform :mac do
