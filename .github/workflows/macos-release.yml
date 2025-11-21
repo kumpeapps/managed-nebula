@@ -56,8 +56,10 @@ jobs:
     - name: Get version from release tag
       id: get_version
       run: |
-        # Extract version from release tag (strip 'v' prefix)
+        # Extract version from release tag (strip 'v' prefix and beta suffixes)
         VERSION="${GITHUB_REF#refs/tags/v}"
+        # Strip -beta, -beta2, etc. suffixes for release number
+        VERSION="${VERSION%%-beta*}"
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
         echo "Building version: $VERSION"
     
