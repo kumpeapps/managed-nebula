@@ -140,7 +140,7 @@ platform :mac do
     # Use notarytool directly to avoid Fastlane action issues
     if is_ci
       # CI: use key content from environment
-      sh(%Q(xcrun notarytool submit "#{signed_pkg_path}" --wait --key-id "#{api_key.key_id}" --issuer "#{api_key.issuer_id}" --key "#{api_key.key}"))
+      sh(%Q(xcrun notarytool submit "#{signed_pkg_path}" --wait --key-id "#{api_key[:key_id]}" --issuer "#{api_key[:issuer_id]}" --key "#{api_key[:key]}"))
     else
       # Local: use key file path
       sh(%Q(xcrun notarytool submit "#{signed_pkg_path}" --wait --key "/Users/justinkumpe/Documents/AuthKey_BZ9R9Y8474.p8" --key-id "BZ9R9Y8474" --issuer "69a6de74-e8dd-47e3-e053-5b8c7c11a4d1"))
