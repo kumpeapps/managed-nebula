@@ -27,12 +27,27 @@ jobs:
         cd macos_client
         gem install fastlane
     
-    - name: Setup Fastlane Match
+    - name: Setup SSH key for Fastlane Match
       env:
-        MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-        MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+        MATCH_DEPLOY_KEY: ${{ secrets.MATCH_DEPLOY_KEY }}
       run: |
-        cd macos_client
+        # Setup SSH key for Match certificates repo
+        mkdir -p ~/.ssh
+        echo "$MATCH_DEPLOY_KEY" > ~/.ssh/match_deploy_key
+        chmod 600 ~/.ssh/match_deploy_key
+        
+        # Add GitHub to known hosts
+        ssh-keyscan github.com >> ~/.ssh/known_hosts
+        
+        # Configure SSH to use the deploy key for Match repo
+        cat >> ~/.ssh/config <<EOF
+        Host github.com-match
+          HostName github.com
+          User git
+          IdentityFile ~/.ssh/match_deploy_key
+          IdentitiesOnly yes
+        EOF
+        
         # Configure git for match
         git config --global user.email "ci@kumpeapps.com"
         git config --global user.name "GitHub Actions"
@@ -52,18 +67,18 @@ jobs:
       if: steps.branch_check.outputs.is_main == 'false'
       env:
         MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-        MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
       run: |
         cd macos_client
         echo "Testing Match clone on non-main branch..."
-        # This will attempt to clone the certificates repo to verify credentials
-        # Use git directly instead of fastlane since bundler isn't set up yet
-        git clone https://github.com/kumpeapps/certificates.git /tmp/test-certs-clone 2>&1 || {
+        
+        # Test SSH connection to Match repo
+        GIT_SSH_COMMAND="ssh -i ~/.ssh/match_deploy_key -o IdentitiesOnly=yes" \
+          git clone git@github.com:kumpeapps/fastlane_certs.git /tmp/test-certs-clone 2>&1 || {
           echo "❌ Failed to clone certificates repo"
-          echo "Check MATCH_GIT_BASIC_AUTHORIZATION secret"
+          echo "Check MATCH_DEPLOY_KEY secret"
           exit 1
         }
-        echo "✅ Successfully cloned certificates repo"
+        echo "✅ Successfully cloned certificates repo via SSH"
         rm -rf /tmp/test-certs-clone
     
     - name: Get version from release tag
@@ -83,7 +98,7 @@ jobs:
       if: steps.branch_check.outputs.is_main == 'true'
       env:
         MATCH_PASSWORD: ${{ secrets.MATCH_KEYCHAIN_PASSWORD }}
-        MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+        MATCH_GIT_PRIVATE_KEY: ${{ secrets.MATCH_DEPLOY_KEY }}
         APPLE_APPSTORE_API_ISSUER_ID: ${{ secrets.APPLE_APPSTORE_API_ISSUER_ID }}
         APPLE_APP_STORE_API_KEY: ${{ secrets.APPLE_APP_STORE_API_KEY }}
         APPLE_APP_STORE_API_KEY_ID: ${{ secrets.APPLE_APP_STORE_API_KEY_ID }}
