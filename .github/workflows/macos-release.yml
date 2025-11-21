@@ -57,13 +57,12 @@ jobs:
         cd macos_client
         echo "Testing Match clone on non-main branch..."
         # This will attempt to clone the certificates repo to verify credentials
-        bundle exec fastlane run git_clone \
-          url:"https://github.com/kumpeapps/certificates.git" \
-          path:"/tmp/test-certs-clone" || {
-            echo "❌ Failed to clone certificates repo"
-            echo "Check MATCH_GIT_BASIC_AUTHORIZATION secret"
-            exit 1
-          }
+        # Use git directly instead of fastlane since bundler isn't set up yet
+        git clone https://github.com/kumpeapps/certificates.git /tmp/test-certs-clone 2>&1 || {
+          echo "❌ Failed to clone certificates repo"
+          echo "Check MATCH_GIT_BASIC_AUTHORIZATION secret"
+          exit 1
+        }
         echo "✅ Successfully cloned certificates repo"
         rm -rf /tmp/test-certs-clone
     
