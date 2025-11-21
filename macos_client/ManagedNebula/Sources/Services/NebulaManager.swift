@@ -234,11 +234,12 @@ class NebulaManager {
                         print("[NebulaManager] Nebula has stopped")
                         break
                     }
-                attempts += 1
-            }
-            
-            if attempts >= maxAttempts {
-                print("[NebulaManager] Warning: Nebula didn't stop within 5 seconds")
+                    attempts += 1
+                }
+                
+                if attempts >= maxAttempts {
+                    print("[NebulaManager] Warning: Nebula didn't stop within 5 seconds")
+                }
             }
         } catch {
             print("[NebulaManager] Failed to write stop command: \(error)")
