@@ -22,7 +22,7 @@ platform :mac do
     match(
       type: "developer_id",
       platform: "macos",
-      readonly: false,
+      readonly: is_ci,
       skip_provisioning_profiles: true,
       skip_certificate_matching: true
     )
@@ -31,7 +31,7 @@ platform :mac do
     match(
       type: "developer_id_installer",
       platform: "macos",
-      readonly: true,
+      readonly: is_ci,
       skip_provisioning_profiles: true,
       skip_certificate_matching: true
     )
@@ -70,7 +70,7 @@ platform :mac do
     match(
       type: "developer_id",
       platform: "macos",
-      readonly: is_ci ? false : true,
+      readonly: is_ci,
       skip_provisioning_profiles: true,
       skip_certificate_matching: true,
       api_key: api_key
