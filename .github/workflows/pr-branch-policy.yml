@@ -37,6 +37,13 @@ jobs:
             exit 0
           fi
 
+          # Special case: allow branches starting with [release] to target main
+          if [[ "$BASE_REF" == "main" && "$TITLE" =~ ^\[release\] ]]; then
+            echo "✅ Release PR to main: title starts with [release]"
+            echo "PR checks passed."
+            exit 0
+          fi
+
           # Allow both manual branches and Copilot-generated branches
           branch_regex='^((feature|bugfix|hotfix|docs|refactor)/(server|frontend|client|macos|ios|android|all)-[0-9]+|copilot/.*)$'
 
