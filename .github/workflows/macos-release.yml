@@ -29,7 +29,7 @@ jobs:
     
     - name: Setup SSH key for Fastlane Match
       env:
-        MATCH_DEPLOY_KEY: ${{ secrets.MATCH_DEPLOY_KEY }}
+        MATCH_DEPLOY_KEY: ${{ secrets.MACOS_RELEASE_DEPLOY_KEY }}
       run: |
         # Setup SSH key for Match certificates repo
         mkdir -p ~/.ssh
@@ -75,7 +75,7 @@ jobs:
         GIT_SSH_COMMAND="ssh -i ~/.ssh/match_deploy_key -o IdentitiesOnly=yes" \
           git clone git@github.com:kumpeapps/fastlane_certs.git /tmp/test-certs-clone 2>&1 || {
           echo "❌ Failed to clone certificates repo"
-          echo "Check MATCH_DEPLOY_KEY secret"
+          echo "Check MACOS_RELEASE_DEPLOY_KEY secret"
           exit 1
         }
         echo "✅ Successfully cloned certificates repo via SSH"
@@ -98,7 +98,7 @@ jobs:
       if: steps.branch_check.outputs.is_main == 'true'
       env:
         MATCH_PASSWORD: ${{ secrets.MATCH_KEYCHAIN_PASSWORD }}
-        MATCH_GIT_PRIVATE_KEY: ${{ secrets.MATCH_DEPLOY_KEY }}
+        MATCH_GIT_PRIVATE_KEY: ${{ secrets.MACOS_RELEASE_DEPLOY_KEY }}
         APPLE_APPSTORE_API_ISSUER_ID: ${{ secrets.APPLE_APPSTORE_API_ISSUER_ID }}
         APPLE_APP_STORE_API_KEY: ${{ secrets.APPLE_APP_STORE_API_KEY }}
         APPLE_APP_STORE_API_KEY_ID: ${{ secrets.APPLE_APP_STORE_API_KEY_ID }}
