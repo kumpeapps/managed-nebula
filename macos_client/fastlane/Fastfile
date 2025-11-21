@@ -117,6 +117,16 @@ platform :mac do
     version = ENV['VERSION'] || '1.0.0'
     UI.message("Building version: #{version}")
 
+    # Build uninstaller app
+    UI.message("Building uninstaller app...")
+    sh("bash ../create-uninstaller-app.sh")
+    
+    # Sign uninstaller app
+    UI.message("Signing uninstaller app...")
+    sh("xattr -cr '../Uninstall ManagedNebula.app' || true")
+    sh(%Q(codesign --deep --force --verify --verbose --sign "#{app_identity_hash}" --options runtime --timestamp '../Uninstall ManagedNebula.app'))
+    sh("codesign --verify --deep --strict --verbose=2 '../Uninstall ManagedNebula.app'")
+
     # Build unsigned installer (pass app identity so script can sign CLI binaries before packaging)
     UI.message("Building unsigned installer...")
     sh(%Q(VERSION="#{version}" APP_IDENTITY_HASH="#{app_identity_hash}" bash ../create-installer.sh))
@@ -130,12 +140,12 @@ platform :mac do
 
     # Sign PKG
     UI.message("Signing PKG...")
-    sh(%Q(productsign --sign "#{installer_identity_hash}" ../dist/ManagedNebula-#{version}.pkg ../dist/ManagedNebula-#{version}-signed.pkg))
-    sh("pkgutil --check-signature ../dist/ManagedNebula-#{version}-signed.pkg")
+    sh(%Q(productsign --sign "#{installer_identity_hash}" ../dist/ManagedNebula-macos-#{version}.pkg ../dist/ManagedNebula-macos-#{version}-signed.pkg))
+    sh("pkgutil --check-signature ../dist/ManagedNebula-macos-#{version}-signed.pkg")
 
     # Notarize PKG and staple
     UI.message("Notarizing PKG (and stapling)...")
-    signed_pkg_path = File.expand_path("../dist/ManagedNebula-#{version}-signed.pkg", __dir__)
+    signed_pkg_path = File.expand_path("../dist/ManagedNebula-macos-#{version}-signed.pkg", __dir__)
 
     # Use notarytool directly to avoid Fastlane action issues
     if is_ci
@@ -185,12 +195,12 @@ platform :mac do
       - Support: https://github.com/kumpeapps/managed-nebula
     README
 
-    sh("hdiutil create -volname ManagedNebula -srcfolder ../dist/dmg-contents-signed -ov -format UDZO ../dist/ManagedNebula-#{version}-signed.dmg")
+    sh("hdiutil create -volname ManagedNebula -srcfolder ../dist/dmg-contents-signed -ov -format UDZO ../dist/ManagedNebula-macos-#{version}-signed.dmg")
     sh("rm -rf ../dist/dmg-contents-signed")
 
     UI.success("Production build complete!")
-    UI.success("Signed PKG: dist/ManagedNebula-#{version}-signed.pkg")
-    UI.success("Signed DMG: dist/ManagedNebula-#{version}-signed.dmg")
+    UI.success("Signed PKG: dist/ManagedNebula-macos-#{version}-signed.pkg")
+    UI.success("Signed DMG: dist/ManagedNebula-macos-#{version}-signed.dmg")
   end
 end
 
