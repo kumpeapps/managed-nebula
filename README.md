@@ -246,7 +246,20 @@ The web interface provides a "Download Docker Compose" button on each client's d
 
 ### 🍎 macOS Native Client
 
-For macOS users who need native TUN interface support (Docker networking limitations on macOS), a native menu bar application is available:
+For macOS users who need native TUN interface support (Docker networking limitations on macOS), a native menu bar application is available.
+
+**📥 Installation (Recommended)**
+
+Download the latest pre-built installer from the [Releases page](https://github.com/kumpeapps/managed-nebula/releases):
+
+1. Download `ManagedNebula-Installer.pkg` from the latest release
+2. Double-click to run the installer
+3. Launch `ManagedNebula` from Applications or Spotlight
+4. Enter your server URL and client token in Preferences
+
+**🔨 Building from Source (Advanced)**
+
+If you prefer to build manually:
 
 ```bash
 # Clone and install
@@ -256,12 +269,9 @@ cd macos_client
 # Or build manually
 make build
 sudo make install
-
-# Launch the application
-ManagedNebula
 ```
 
-The macOS client provides:
+**Features:**
 - **Native Nebula integration** - Direct TUN interface on macOS
 - **Menu bar application** - System tray icon with connection status
 - **Secure storage** - Client token stored in macOS Keychain
