@@ -160,6 +160,51 @@ class NebulaManager {
 
     // No explicit injection of dev: utunX; let Nebula allocate automatically
     
+    /// Safely write a command to the control file with proper error handling
+    private func writeControlCommand(_ command: String) throws {
+        let controlFile = "/tmp/nebula-control"
+        let fileURL = URL(fileURLWithPath: controlFile)
+        let tempFileURL = URL(fileURLWithPath: controlFile + ".tmp")
+        
+        guard let data = command.data(using: .utf8) else {
+            throw NebulaError.controlFileWriteFailed(reason: "Failed to encode command")
+        }
+        
+        do {
+            // First, ensure the control file exists with proper permissions
+            if !fileManager.fileExists(atPath: controlFile) {
+                // Create the file if it doesn't exist
+                fileManager.createFile(atPath: controlFile, contents: nil, attributes: [
+                    .posixPermissions: 0o666
+                ])
+                print("[NebulaManager] Created control file: \(controlFile)")
+            }
+            
+            // Try atomic write first (preferred method)
+            do {
+                try data.write(to: tempFileURL, options: .atomic)
+                
+                // If temp file exists, try to replace the original
+                if fileManager.fileExists(atPath: tempFileURL.path) {
+                    _ = try? fileManager.removeItem(at: fileURL)
+                    try fileManager.moveItem(at: tempFileURL, to: fileURL)
+                    print("[NebulaManager] Sent \(command) command to helper daemon (atomic write)")
+                    return
+                }
+            } catch {
+                print("[NebulaManager] Atomic write failed: \(error), trying direct write")
+            }
+            
+            // Fallback: Direct write if atomic write fails
+            try data.write(to: fileURL, options: [])
+            print("[NebulaManager] Sent \(command) command to helper daemon (direct write)")
+            
+        } catch {
+            print("[NebulaManager] Failed to write \(command) command: \(error)")
+            throw NebulaError.controlFileWriteFailed(reason: error.localizedDescription)
+        }
+    }
+    
     /// Start Nebula daemon
     func startNebula() throws {
         // Ensure config exists before asking helper to start
@@ -169,80 +214,56 @@ class NebulaManager {
         }
 
         // Ask the root helper daemon to start Nebula
-        let controlFile = "/tmp/nebula-control"
-        do {
-            // Write to temporary file, then atomically move to control file
-            // This ensures the helper daemon never reads partial/corrupted messages
-            let fileURL = URL(fileURLWithPath: controlFile)
-            let tempFileURL = URL(fileURLWithPath: controlFile + ".tmp")
-            
-            if let data = "start".data(using: .utf8) {
-                try data.write(to: tempFileURL, options: .atomic)
-                try fileManager.replaceItemAt(fileURL, withItemAt: tempFileURL)
-                print("[NebulaManager] Sent start command to helper daemon (atomic write)")
+        try writeControlCommand("start")
+        
+        // Wait for Nebula to actually start and be running
+        // Poll on background thread to avoid blocking UI
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            var attempts = 0
+            let maxAttempts = 20 // 20 * 500ms = 10 seconds
+            while attempts < maxAttempts {
+                usleep(500_000) // 500ms
+                if self.isRunning() {
+                    print("[NebulaManager] Nebula is now running")
+                    break
+                }
+                attempts += 1
             }
             
-            // Wait for Nebula to actually start and be running
-            // Poll on background thread to avoid blocking UI
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                guard let self = self else { return }
-                var attempts = 0
-                let maxAttempts = 20 // 20 * 500ms = 10 seconds
-                while attempts < maxAttempts {
-                    usleep(500_000) // 500ms
-                    if self.isRunning() {
-                        print("[NebulaManager] Nebula is now running")
-                        break
-                    }
-                    attempts += 1
-                }
-                
-                if attempts >= maxAttempts {
-                    print("[NebulaManager] Warning: Nebula didn't start within 10 seconds")
-                }
+            if attempts >= maxAttempts {
+                print("[NebulaManager] Warning: Nebula didn't start within 10 seconds")
             }
-        } catch {
-            print("[NebulaManager] Failed to write start command: \(error)")
-            throw error
         }
     }
     
     /// Stop Nebula daemon
     func stopNebula() {
         // Ask the root helper daemon to stop Nebula
-        let controlFile = "/tmp/nebula-control"
         do {
-            // Write to temporary file, then atomically move to control file
-            let fileURL = URL(fileURLWithPath: controlFile)
-            let tempFileURL = URL(fileURLWithPath: controlFile + ".tmp")
-            
-            if let data = "stop".data(using: .utf8) {
-                try data.write(to: tempFileURL, options: .atomic)
-                try fileManager.replaceItemAt(fileURL, withItemAt: tempFileURL)
-                print("[NebulaManager] Sent stop command to helper daemon (atomic write)")
-            }
-            
-            // Wait for Nebula to actually stop
-            // Poll on background thread to avoid blocking UI
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                guard let self = self else { return }
-                var attempts = 0
-                let maxAttempts = 10 // 10 * 500ms = 5 seconds
-                while attempts < maxAttempts {
-                    usleep(500_000) // 500ms
-                    if !self.isRunning() {
-                        print("[NebulaManager] Nebula has stopped")
-                        break
-                    }
-                    attempts += 1
-                }
-                
-                if attempts >= maxAttempts {
-                    print("[NebulaManager] Warning: Nebula didn't stop within 5 seconds")
-                }
-            }
+            try writeControlCommand("stop")
         } catch {
-            print("[NebulaManager] Failed to write stop command: \(error)")
+            print("[NebulaManager] Failed to send stop command: \(error)")
+        }
+        
+        // Wait for Nebula to actually stop
+        // Poll on background thread to avoid blocking UI
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            var attempts = 0
+            let maxAttempts = 10 // 10 * 500ms = 5 seconds
+            while attempts < maxAttempts {
+                usleep(500_000) // 500ms
+                if !self.isRunning() {
+                    print("[NebulaManager] Nebula has stopped")
+                    break
+                }
+                attempts += 1
+            }
+            
+            if attempts >= maxAttempts {
+                print("[NebulaManager] Warning: Nebula didn't stop within 5 seconds")
+            }
         }
         self.process = nil
     }
@@ -302,6 +323,7 @@ enum NebulaError: Error, LocalizedError {
     case publicKeyNotFound
     case configNotFound
     case binaryNotFound
+    case controlFileWriteFailed(reason: String)
     
     var errorDescription: String? {
         switch self {
@@ -313,6 +335,8 @@ enum NebulaError: Error, LocalizedError {
             return "Configuration file not found"
         case .binaryNotFound:
             return "Nebula binary not found at /usr/local/bin/nebula"
+        case .controlFileWriteFailed(let reason):
+            return "Failed to write to control file: \(reason)"
         }
     }
 }
