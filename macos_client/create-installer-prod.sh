@@ -31,7 +31,21 @@ if [ -z "$FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD" ]; then
 fi
 
 cd "${SCRIPT_DIR}"
-/usr/local/bin/fastlane mac build_production
+
+# Ensure bundler is installed
+if ! command -v bundle &> /dev/null; then
+    echo "Bundler not found. Installing..."
+    gem install bundler
+fi
+
+# Install dependencies if needed
+if [ ! -f "Gemfile.lock" ] || [ "Gemfile" -nt "Gemfile.lock" ]; then
+    echo "Installing Fastlane dependencies via Bundler..."
+    bundle install
+fi
+
+# Run Fastlane via Bundler
+bundle exec fastlane mac build_production
 
 echo ""
 echo "=== Production Build Complete ==="
