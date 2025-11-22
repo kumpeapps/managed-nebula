@@ -864,7 +864,7 @@ async def delete_client(
 
         # Log deletion for audit trail
         logger.info(
-            f"Deleting client {client_id} (name: {client.name}) by user {user.username} (id: {user.id})"
+            f"Deleting client {client_id} (name: {client.name}) by user {user.email} (id: {user.id})"
         )
 
         # Delete the client (CASCADE will handle related records)
