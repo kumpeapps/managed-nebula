@@ -54,8 +54,9 @@ def async_session_maker():
 async def _ensure_models():
     import os
     async with engine.begin() as conn:
-        # Ensure SQLite enforces foreign key constraints
-        await conn.run_sync(lambda connection: connection.execute(text("PRAGMA foreign_keys=ON")))
+        # Ensure SQLite enforces foreign key constraints (only for SQLite)
+        if engine.dialect.name == 'sqlite':
+            await conn.run_sync(lambda connection: connection.execute(text("PRAGMA foreign_keys=ON")))
         if "PYTEST_CURRENT_TEST" in os.environ:
             # In test context, reset schema each session to ensure isolation
             await conn.run_sync(Base.metadata.drop_all)
