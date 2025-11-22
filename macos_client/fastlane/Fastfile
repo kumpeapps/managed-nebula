@@ -64,13 +64,13 @@ platform :mac do
     end
 
     # Import Developer ID Application certificate
+    # Note: Use readonly mode to avoid querying App Store Connect API for Developer ID certs
     match(
       type: "developer_id",
       platform: "macos",
-      readonly: is_ci,
+      readonly: true,
       skip_provisioning_profiles: true,
-      skip_certificate_matching: true,
-      api_key: api_key
+      skip_certificate_matching: true
     )
     
     # Import Developer ID Installer certificate
@@ -79,8 +79,7 @@ platform :mac do
       platform: "macos",
       readonly: true,
       skip_provisioning_profiles: true,
-      skip_certificate_matching: true,
-      api_key: api_key
+      skip_certificate_matching: true
     )
 
     # Get signing identities from keychain

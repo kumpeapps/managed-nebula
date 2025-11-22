@@ -5,29 +5,137 @@
     
     
       
-      <testcase classname="fastlane.lanes" name="0: default_platform" time="0.000332">
+      <testcase classname="fastlane.lanes" name="00: default_platform" time="0.000189">
         
       </testcase>
     
       
-      <testcase classname="fastlane.lanes" name="1: is_ci" time="0.0001">
+      <testcase classname="fastlane.lanes" name="01: is_ci" time="7.5e-05">
         
       </testcase>
     
       
-      <testcase classname="fastlane.lanes" name="2: app_store_connect_api_key" time="0.034382">
+      <testcase classname="fastlane.lanes" name="02: app_store_connect_api_key" time="0.002057">
         
       </testcase>
     
       
-      <testcase classname="fastlane.lanes" name="3: is_ci" time="0.000144">
+      <testcase classname="fastlane.lanes" name="03: match" time="1.692291">
         
       </testcase>
     
       
-      <testcase classname="fastlane.lanes" name="4: match" time="5.265762">
+      <testcase classname="fastlane.lanes" name="04: match" time="1.753167">
         
-          <failure message="/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/fastlane/lib/fastlane/actions/actions_helper.rb:67:in &apos;Fastlane::Actions.execute_action&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/fastlane/lib/fastlane/runner.rb:255:in &apos;block in Fastlane::Runner#execute_action&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/fastlane/lib/fastlane/runner.rb:229:in &apos;Dir.chdir&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/fastlane/lib/fastlane/runner.rb:229:in &apos;Fastlane::Runner#execute_action&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/fastlane/lib/fastlane/runner.rb:157:in &apos;Fastlane::Runner#trigger_action_by_name&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/fastlane/lib/fastlane/fast_file.rb:159:in &apos;Fastlane::FastFile#method_missing&apos;&#10;Fastfile:67:in &apos;block (2 levels) in Fastlane::FastFile#parsing_binding&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/fastlane/lib/fastlane/lane.rb:41:in &apos;Fastlane::Lane#call&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/fastlane/lib/fastlane/runner.rb:49:in &apos;block in Fastlane::Runner#execute&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/fastlane/lib/fastlane/runner.rb:45:in &apos;Dir.chdir&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/fastlane/lib/fastlane/runner.rb:45:in &apos;Fastlane::Runner#execute&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/fastlane/lib/fastlane/lane_manager.rb:46:in &apos;Fastlane::LaneManager.cruise_lane&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/fastlane/lib/fastlane/command_line_handler.rb:34:in &apos;Fastlane::CommandLineHandler.handle&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/fastlane/lib/fastlane/commands_generator.rb:110:in &apos;block (2 levels) in Fastlane::CommandsGenerator#run&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/commander-4.6.0/lib/commander/command.rb:187:in &apos;Commander::Command#call&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/commander-4.6.0/lib/commander/command.rb:157:in &apos;Commander::Command#run&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/commander-4.6.0/lib/commander/runner.rb:444:in &apos;Commander::Runner#run_active_command&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/fastlane_core/lib/fastlane_core/ui/fastlane_runner.rb:124:in &apos;Commander::Runner#run!&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/commander-4.6.0/lib/commander/delegates.rb:18:in &apos;Commander::Delegates#run!&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/fastlane/lib/fastlane/commands_generator.rb:363:in &apos;Fastlane::CommandsGenerator#run&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/fastlane/lib/fastlane/commands_generator.rb:43:in &apos;Fastlane::CommandsGenerator.start&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/fastlane/lib/fastlane/cli_tools_distributor.rb:123:in &apos;Fastlane::CLIToolsDistributor.take_off&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/gems/fastlane-2.228.0/bin/fastlane:23:in &apos;&lt;top (required)&gt;&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/bin/fastlane:25:in &apos;Kernel#load&apos;&#10;/usr/local/Cellar/fastlane/2.228.0/libexec/bin/fastlane:25:in &apos;&lt;main&gt;&apos;&#10;&#10;A parameter has an invalid value - &apos;DEVELOPER_ID_APPLICATION_G2&apos; is not a valid filter value. Expected one of: APPLE_PAY, APPLE_PAY_MERCHANT_IDENTITY, APPLE_PAY_PSP_IDENTITY, APPLE_PAY_RSA, DEVELOPER_ID_KEXT, DEVELOPER_ID_APPLICATION, DEVELOPMENT, DISTRIBUTION, IDENTITY_ACCESS, IOS_DEVELOPMENT, IOS_DISTRIBUTION, MAC_APP_DISTRIBUTION, MAC_INSTALLER_DISTRIBUTION, MAC_APP_DEVELOPMENT, PASS_TYPE_ID, PASS_TYPE_ID_WITH_NFC" />
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="05: security find-identity -v -p codesigning | grep &apos;Developer ID Application&apos; | head -1 | awk &apos;{print $2}&apos;" time="0.057717">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="06: security find-identity -v -p codesigning | grep &apos;Developer ID Application&apos; | head -1 | sed -E &apos;s/.*&quot;(.*)&quot;.*/\1/&apos;" time="0.053788">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="07: security find-identity -v -p basic | grep &apos;Developer ID Installer&apos; | head -1 | awk &apos;{print $2}&apos;" time="0.070372">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="08: security find-identity -v -p basic | grep &apos;Developer ID Installer&apos; | head -1 | sed -E &apos;s/.*&quot;(.*)&quot;.*/\1/&apos;" time="0.07081">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="09: bash ../create-uninstaller-app.sh" time="0.020634">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="10: xattr -cr &apos;../Uninstall ManagedNebula.app&apos; || true" time="0.008935">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="11: codesign --deep --force --verify --verbose --sign &quot;E9BC06351EBC880BC672E49D70A69E9287255868&quot; --options runtime --timestamp &apos;../Uninstall ManagedNebula.app&apos;" time="0.269877">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="12: codesign --verify --deep --strict --verbose=2 &apos;../Uninstall ManagedNebula.app&apos;" time="0.024133">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="13: VERSION=&quot;1.0.0&quot; APP_IDENTITY_HASH=&quot;E9BC06351EBC880BC672E49D70A69E9287255868&quot; bash ../create-installer.sh" time="16.832034">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="14: xattr -cr ../ManagedNebula.app || true" time="0.015353">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="15: codesign --deep --force --verify --verbose --sign &quot;E9BC06351EBC880BC672E49D70A69E9287255868&quot; --options runtime --timestamp ../ManagedNebula.app" time="0.169766">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="16: codesign --verify --deep --strict --verbose=2 ../ManagedNebula.app" time="0.020999">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="17: productsign --sign &quot;ACB1940715DED4342770834EAC0740738E2BBD9A&quot; ../dist/ManagedNebula-macos-1.0.0.pkg ../dist/ManagedNebula-macos-1.0.0-signed.pkg" time="0.268405">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="18: pkgutil --check-signature ../dist/ManagedNebula-macos-1.0.0-signed.pkg" time="0.127354">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="19: is_ci" time="0.000126">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="20: xcrun notarytool submit &quot;/Users/justinkumpe/Downloads/managed-nebula/macos_client/dist/ManagedNebula-macos-1.0.0-signed.pkg&quot; --wait --key &quot;/Users/justinkumpe/Documents/AuthKey_BZ9R9Y8474.p8&quot; --key-id &quot;BZ9R9Y8474&quot; --issuer &quot;69a6de74-e8dd-47e3-e053-5b8c7c11a4d1&quot;" time="57.470531">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="21: xcrun stapler staple &quot;/Users/justinkumpe/Downloads/managed-nebula/macos_client/dist/ManagedNebula-macos-1.0.0-signed.pkg&quot;" time="0.432161">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="22: rm -rf ../dist/dmg-contents-signed &amp;&amp; mkdir -p ../dist/dmg-contents-signed" time="0.013226">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="23: cp -R ../ManagedNebula.app ../dist/dmg-contents-signed/" time="0.012374">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="24: ln -s /Applications ../dist/dmg-contents-signed/Applications" time="0.006942">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="25: hdiutil create -volname ManagedNebula -srcfolder ../dist/dmg-contents-signed -ov -format UDZO ../dist/ManagedNebula-macos-1.0.0-signed.dmg" time="5.039133">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="26: rm -rf ../dist/dmg-contents-signed" time="0.017988">
         
       </testcase>
     
