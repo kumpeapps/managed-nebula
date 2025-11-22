@@ -50,6 +50,8 @@ Nebula is a scalable overlay networking tool focusing on performance, simplicity
 
 ### 🤖 **Automated Client Provisioning**
 - Self-service token-based authentication
+- **Standardized token format** with configurable prefix for GitHub Secret Scanning
+- **Token re-issuance** for rotation and security incidents
 - Automatic keypair generation on client side
 - Dynamic configuration delivery via REST API
 - Periodic polling for certificate rotation and config updates
@@ -93,6 +95,14 @@ Nebula is a scalable overlay networking tool focusing on performance, simplicity
 - **Admin Lockout Protection** - Admin role + admin group bypass ensures continuous access
 
 ## 🆕 Recent Updates
+
+### 🔒 Security & Token Management (NEW!)
+- 🔐 **Standardized Token Format** - Configurable prefix (default: `mnebula_`) + 32 secure random characters
+- 🔐 **Token Re-issuance** - Admins can rotate client tokens with a single API call
+- 🔐 **GitHub Secret Scanning Integration** - Automatic detection of leaked tokens in public repositories
+- 🔐 **Audit Trail** - All token operations and GitHub scanning events logged
+- 🔐 **Backward Compatibility** - Legacy tokens without prefix continue to work
+- 📚 **Documentation**: See [GITHUB_SECRET_SCANNING.md](GITHUB_SECRET_SCANNING.md) for setup guide
 
 ### IP Management Enhancements
 - ✨ **Change client IP configuration** directly from the UI
