@@ -20,7 +20,9 @@ server/.nebula/
 *.crt.pub
 *.crt.json
 venv/
-
+vendor/
+node_modules/
+.DS_Store
 # Created by https://www.toptal.com/developers/gitignore/api/node,python,venv,macos,linux
 # Edit at https://www.toptal.com/developers/gitignore?templates=node,python,venv,macos,linux
 
