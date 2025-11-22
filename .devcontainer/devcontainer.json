@@ -39,6 +39,24 @@
 	"postCreateCommand": "echo 'Dev container setup complete. Ports 443, 8080, and 4200 should be forwarded.'",
 	"remoteEnv": {
 		"DISPLAY": "${localEnv:DISPLAY}"
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"gitguardian-secret-security.gitguardian",
+				"GitHub.copilot",
+				"GitHub.copilot-chat",
+				"ms-python.black-formatter",
+				"codacy-app.codacy",
+				"ms-azuretools.vscode-containers",
+				"ms-vscode-remote.remote-containers",
+				"ms-azuretools.vscode-docker",
+				"ms-python.pylint",
+				"ms-python.python",
+				"ms-python.vscode-python-envs",
+				"swiftlang.swift-vscode"
+			]
+		}
 	}
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
