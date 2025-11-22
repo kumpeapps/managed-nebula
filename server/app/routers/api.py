@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -9,6 +9,7 @@ import logging
 from ..db import get_session
 from ..models import ClientToken, Client, IPAssignment, GlobalSettings, CACertificate, IPPool, Permission
 from ..models.client import ClientCertificate
+from ..models.system_settings import SystemSettings, GitHubSecretScanningLog
 logger = logging.getLogger(__name__)
 
 from ..models.schemas import (
@@ -62,12 +63,23 @@ from ..models.schemas import (
     ClientOwnerUpdate,
     PermissionResponse,
     PermissionGrantRequest,
+    ClientTokenReissueResponse,
+    SystemSettingResponse,
+    TokenPrefixUpdate,
+    GitHubWebhookSecretUpdate,
+    GitHubSecretScanningPattern,
+    GitHubSecretVerificationRequest,
+    GitHubSecretVerificationResponse,
+    GitHubSecretRevocationRequest,
+    GitHubSecretRevocationResponse,
 )
 from ..services.cert_manager import CertManager
 from ..services.config_builder import build_nebula_config
 from ..services.ip_allocator import ensure_default_pool, allocate_ip_from_pool
+from ..services.token_manager import generate_client_token, get_token_prefix, get_token_preview
 from ..core.auth import require_permission, get_current_user
 from ..core.config import settings
+from ..core.github_verification import verify_github_signature, get_github_pattern_regex
 from ..models.user import User
 from ..models.client import Group, FirewallRule, IPGroup, client_groups, client_firewall_rulesets
 from ..models.permissions import ClientPermission, UserGroup, UserGroupMembership
@@ -542,9 +554,10 @@ async def create_client(
     await session.commit()
     await session.refresh(client)
 
-    # Generate token
-    token_value = secrets.token_urlsafe(32)
-    token = ClientToken(client_id=client.id, token=token_value, is_active=True)
+    # Generate token with current prefix from settings
+    prefix = await get_token_prefix(session)
+    token_value = generate_client_token(prefix)
+    token = ClientToken(client_id=client.id, token=token_value, is_active=True, owner_user_id=user.id)
     session.add(token)
 
     # Handle IP allocation
@@ -3509,3 +3522,428 @@ async def revoke_group_permission(
     await session.commit()
 
     return {"status": "revoked", "permission_id": permission_id, "group_id": group_id}
+
+
+# ============ Token Re-issuance Endpoints ============
+
+@router.post(
+    "/clients/{client_id}/tokens/{token_id}/reissue",
+    response_model=ClientTokenReissueResponse
+)
+async def reissue_client_token(
+    client_id: int,
+    token_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user)
+):
+    """Re-issue a client token with new value.
+    
+    This endpoint deactivates the old token and generates a new one.
+    Requires admin permissions.
+    """
+    # Check admin permission
+    is_admin = await user.has_permission(session, "users", "delete")
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="Admin permission required")
+    
+    # Verify client exists
+    client_result = await session.execute(
+        select(Client).where(Client.id == client_id)
+    )
+    client = client_result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    # Verify token exists and belongs to client
+    token_result = await session.execute(
+        select(ClientToken).where(
+            ClientToken.id == token_id,
+            ClientToken.client_id == client_id
+        )
+    )
+    old_token = token_result.scalar_one_or_none()
+    if not old_token:
+        raise HTTPException(status_code=404, detail="Token not found")
+    
+    # Deactivate old token
+    old_token.is_active = False
+    
+    # Generate new token with current prefix
+    prefix = await get_token_prefix(session)
+    new_token_value = generate_client_token(prefix)
+    
+    # Create new token
+    new_token = ClientToken(
+        client_id=client_id,
+        token=new_token_value,
+        is_active=True,
+        owner_user_id=user.id
+    )
+    session.add(new_token)
+    await session.commit()
+    await session.refresh(new_token)
+    
+    # Log the action
+    logger.info(f"Token re-issued for client {client_id} by user {user.id}")
+    
+    # Return response with full token (only time it's shown)
+    return ClientTokenReissueResponse(
+        id=new_token.id,
+        token=new_token.token,
+        client_id=new_token.client_id,
+        created_at=new_token.created_at,
+        old_token_id=old_token.id
+    )
+
+
+# ============ System Settings Endpoints ============
+
+@router.get(
+    "/settings/token-prefix",
+    response_model=SystemSettingResponse
+)
+async def get_token_prefix_setting(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user)
+):
+    """Get current token prefix setting.
+    
+    Requires admin permissions.
+    """
+    # Check admin permission
+    is_admin = await user.has_permission(session, "users", "delete")
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="Admin permission required")
+    
+    result = await session.execute(
+        select(SystemSettings)
+        .options(selectinload(SystemSettings.updated_by))
+        .where(SystemSettings.key == "token_prefix")
+    )
+    setting = result.scalar_one_or_none()
+    
+    if not setting:
+        # Return default if not found
+        return SystemSettingResponse(
+            key="token_prefix",
+            value="mnebula_",
+            updated_at=datetime.utcnow(),
+            updated_by=None
+        )
+    
+    return SystemSettingResponse(
+        key=setting.key,
+        value=setting.value,
+        updated_at=setting.updated_at,
+        updated_by=setting.updated_by.email if setting.updated_by else None
+    )
+
+
+@router.put(
+    "/settings/token-prefix",
+    response_model=SystemSettingResponse
+)
+async def update_token_prefix_setting(
+    data: TokenPrefixUpdate,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user)
+):
+    """Update token prefix setting.
+    
+    This only affects new tokens. Existing tokens remain valid.
+    Requires admin permissions.
+    """
+    # Check admin permission
+    is_admin = await user.has_permission(session, "users", "delete")
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="Admin permission required")
+    
+    # Get or create setting
+    result = await session.execute(
+        select(SystemSettings).where(SystemSettings.key == "token_prefix")
+    )
+    setting = result.scalar_one_or_none()
+    
+    if setting:
+        setting.value = data.prefix
+        setting.updated_at = datetime.utcnow()
+        setting.updated_by_user_id = user.id
+    else:
+        setting = SystemSettings(
+            key="token_prefix",
+            value=data.prefix,
+            updated_at=datetime.utcnow(),
+            updated_by_user_id=user.id
+        )
+        session.add(setting)
+    
+    await session.commit()
+    await session.refresh(setting)
+    
+    # Reload with relationship
+    result = await session.execute(
+        select(SystemSettings)
+        .options(selectinload(SystemSettings.updated_by))
+        .where(SystemSettings.id == setting.id)
+    )
+    setting = result.scalar_one()
+    
+    logger.info(f"Token prefix updated to '{data.prefix}' by user {user.id}")
+    
+    return SystemSettingResponse(
+        key=setting.key,
+        value=setting.value,
+        updated_at=setting.updated_at,
+        updated_by=setting.updated_by.email if setting.updated_by else None
+    )
+
+
+@router.get(
+    "/settings/github-webhook-secret",
+    response_model=SystemSettingResponse
+)
+async def get_github_webhook_secret_setting(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user)
+):
+    """Get GitHub webhook secret setting (masked).
+    
+    Requires admin permissions.
+    """
+    # Check admin permission
+    is_admin = await user.has_permission(session, "users", "delete")
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="Admin permission required")
+    
+    result = await session.execute(
+        select(SystemSettings)
+        .options(selectinload(SystemSettings.updated_by))
+        .where(SystemSettings.key == "github_webhook_secret")
+    )
+    setting = result.scalar_one_or_none()
+    
+    if not setting:
+        return SystemSettingResponse(
+            key="github_webhook_secret",
+            value="",
+            updated_at=datetime.utcnow(),
+            updated_by=None
+        )
+    
+    # Mask the secret value (show only first 4 chars)
+    masked_value = ""
+    if setting.value and len(setting.value) > 0:
+        masked_value = setting.value[:4] + "*" * (len(setting.value) - 4)
+    
+    return SystemSettingResponse(
+        key=setting.key,
+        value=masked_value,
+        updated_at=setting.updated_at,
+        updated_by=setting.updated_by.email if setting.updated_by else None
+    )
+
+
+@router.put(
+    "/settings/github-webhook-secret",
+    response_model=SystemSettingResponse
+)
+async def update_github_webhook_secret_setting(
+    data: GitHubWebhookSecretUpdate,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user)
+):
+    """Update GitHub webhook secret setting.
+    
+    Requires admin permissions.
+    """
+    # Check admin permission
+    is_admin = await user.has_permission(session, "users", "delete")
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="Admin permission required")
+    
+    # Get or create setting
+    result = await session.execute(
+        select(SystemSettings).where(SystemSettings.key == "github_webhook_secret")
+    )
+    setting = result.scalar_one_or_none()
+    
+    if setting:
+        setting.value = data.secret
+        setting.updated_at = datetime.utcnow()
+        setting.updated_by_user_id = user.id
+    else:
+        setting = SystemSettings(
+            key="github_webhook_secret",
+            value=data.secret,
+            updated_at=datetime.utcnow(),
+            updated_by_user_id=user.id
+        )
+        session.add(setting)
+    
+    await session.commit()
+    await session.refresh(setting)
+    
+    # Reload with relationship
+    result = await session.execute(
+        select(SystemSettings)
+        .options(selectinload(SystemSettings.updated_by))
+        .where(SystemSettings.id == setting.id)
+    )
+    setting = result.scalar_one()
+    
+    logger.info(f"GitHub webhook secret updated by user {user.id}")
+    
+    # Return masked value
+    masked_value = setting.value[:4] + "*" * (len(setting.value) - 4) if setting.value else ""
+    
+    return SystemSettingResponse(
+        key=setting.key,
+        value=masked_value,
+        updated_at=setting.updated_at,
+        updated_by=setting.updated_by.email if setting.updated_by else None
+    )
+
+
+# ============ GitHub Secret Scanning Endpoints ============
+# Note: /.well-known/secret-scanning.json is in public.py (no /api/v1 prefix)
+
+@router.post(
+    "/github/secret-scanning/verify",
+    response_model=List[GitHubSecretVerificationResponse]
+)
+async def github_secret_scanning_verify(
+    request: Request,
+    tokens: List[GitHubSecretVerificationRequest],
+    session: AsyncSession = Depends(get_session)
+):
+    """Verify tokens for GitHub Secret Scanning.
+    
+    This endpoint verifies if tokens are valid and returns details.
+    Requires GitHub webhook signature verification.
+    """
+    # Get webhook secret from settings
+    secret_result = await session.execute(
+        select(SystemSettings).where(SystemSettings.key == "github_webhook_secret")
+    )
+    secret_setting = secret_result.scalar_one_or_none()
+    
+    # Verify GitHub signature if secret is configured
+    if secret_setting and secret_setting.value:
+        # Get signature header
+        signature_header = request.headers.get("X-Hub-Signature-256", "")
+        
+        # Read body bytes
+        body = await request.body()
+        
+        # Verify signature
+        if not verify_github_signature(body, signature_header, secret_setting.value):
+            raise HTTPException(status_code=401, detail="Invalid signature")
+    
+    # Process each token
+    responses = []
+    for token_request in tokens:
+        # Look up token in database
+        token_result = await session.execute(
+            select(ClientToken)
+            .options(selectinload(ClientToken.client))
+            .where(ClientToken.token == token_request.token)
+        )
+        token = token_result.scalar_one_or_none()
+        
+        if token:
+            # Token found - return details
+            client = token.client
+            responses.append(
+                GitHubSecretVerificationResponse(
+                    token=token_request.token,
+                    type=token_request.type,
+                    label=client.name if client else "unknown",
+                    url=f"{request.base_url}clients/{client.id}" if client else None,
+                    is_active=token.is_active
+                )
+            )
+            
+            # Log verification
+            log_entry = GitHubSecretScanningLog(
+                action="verify",
+                token_preview=get_token_preview(token_request.token),
+                github_url=token_request.url,
+                is_active=token.is_active,
+                client_id=token.client_id
+            )
+            session.add(log_entry)
+        # If token not found, don't add to responses (don't leak info)
+    
+    await session.commit()
+    
+    return responses
+
+
+@router.post(
+    "/github/secret-scanning/revoke",
+    response_model=GitHubSecretRevocationResponse
+)
+async def github_secret_scanning_revoke(
+    request: Request,
+    tokens: List[GitHubSecretRevocationRequest],
+    session: AsyncSession = Depends(get_session)
+):
+    """Revoke tokens reported by GitHub Secret Scanning.
+    
+    This endpoint automatically deactivates tokens found in public repositories.
+    Requires GitHub webhook signature verification.
+    """
+    # Get webhook secret from settings
+    secret_result = await session.execute(
+        select(SystemSettings).where(SystemSettings.key == "github_webhook_secret")
+    )
+    secret_setting = secret_result.scalar_one_or_none()
+    
+    # Verify GitHub signature if secret is configured
+    if secret_setting and secret_setting.value:
+        # Get signature header
+        signature_header = request.headers.get("X-Hub-Signature-256", "")
+        
+        # Read body bytes
+        body = await request.body()
+        
+        # Verify signature
+        if not verify_github_signature(body, signature_header, secret_setting.value):
+            raise HTTPException(status_code=401, detail="Invalid signature")
+    
+    # Process each token
+    revoked_count = 0
+    for token_request in tokens:
+        # Look up token in database
+        token_result = await session.execute(
+            select(ClientToken).where(ClientToken.token == token_request.token)
+        )
+        token = token_result.scalar_one_or_none()
+        
+        if token and token.is_active:
+            # Deactivate token
+            token.is_active = False
+            revoked_count += 1
+            
+            logger.warning(
+                f"Token revoked by GitHub Secret Scanning: "
+                f"client_id={token.client_id}, "
+                f"github_url={token_request.url}"
+            )
+        
+        # Log revocation attempt (even if token not found)
+        log_entry = GitHubSecretScanningLog(
+            action="revoke",
+            token_preview=get_token_preview(token_request.token),
+            github_url=token_request.url,
+            is_active=token.is_active if token else False,
+            client_id=token.client_id if token else None
+        )
+        session.add(log_entry)
+    
+    await session.commit()
+    
+    return GitHubSecretRevocationResponse(
+        message="Tokens processed",
+        revoked_count=revoked_count
+    )

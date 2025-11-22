@@ -506,3 +506,92 @@ class PermissionGrantRequest(BaseModel):
     def validate_grant(self):
         if not self.permission_id and not (self.resource and self.action):
             raise ValueError("Either permission_id or both resource and action must be provided")
+
+
+# ============ Token Re-issuance Schemas ============
+
+class ClientTokenReissueResponse(BaseModel):
+    """Response when re-issuing a client token."""
+    id: int
+    token: str  # Full token (only shown once)
+    client_id: int
+    created_at: datetime
+    old_token_id: int  # Reference to deactivated token
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ============ System Settings Schemas ============
+
+class SystemSettingResponse(BaseModel):
+    """System setting response."""
+    key: str
+    value: str
+    updated_at: datetime
+    updated_by: Optional[str] = None  # Username
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TokenPrefixUpdate(BaseModel):
+    """Request to update token prefix."""
+    prefix: str
+    
+    @field_validator('prefix')
+    @classmethod
+    def validate_prefix(cls, v: str) -> str:
+        if not v or not (3 <= len(v) <= 20):
+            raise ValueError("Prefix must be 3-20 characters")
+        if not all(c.isalnum() or c == '_' for c in v):
+            raise ValueError("Prefix must be alphanumeric with underscores only")
+        return v
+
+
+class GitHubWebhookSecretUpdate(BaseModel):
+    """Request to update GitHub webhook secret."""
+    secret: str
+    
+    @field_validator('secret')
+    @classmethod
+    def validate_secret(cls, v: str) -> str:
+        if not v or len(v) < 16:
+            raise ValueError("Webhook secret must be at least 16 characters")
+        return v
+
+
+# ============ GitHub Secret Scanning Schemas ============
+
+class GitHubSecretScanningPattern(BaseModel):
+    """GitHub secret scanning pattern metadata."""
+    type: str
+    pattern: str
+    description: str
+
+
+class GitHubSecretVerificationRequest(BaseModel):
+    """GitHub secret scanning verification request."""
+    type: str
+    token: str
+    url: str
+
+
+class GitHubSecretVerificationResponse(BaseModel):
+    """GitHub secret scanning verification response."""
+    token: str
+    type: str
+    label: Optional[str] = None
+    url: Optional[str] = None
+    is_active: bool
+
+
+class GitHubSecretRevocationRequest(BaseModel):
+    """GitHub secret scanning revocation request."""
+    type: str
+    token: str
+    url: str
+
+
+class GitHubSecretRevocationResponse(BaseModel):
+    """GitHub secret scanning revocation response."""
+    message: str
+    revoked_count: int
