@@ -15,8 +15,8 @@ echo ""
 if [ -z "$MATCH_PASSWORD" ]; then
     read -sp "Enter Fastlane Match password (encryption key): " MATCH_PASSWORD
     echo ""
-    export MATCH_PASSWORD
 fi
+export MATCH_PASSWORD
 
 # Prompt for notarization credentials if not set via Appfile
 if [ -z "$FASTLANE_APPLE_ID" ]; then
@@ -32,20 +32,15 @@ fi
 
 cd "${SCRIPT_DIR}"
 
-# Ensure bundler is installed
-if ! command -v bundle &> /dev/null; then
-    echo "Bundler not found. Installing..."
-    gem install bundler
+# Check if fastlane is installed
+if ! command -v fastlane &> /dev/null; then
+    echo "Error: fastlane not found. Please install it:"
+    echo "  brew install fastlane"
+    exit 1
 fi
 
-# Install dependencies if needed
-if [ ! -f "Gemfile.lock" ] || [ "Gemfile" -nt "Gemfile.lock" ]; then
-    echo "Installing Fastlane dependencies via Bundler..."
-    bundle install
-fi
-
-# Run Fastlane via Bundler
-bundle exec fastlane mac build_production
+# Run Fastlane directly (system installation works, bundler has env var issues)
+fastlane mac build_production
 
 echo ""
 echo "=== Production Build Complete ==="
