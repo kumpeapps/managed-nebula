@@ -7,7 +7,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.exceptions import HTTPException
 from fastapi.exception_handlers import http_exception_handler as fastapi_http_exception_handler
 
-from .routers import api, auth
+from .routers import api, auth, public
 from .core.scheduler import init_scheduler
 from .services.schema_sync import sync_schema
 from .db import engine, Base
@@ -240,6 +240,7 @@ def create_app() -> FastAPI:
     )
 
     # Routers
+    app.include_router(public.router)  # Public endpoints (no prefix)
     app.include_router(api.router, prefix="/api")
     app.include_router(auth.router)
 
