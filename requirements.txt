@@ -43,7 +43,7 @@ oauthlib==3.2.2
 olefile==0.46
 packaging==25.0
 passlib==1.7.4
-Pillow==8.1.2
+Pillow==10.3.0
 platformdirs==3.0.0
 pluggy==1.6.0
 pre-commit==4.3.0
@@ -59,7 +59,7 @@ pytest==8.3.3
 pytest-asyncio==0.23.8
 python-dotenv==0.21.1
 python-jose==3.4.0
-python-multipart==0.0.9
+python-multipart==0.0.18
 pytz==2025.2
 PyYAML==6.0.2
 requests==2.32.5
