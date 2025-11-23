@@ -100,8 +100,23 @@ import { FirewallRuleset, FirewallRule, Group, GroupRef } from '../models';
         </div>
       </div>
 
+      <!-- Loading State -->
+      <div *ngIf="isLoading" class="loading-container">
+        <div class="spinner"></div>
+        <p>Loading firewall rulesets...</p>
+      </div>
+
+      <!-- Error State -->
+      <div *ngIf="!isLoading && error" class="error-container">
+        <p class="error-message">{{ error }}</p>
+        <button (click)="loadRulesets()" class="btn btn-secondary">Retry</button>
+      </div>
+
+      <!-- Empty State -->
+      <p *ngIf="!isLoading && !error && !rulesets.length" class="no-data">No firewall rulesets defined.</p>
+
       <!-- Rulesets Table -->
-      <table *ngIf="rulesets.length" class="table">
+      <table *ngIf="!isLoading && !error && rulesets.length" class="table">
         <thead>
           <tr>
             <th>Name</th>
@@ -124,7 +139,6 @@ import { FirewallRuleset, FirewallRule, Group, GroupRef } from '../models';
           </tr>
         </tbody>
       </table>
-      <p *ngIf="!rulesets.length">No firewall rulesets defined.</p>
     </div>
   `,
     styles: [`
@@ -205,6 +219,47 @@ import { FirewallRuleset, FirewallRule, Group, GroupRef } from '../models';
     .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.85rem; }
     .btn:disabled { opacity: 0.6; cursor: not-allowed; }
     
+    /* Loading and Error States */
+    .loading-container, .error-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 1.5rem;
+      text-align: center;
+      background: white;
+      border-radius: 8px;
+    }
+    
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #4CAF50;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 1rem;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .error-message {
+      color: #d32f2f;
+      margin-bottom: 1rem;
+    }
+    
+    .no-data {
+      text-align: center;
+      color: #666;
+      padding: 2rem;
+      font-style: italic;
+      background: white;
+      border-radius: 8px;
+    }
+    
     @media (max-width: 768px) {
       .resource-page {
         padding: 1rem;
@@ -236,6 +291,8 @@ import { FirewallRuleset, FirewallRule, Group, GroupRef } from '../models';
 })
 export class FirewallRulesComponent implements OnInit {
   rulesets: FirewallRuleset[] = [];
+  isLoading = false;
+  error: string | null = null;
   allGroups: Group[] = [];
   showForm = false;
   saving = false;
@@ -272,9 +329,18 @@ export class FirewallRulesComponent implements OnInit {
   }
 
   loadRulesets(): void {
+    this.isLoading = true;
+    this.error = null;
     this.api.getFirewallRulesets().subscribe({
-      next: (rs: FirewallRuleset[]) => (this.rulesets = rs),
-      error: (e: any) => console.error('Failed to load firewall rulesets', e)
+      next: (rs: FirewallRuleset[]) => {
+        this.rulesets = rs;
+        this.isLoading = false;
+      },
+      error: (e: any) => {
+        console.error('Failed to load firewall rulesets', e);
+        this.error = 'Failed to load firewall rulesets. Please try again.';
+        this.isLoading = false;
+      }
     });
   }
 

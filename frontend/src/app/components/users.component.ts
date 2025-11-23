@@ -49,7 +49,23 @@ import { User, UserGroup } from '../models';
         </div>
       </div>
 
-      <table *ngIf="users.length" class="table">
+      <!-- Loading State -->
+      <div *ngIf="isLoading" class="loading-container">
+        <div class="spinner"></div>
+        <p>Loading users...</p>
+      </div>
+
+      <!-- Error State -->
+      <div *ngIf="!isLoading && error" class="error-container">
+        <p class="error-message">{{ error }}</p>
+        <button (click)="load()" class="btn btn-secondary">Retry</button>
+      </div>
+
+      <!-- Empty State -->
+      <p *ngIf="!isLoading && !error && !users.length" class="no-data">No users found.</p>
+
+      <!-- Users Table -->
+      <table *ngIf="!isLoading && !error && users.length" class="table">
         <thead>
           <tr>
             <th>Email</th>
@@ -74,7 +90,6 @@ import { User, UserGroup } from '../models';
           </tr>
         </tbody>
       </table>
-      <p *ngIf="!users.length">No users found.</p>
 
       <!-- Edit User Modal -->
       <div *ngIf="editingUser" class="modal">
@@ -122,6 +137,47 @@ import { User, UserGroup } from '../models';
     .modal { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; padding: 1rem; overflow-y: auto; }
     .modal-content { background:#fff; padding:1.5rem; width:500px; max-width:95%; border-radius:8px; max-height: 90vh; overflow-y: auto; margin: auto; }
     
+    /* Loading and Error States */
+    .loading-container, .error-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 1.5rem;
+      text-align: center;
+      background: white;
+      border-radius: 8px;
+    }
+    
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #4CAF50;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 1rem;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .error-message {
+      color: #d32f2f;
+      margin-bottom: 1rem;
+    }
+    
+    .no-data {
+      text-align: center;
+      color: #666;
+      padding: 2rem;
+      font-style: italic;
+      background: white;
+      border-radius: 8px;
+    }
+
     @media (max-width: 768px) {
       .resource-page { padding: 1rem; }
       .modal-content { padding: 1rem; }
@@ -136,6 +192,8 @@ import { User, UserGroup } from '../models';
 })
 export class UsersComponent implements OnInit {
   users: User[] = [];
+  isLoading = false;
+  error: string | null = null;
   showForm = false;
   creating = false;
   availableGroups: UserGroup[] = [];
@@ -155,9 +213,18 @@ export class UsersComponent implements OnInit {
   ngOnInit(): void { this.load(); this.loadGroups(); this.loadSettings(); }
 
   load(): void {
+    this.isLoading = true;
+    this.error = null;
     this.api.getUsers().subscribe({
-      next: (u: User[]) => (this.users = u),
-      error: (e: any) => console.error('Failed to load users', e)
+      next: (users: User[]) => {
+        this.users = users;
+        this.isLoading = false;
+      },
+      error: (e: any) => {
+        console.error('Failed to load users', e);
+        this.error = 'Failed to load users. Please try again.';
+        this.isLoading = false;
+      }
     });
   }
 
