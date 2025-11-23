@@ -571,6 +571,8 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
 })
 export class ClientsComponent implements OnInit {
   clients: Client[] = [];
+  isLoading = false;
+  error: string | null = null;
   isAdmin = this.authService.isAdmin();
   showCreateModal = false;
   newClient: ClientCreateRequest = {
