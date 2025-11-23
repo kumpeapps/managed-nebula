@@ -22,8 +22,24 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
         </div>
         
         <div class="clients-list">
-          <div class="table-responsive">
-            <table *ngIf="clients.length > 0">
+          <!-- Loading State -->
+          <div *ngIf="isLoading" class="loading-container">
+            <div class="spinner"></div>
+            <p>Loading clients...</p>
+          </div>
+
+          <!-- Error State -->
+          <div *ngIf="!isLoading && error" class="error-container">
+            <p class="error-message">{{ error }}</p>
+            <button (click)="loadClients()" class="btn btn-secondary">Retry</button>
+          </div>
+
+          <!-- Empty State -->
+          <p *ngIf="!isLoading && !error && clients.length === 0" class="no-data">No clients found.</p>
+
+          <!-- Data Table -->
+          <div class="table-responsive" *ngIf="!isLoading && !error && clients.length > 0">
+            <table>
               <thead>
                 <tr>
                   <th class="hide-mobile">ID</th>
@@ -81,7 +97,6 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
               </tbody>
             </table>
           </div>
-          <p *ngIf="clients.length === 0">No clients found.</p>
         </div>
       </div>
 
@@ -467,6 +482,43 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
       gap: 0.5rem;
     }
     
+    /* Loading and Error States */
+    .loading-container, .error-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 1.5rem;
+      text-align: center;
+    }
+    
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #4CAF50;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 1rem;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .error-message {
+      color: #d32f2f;
+      margin-bottom: 1rem;
+    }
+    
+    .no-data {
+      text-align: center;
+      color: #666;
+      padding: 2rem;
+      font-style: italic;
+    }
+    
     @media (max-width: 768px) {
       .header {
         flex-direction: column;
@@ -623,12 +675,17 @@ export class ClientsComponent implements OnInit {
   }
 
   loadClients(): void {
+    this.isLoading = true;
+    this.error = null;
     this.apiService.getClients().subscribe({
       next: (clients: Client[]) => {
         this.clients = clients;
+        this.isLoading = false;
       },
       error: (error: unknown) => {
         console.error('Failed to load clients:', error);
+        this.error = 'Failed to load clients. Please try again.';
+        this.isLoading = false;
       }
     });
   }

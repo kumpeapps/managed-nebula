@@ -33,7 +33,23 @@ import { Router } from '@angular/router';
         </div>
       </div>
 
-      <table *ngIf="pools.length" class="table">
+      <!-- Loading State -->
+      <div *ngIf="isLoading" class="loading-container">
+        <div class="spinner"></div>
+        <p>Loading IP pools...</p>
+      </div>
+
+      <!-- Error State -->
+      <div *ngIf="!isLoading && error" class="error-container">
+        <p class="error-message">{{ error }}</p>
+        <button (click)="load()" class="btn btn-secondary">Retry</button>
+      </div>
+
+      <!-- Empty State -->
+      <p *ngIf="!isLoading && !error && !pools.length" class="no-data">No IP pools defined.</p>
+
+      <!-- Pools Table -->
+      <table *ngIf="!isLoading && !error && pools.length" class="table">
         <thead>
           <tr>
             <th>CIDR</th>
@@ -88,7 +104,6 @@ import { Router } from '@angular/router';
           </div>
         </div>
       </div>
-      <p *ngIf="!pools.length">No IP pools defined.</p>
     </div>
   `,
     styles: [`
@@ -102,6 +117,47 @@ import { Router } from '@angular/router';
     .form-group { margin-bottom: 1rem; }
     .form-actions { display:flex; gap:.75rem; justify-content:flex-end; }
     
+    /* Loading and Error States */
+    .loading-container, .error-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 1.5rem;
+      text-align: center;
+      background: white;
+      border-radius: 8px;
+    }
+    
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #4CAF50;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 1rem;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .error-message {
+      color: #d32f2f;
+      margin-bottom: 1rem;
+    }
+    
+    .no-data {
+      text-align: center;
+      color: #666;
+      padding: 2rem;
+      font-style: italic;
+      background: white;
+      border-radius: 8px;
+    }
+
     @media (max-width: 768px) {
       .page { padding: 1rem; }
       .modal-content { padding: 1rem; width: 95%; }
@@ -116,6 +172,8 @@ import { Router } from '@angular/router';
 })
 export class IPPoolsComponent implements OnInit {
   pools: IPPool[] = [];
+  isLoading = false;
+  error: string | null = null;
   showForm = false;
   creating = false;
   newPool: { cidr: string; description?: string } = { cidr: '', description: '' };
@@ -129,9 +187,18 @@ export class IPPoolsComponent implements OnInit {
   ngOnInit(): void { this.load(); }
 
   load(): void {
+    this.isLoading = true;
+    this.error = null;
     this.api.getIPPools().subscribe({
-      next: (p: IPPool[]) => (this.pools = p),
-      error: (e: any) => console.error('Failed to load pools', e)
+      next: (p: IPPool[]) => {
+        this.pools = p;
+        this.isLoading = false;
+      },
+      error: (e: any) => {
+        console.error('Failed to load pools', e);
+        this.error = 'Failed to load IP pools. Please try again.';
+        this.isLoading = false;
+      }
     });
   }
 
