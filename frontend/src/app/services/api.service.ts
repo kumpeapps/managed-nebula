@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { Client, Group, FirewallRuleset, IPPool, IPGroup, AvailableIP, CACertificate, User, ClientUpdateRequest, ClientCreateRequest, ClientCertificate, ClientConfigDownload, Settings, SettingsUpdate, DockerComposeTemplate, PlaceholdersResponse, Permission } from '../models';
+import { Client, Group, FirewallRuleset, IPPool, IPGroup, AvailableIP, CACertificate, User, ClientUpdateRequest, ClientCreateRequest, ClientCertificate, ClientConfigDownload, Settings, SettingsUpdate, DockerComposeTemplate, PlaceholdersResponse, Permission, VersionResponse } from '../models';
 
 @Injectable({
   providedIn: 'root'
@@ -314,5 +314,10 @@ export class ApiService {
 
   revokePermissionFromUserGroup(groupId: number, permissionId: number): Observable<void> {
     return this.http.delete<void>(`${this.apiUrl}/user-groups/${groupId}/permissions/${permissionId}`, { withCredentials: true });
+  }
+
+  // Version endpoint
+  getVersion(): Observable<VersionResponse> {
+    return this.http.get<VersionResponse>(`${this.apiUrl}/version`, { withCredentials: true });
   }
 }

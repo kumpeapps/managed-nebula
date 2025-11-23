@@ -55,10 +55,26 @@ jobs:
           echo "Failed to login to Harbor after 3 attempts" >&2
           exit 1
 
+      - name: Get Latest Release Version
+        id: get_version
+        run: |
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          echo "Current branch: ${BRANCH_NAME}"
+          
+          # Fetch all releases and find the most recent one for this branch
+          LATEST_RELEASE=$(curl -s https://api.github.com/repos/kumpeapps/managed-nebula/releases | \
+            jq -r --arg branch "$BRANCH_NAME" '[
+              .[] | select(.target_commitish == $branch or .target_commitish == "main")
+            ] | .[0].tag_name // "v1.0.0"')
+          
+          echo "latest_version=${LATEST_RELEASE}" >> $GITHUB_OUTPUT
+          echo "Latest release version for ${BRANCH_NAME}: ${LATEST_RELEASE}"
+
       - name: Build and Push Image (dev-latest)
         if: github.ref == 'refs/heads/dev'
         run: |
           docker buildx build --push \
+            --build-arg VERSION=${{ steps.get_version.outputs.latest_version }} \
             --tag harbor.vm.kumpeapps.com/managed-nebula/client:dev-latest \
             --cache-from type=gha,scope=client-dev \
             --cache-to type=gha,mode=max,scope=client-dev \
@@ -70,6 +86,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           docker buildx build --push \
+            --build-arg VERSION=${{ steps.get_version.outputs.latest_version }} \
             --tag harbor.vm.kumpeapps.com/managed-nebula/client:latest \
             --cache-from type=gha,scope=client-main \
             --cache-to type=gha,mode=max,scope=client-main \
@@ -81,6 +98,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           docker buildx build --push \
+            --build-arg VERSION=${GITHUB_REF#refs/tags/} \
             --tag harbor.vm.kumpeapps.com/managed-nebula/client:${GITHUB_REF#refs/tags/} \
             --cache-from type=gha,scope=client-main \
             --cache-to type=gha,mode=max,scope=client-tag \

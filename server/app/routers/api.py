@@ -48,6 +48,7 @@ from ..models.schemas import (
     UserGroupUpdate,
     UserGroupResponse,
     UserGroupMembershipAdd,
+    VersionResponse,
     UserGroupMembershipResponse,
     ClientCertificateResponse,
     ClientConfigDownloadResponse,
@@ -164,6 +165,43 @@ async def build_client_response(client: Client, session: AsyncSession, user: Use
 @router.get("/healthz")
 async def healthz():
     return {"status": "ok"}
+
+
+@router.get("/version", response_model=VersionResponse)
+async def get_version():
+    """Get server and Nebula versions.
+    
+    Returns version information for both the Managed Nebula server
+    and the installed Nebula binary.
+    """
+    import subprocess
+    from .. import __version__ as server_version
+    
+    # Get Nebula version
+    nebula_version = "unknown"
+    try:
+        result = subprocess.run(
+            ["nebula", "-version"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            # Parse version from output like "Version: 1.9.7"
+            for line in result.stdout.split("\n"):
+                if line.startswith("Version:"):
+                    nebula_version = line.replace("Version:", "").strip()
+                    break
+        else:
+            nebula_version = "error"
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+        logger.warning(f"Failed to get Nebula version: {e}")
+        nebula_version = "unavailable"
+    
+    return VersionResponse(
+        managed_nebula_version=server_version,
+        nebula_version=nebula_version
+    )
 
 
 # ============ Settings ============

@@ -243,3 +243,9 @@ export interface ClientCreateRequest {
   ip_group_id?: number | null;
   ip_address?: string | null;
 }
+
+// Version response from server
+export interface VersionResponse {
+  managed_nebula_version: string;
+  nebula_version: string;
+}
