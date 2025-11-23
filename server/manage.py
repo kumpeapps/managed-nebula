@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from app.db import AsyncSessionLocal
 from app.models.user import User
 from app.models.client import Client, Group, ClientToken, IPAssignment, IPPool, IPGroup, FirewallRuleset, FirewallRule, client_groups, client_firewall_rulesets, ruleset_rules
-from app.models.permissions import UserGroup, UserGroupMembership, GroupPermission, ClientPermission
+from app.models.permissions import UserGroup, UserGroupMembership, GroupPermission, ClientPermission, Permission, user_group_permissions
 from app.models.ca import CACertificate
 from app.models.settings import GlobalSettings
 from app.core.auth import hash_password
@@ -26,9 +26,106 @@ import secrets
 import string
 
 
+async def bootstrap_permissions(session):
+    """Ensure all necessary RBAC permissions exist in the database."""
+    permissions_data = [
+        # Clients permissions
+        ('clients', 'read', 'View client information'),
+        ('clients', 'create', 'Create new clients'),
+        ('clients', 'update', 'Update client settings'),
+        ('clients', 'delete', 'Delete clients'),
+        ('clients', 'download', 'Download client configurations'),
+        
+        # Groups permissions (Nebula groups, not user groups)
+        ('groups', 'read', 'View Nebula groups'),
+        ('groups', 'create', 'Create new Nebula groups'),
+        ('groups', 'update', 'Update Nebula groups'),
+        ('groups', 'delete', 'Delete Nebula groups'),
+        
+        # Firewall rules permissions
+        ('firewall_rules', 'read', 'View firewall rules'),
+        ('firewall_rules', 'create', 'Create firewall rules'),
+        ('firewall_rules', 'update', 'Update firewall rules'),
+        ('firewall_rules', 'delete', 'Delete firewall rules'),
+        
+        # IP pools permissions
+        ('ip_pools', 'read', 'View IP pools'),
+        ('ip_pools', 'create', 'Create IP pools'),
+        ('ip_pools', 'update', 'Update IP pools'),
+        ('ip_pools', 'delete', 'Delete IP pools'),
+        
+        # IP groups permissions
+        ('ip_groups', 'read', 'View IP groups'),
+        ('ip_groups', 'create', 'Create IP groups'),
+        ('ip_groups', 'update', 'Update IP groups'),
+        ('ip_groups', 'delete', 'Delete IP groups'),
+        
+        # CA permissions
+        ('ca', 'read', 'View certificate authorities'),
+        ('ca', 'create', 'Create certificate authorities'),
+        ('ca', 'update', 'Update certificate authority settings'),
+        ('ca', 'delete', 'Delete certificate authorities'),
+        ('ca', 'download', 'Download CA certificates'),
+        
+        # Users permissions
+        ('users', 'read', 'View users'),
+        ('users', 'create', 'Create new users'),
+        ('users', 'update', 'Update user settings'),
+        ('users', 'delete', 'Delete users'),
+        
+        # User Groups permissions
+        ('user_groups', 'read', 'View user groups'),
+        ('user_groups', 'create', 'Create user groups'),
+        ('user_groups', 'update', 'Update user groups'),
+        ('user_groups', 'delete', 'Delete user groups'),
+        ('user_groups', 'manage_members', 'Add/remove members from user groups'),
+        
+        # Settings permissions
+        ('settings', 'read', 'View system settings'),
+        ('settings', 'update', 'Update system settings'),
+        ('settings', 'docker_compose', 'Download docker-compose configurations'),
+        
+        # Lighthouse permissions
+        ('lighthouse', 'read', 'View lighthouse settings'),
+        ('lighthouse', 'update', 'Update lighthouse settings'),
+        
+        # Dashboard permissions
+        ('dashboard', 'read', 'View dashboard and statistics'),
+    ]
+    
+    created_count = 0
+    for resource, action, description in permissions_data:
+        # Check if permission exists
+        existing = (await session.execute(
+            select(Permission).where(
+                Permission.resource == resource,
+                Permission.action == action
+            )
+        )).scalars().first()
+        
+        if not existing:
+            permission = Permission(
+                resource=resource,
+                action=action,
+                description=description
+            )
+            session.add(permission)
+            created_count += 1
+    
+    if created_count > 0:
+        await session.flush()
+    
+    return created_count
+
+
 async def create_admin_user(email: str, password: str):
     """Create an admin user and add to Administrators group."""
     async with AsyncSessionLocal() as session:
+        # Bootstrap permissions first
+        perm_count = await bootstrap_permissions(session)
+        if perm_count > 0:
+            print(f"🔐 Created {perm_count} missing permissions")
+        
         # Check if user already exists
         existing = (await session.execute(
             select(User).where(User.email == email)
@@ -110,6 +207,11 @@ async def list_users():
 async def make_admin(email: str):
     """Make an existing user an admin: add to Administrators group."""
     async with AsyncSessionLocal() as session:
+        # Bootstrap permissions first
+        perm_count = await bootstrap_permissions(session)
+        if perm_count > 0:
+            print(f"🔐 Created {perm_count} missing permissions")
+        
         user = (await session.execute(
             select(User).where(User.email == email)
         )).scalars().first()
@@ -148,13 +250,22 @@ async def create_demo_data():
         print("🌌 Creating demo data for Managed Nebula...")
         print("=" * 60)
         
+        # Bootstrap permissions first
+        print("🔐 Bootstrapping RBAC permissions...")
+        perm_count = await bootstrap_permissions(session)
+        if perm_count > 0:
+            print(f"  ✅ Created {perm_count} missing permissions")
+        else:
+            print(f"  ℹ️  All permissions already exist")
+        await session.commit()
+        
         # Check if demo data already exists
         existing_clients = (await session.execute(select(func.count(Client.id)))).scalar()
         if existing_clients > 0:
             print("⚠️  Demo data may already exist. Continuing anyway...")
         
         # 1. Create demo users
-        print("👥 Creating demo users...")
+        print("\n👥 Creating demo users...")
         
         # Ensure Administrators group exists
         admins_group = (await session.execute(select(UserGroup).where(UserGroup.name == "Administrators"))).scalars().first()
@@ -242,6 +353,94 @@ async def create_demo_data():
                         user_id=member.id
                     )
                     session.add(membership)
+        
+        # Grant permissions to user groups
+        print("\n🔐 Granting permissions to user groups...")
+        
+        # Get all read permissions for standard user groups
+        read_permissions = (await session.execute(
+            select(Permission).where(Permission.action == 'read')
+        )).scalars().all()
+        
+        # Grant read permissions to all non-admin user groups
+        for group_name, group in created_user_groups.items():
+            if not group.is_admin:  # Only grant to non-admin groups
+                for perm in read_permissions:
+                    # Check if permission already granted
+                    existing = (await session.execute(
+                        select(user_group_permissions).where(
+                            user_group_permissions.c.user_group_id == group.id,
+                            user_group_permissions.c.permission_id == perm.id
+                        )
+                    )).first()
+                    
+                    if not existing:
+                        await session.execute(
+                            user_group_permissions.insert().values(
+                                user_group_id=group.id,
+                                permission_id=perm.id
+                            )
+                        )
+                
+                print(f"  ✅ Granted read permissions to {group_name}")
+        
+        # Grant additional permissions for specific groups
+        # Developers get create/update permissions for clients and groups
+        dev_perms = (await session.execute(
+            select(Permission).where(
+                ((Permission.resource == 'clients') & (Permission.action.in_(['create', 'update', 'download']))) |
+                ((Permission.resource == 'groups') & (Permission.action.in_(['create', 'update']))) |
+                ((Permission.resource == 'firewall_rules') & (Permission.action == 'read'))
+            )
+        )).scalars().all()
+        
+        if 'Developers' in created_user_groups:
+            dev_group = created_user_groups['Developers']
+            for perm in dev_perms:
+                existing = (await session.execute(
+                    select(user_group_permissions).where(
+                        user_group_permissions.c.user_group_id == dev_group.id,
+                        user_group_permissions.c.permission_id == perm.id
+                    )
+                )).first()
+                
+                if not existing:
+                    await session.execute(
+                        user_group_permissions.insert().values(
+                            user_group_id=dev_group.id,
+                            permission_id=perm.id
+                        )
+                    )
+            print(f"  ✅ Granted additional permissions to Developers (create/update clients & groups)")
+        
+        # Operations get full permissions for IP pools, IP groups, and settings
+        ops_perms = (await session.execute(
+            select(Permission).where(
+                (Permission.resource.in_(['ip_pools', 'ip_groups', 'settings', 'lighthouse'])) |
+                ((Permission.resource == 'clients') & (Permission.action.in_(['update', 'download'])))
+            )
+        )).scalars().all()
+        
+        if 'Operations' in created_user_groups:
+            ops_group = created_user_groups['Operations']
+            for perm in ops_perms:
+                existing = (await session.execute(
+                    select(user_group_permissions).where(
+                        user_group_permissions.c.user_group_id == ops_group.id,
+                        user_group_permissions.c.permission_id == perm.id
+                    )
+                )).first()
+                
+                if not existing:
+                    await session.execute(
+                        user_group_permissions.insert().values(
+                            user_group_id=ops_group.id,
+                            permission_id=perm.id
+                        )
+                    )
+            print(f"  ✅ Granted additional permissions to Operations (manage IPs & settings)")
+        
+        await session.commit()
         
         # 3. Ensure global settings exist
         print("\n⚙️  Setting up global settings...")

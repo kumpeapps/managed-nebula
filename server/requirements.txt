@@ -21,3 +21,4 @@ pytest==8.3.3
 pytest-asyncio==0.23.8
 aiomysql==0.3.2
 asyncmy==0.2.10
+pre-commit==4.4.0

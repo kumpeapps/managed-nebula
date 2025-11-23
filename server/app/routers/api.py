@@ -3527,6 +3527,78 @@ async def revoke_group_permission(
 # ============ Token Re-issuance Endpoints ============
 
 @router.post(
+    "/clients/{client_id}/token/reissue",
+    response_model=ClientTokenReissueResponse
+)
+async def reissue_client_token_auto(
+    client_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user)
+):
+    """Re-issue a client token with new value (auto-detects active token).
+    
+    This endpoint automatically finds the active token for the client,
+    deactivates it, and generates a new one.
+    Requires admin permissions or ownership of the client.
+    """
+    # Check admin permission or ownership
+    is_admin = await user.has_permission(session, "users", "delete")
+    
+    # Verify client exists
+    client_result = await session.execute(
+        select(Client).where(Client.id == client_id)
+    )
+    client = client_result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    # Check ownership if not admin
+    if not is_admin and client.owner_user_id != user.id:
+        raise HTTPException(status_code=403, detail="Admin permission or ownership required")
+    
+    # Find active token for this client
+    token_result = await session.execute(
+        select(ClientToken).where(
+            ClientToken.client_id == client_id,
+            ClientToken.is_active == True
+        )
+    )
+    old_token = token_result.scalar_one_or_none()
+    if not old_token:
+        raise HTTPException(status_code=404, detail="No active token found for this client")
+    
+    # Deactivate old token
+    old_token.is_active = False
+    
+    # Generate new token with current prefix
+    prefix = await get_token_prefix(session)
+    new_token_value = generate_client_token(prefix)
+    
+    # Create new token
+    new_token = ClientToken(
+        client_id=client_id,
+        token=new_token_value,
+        is_active=True,
+        owner_user_id=user.id
+    )
+    session.add(new_token)
+    await session.commit()
+    await session.refresh(new_token)
+    
+    # Log the action
+    logger.info(f"Token re-issued for client {client_id} by user {user.id}")
+    
+    # Return response with full token (only time it's shown)
+    return ClientTokenReissueResponse(
+        id=new_token.id,
+        token=new_token.token,
+        client_id=new_token.client_id,
+        created_at=new_token.created_at,
+        old_token_id=old_token.id
+    )
+
+
+@router.post(
     "/clients/{client_id}/tokens/{token_id}/reissue",
     response_model=ClientTokenReissueResponse
 )
