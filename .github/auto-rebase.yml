@@ -1,0 +1,27 @@
+# Auto-rebase Configuration
+# Configure which branches should be automatically rebased when a source branch is updated
+
+# Format:
+# rebase_branches:
+#   source_branch:
+#     - target_branch1
+#     - target_branch2
+
+rebase_branches:
+  # When main is updated, automatically rebase dev
+  main:
+    - dev
+  
+  # Example: When develop is updated, rebase feature branches
+  # develop:
+  #   - feature/experimental
+  #   - staging
+  
+  # Example: Single target branch (string format also supported)
+  # release:
+  #   - hotfix
+
+# Notes:
+# - If a rebase fails due to conflicts, an issue will be created automatically
+# - Use force-with-lease for safe pushing (protects against race conditions)
+# - Manual workflow dispatch is also available for ad-hoc rebases
