@@ -16,7 +16,7 @@ fi
 # Wait for server to be reachable
 echo "Waiting for server at ${SERVER_URL}..."
 for i in {1..60}; do
-  if curl -sf "${SERVER_URL%/}/v1/healthz" >/dev/null; then
+  if curl -ksfL "${SERVER_URL%/}/v1/healthz" >/dev/null; then
     break
   fi
   sleep 2

@@ -154,6 +154,9 @@ async def build_client_response(client: Client, session: AsyncSession, user: Use
         created_at=client.created_at,
         config_last_changed_at=client.config_last_changed_at,
         last_config_download_at=client.last_config_download_at,
+        client_version=client.client_version,
+        nebula_version=client.nebula_version,
+        last_version_report_at=client.last_version_report_at,
         owner=owner_ref,
         groups=[GroupRef(id=g.id, name=g.name) for g in client.groups],
         firewall_rulesets=[FirewallRulesetRef(

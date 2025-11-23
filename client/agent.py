@@ -57,7 +57,9 @@ def fetch_config(token: str, server_url: str, public_key: str) -> dict:
         "client_version": __version__,
         "nebula_version": get_nebula_version()
     }
-    with httpx.Client(timeout=30) as client:
+    # Allow self-signed certificates in development (set ALLOW_SELF_SIGNED_CERT=false in production)
+    verify_ssl = os.getenv("ALLOW_SELF_SIGNED_CERT", "false").lower() != "true"
+    with httpx.Client(timeout=30, verify=verify_ssl) as client:
         r = client.post(url, json=payload)
         r.raise_for_status()
         return r.json()
