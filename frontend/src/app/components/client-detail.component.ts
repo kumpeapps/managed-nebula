@@ -67,6 +67,18 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
                 </div>
               </div>
 
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Client Version</label>
+                  <div class="readonly-field">{{ client.client_version || 'Unknown' }}</div>
+                  <small class="text-muted" *ngIf="client.last_version_report_at">Last reported: {{ client.last_version_report_at | date:'short' }}</small>
+                </div>
+                <div class="form-group">
+                  <label>Nebula Version</label>
+                  <div class="readonly-field">{{ client.nebula_version || 'Unknown' }}</div>
+                </div>
+              </div>
+
               <h3>IP Configuration</h3>
               <div class="form-row">
                 <div class="form-group">
@@ -483,6 +495,15 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
       margin: 0.25rem 0 0 0;
       font-size: 0.85rem;
       color: #666;
+    }
+    
+    .readonly-field {
+      padding: 0.5rem;
+      background: #f9f9f9;
+      border: 1px solid #e0e0e0;
+      border-radius: 4px;
+      font-family: monospace;
+      color: #333;
     }
     
     .info-grid {

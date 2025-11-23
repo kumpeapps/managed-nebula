@@ -31,10 +31,34 @@ def ensure_keypair() -> tuple[str, str]:
     return private_key_pem, public_key
 
 
+def get_nebula_version() -> str:
+    """Get nebula binary version"""
+    try:
+        result = subprocess.run(
+            ["nebula", "-version"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        # Parse output like "Version: 1.9.7"
+        for line in result.stdout.splitlines():
+            if line.startswith("Version:"):
+                return line.split(":", 1)[1].strip()
+        return "unknown"
+    except Exception:
+        return "unknown"
+
+
 def fetch_config(token: str, server_url: str, public_key: str) -> dict:
     url = server_url.rstrip("/") + "/v1/client/config"
+    payload = {
+        "token": token,
+        "public_key": public_key,
+        "client_version": __version__,
+        "nebula_version": get_nebula_version()
+    }
     with httpx.Client(timeout=30) as client:
-        r = client.post(url, json={"token": token, "public_key": public_key})
+        r = client.post(url, json=payload)
         r.raise_for_status()
         return r.json()
 
