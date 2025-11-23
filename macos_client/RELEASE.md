@@ -82,7 +82,7 @@ If you need to create a release manually:
 - **Complete installation** with Nebula binaries and LaunchDaemon
 - **Download**: `ManagedNebula-1.0.0.pkg` (26MB)
 - **Install**: Double-click to install
-- **Includes**: App + Nebula v1.8.2 + Auto-start configuration
+- **Includes**: App + Nebula v1.9.7 + Auto-start configuration
 
 ### DMG Installer
 - **For users who already have Nebula via Homebrew**

@@ -595,3 +595,11 @@ class GitHubSecretRevocationResponse(BaseModel):
     """GitHub secret scanning revocation response."""
     message: str
     revoked_count: int
+
+
+# ============ Version Schemas ============
+
+class VersionResponse(BaseModel):
+    """Response model for version information."""
+    managed_nebula_version: str
+    nebula_version: str
