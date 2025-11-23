@@ -590,7 +590,15 @@ export class ClientsComponent implements OnInit {
     this.ipGroups = [];
     this.availableIPs = [];
     if (this.newClient.pool_id) {
-  this.apiService.getIPGroups(this.newClient.pool_id).subscribe({ next: (gs: IPGroup[]) => this.ipGroups = gs });
+      this.apiService.getIPGroups(this.newClient.pool_id).subscribe({ 
+        next: (gs: IPGroup[]) => this.ipGroups = gs,
+        error: (err: any) => {
+          // If 403, user doesn't have permission - silently fail
+          if (err.status !== 403) {
+            console.error('Failed to load IP groups:', err);
+          }
+        }
+      });
       this.loadAvailableIPs();
     }
   }
