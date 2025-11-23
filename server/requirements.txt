@@ -4,7 +4,7 @@ SQLAlchemy==2.0.36
 alembic==1.13.3
 pydantic==2.9.2
 python-multipart==0.0.9
-Jinja2==3.1.4
+Jinja2==3.1.6
 itsdangerous==2.2.0
 bcrypt==4.0.1
 passlib[bcrypt]==1.7.4
