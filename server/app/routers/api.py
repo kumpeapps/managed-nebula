@@ -177,27 +177,40 @@ async def get_version():
     Returns version information for both the Managed Nebula server
     and the installed Nebula binary.
     """
-    import subprocess
+    import asyncio
     from .. import __version__ as server_version
     
     # Get Nebula version
     nebula_version = "unknown"
     try:
-        result = subprocess.run(
-            ["nebula", "-version"],
-            capture_output=True,
-            text=True,
-            timeout=5
+        # Run subprocess asynchronously to avoid blocking the event loop
+        process = await asyncio.create_subprocess_exec(
+            "nebula", "-version",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
         )
-        if result.returncode == 0:
+        
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(),
+            timeout=5.0
+        )
+        
+        if process.returncode == 0:
             # Parse version from output like "Version: 1.9.7"
-            for line in result.stdout.split("\n"):
+            output = stdout.decode('utf-8')
+            for line in output.split("\n"):
                 if line.startswith("Version:"):
                     nebula_version = line.replace("Version:", "").strip()
                     break
         else:
             nebula_version = "error"
-    except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+    except asyncio.TimeoutError:
+        logger.warning("Timeout getting Nebula version")
+        nebula_version = "timeout"
+    except FileNotFoundError:
+        logger.warning("Nebula binary not found")
+        nebula_version = "not_installed"
+    except Exception as e:
         logger.warning(f"Failed to get Nebula version: {e}")
         nebula_version = "unavailable"
     

@@ -15,8 +15,12 @@ fi
 
 # Wait for server to be reachable
 echo "Waiting for server at ${SERVER_URL}..."
+CURL_OPTS="-sfL"
+if [[ "${ALLOW_SELF_SIGNED_CERT:-false}" == "true" ]]; then
+  CURL_OPTS="-ksfL"
+fi
 for i in {1..60}; do
-  if curl -ksfL "${SERVER_URL%/}/v1/healthz" >/dev/null; then
+  if curl $CURL_OPTS "${SERVER_URL%/}/v1/healthz" >/dev/null; then
     break
   fi
   sleep 2
