@@ -32,6 +32,27 @@ class FirewallRulesetRef(BaseModel):
     name: str
 
 
+class SecurityAdvisoryInfo(BaseModel):
+    """Security advisory information."""
+    id: str
+    severity: str
+    summary: str
+    affected_versions: str
+    patched_version: Optional[str] = None
+    published_at: str
+    url: str
+    cve_id: Optional[str] = None
+
+
+class VersionStatus(BaseModel):
+    """Version status information for a client."""
+    client_version_status: str  # current, outdated, vulnerable, unknown
+    nebula_version_status: str  # current, outdated, vulnerable, unknown
+    client_advisories: List[SecurityAdvisoryInfo] = []
+    nebula_advisories: List[SecurityAdvisoryInfo] = []
+    days_behind: Optional[int] = None
+
+
 class ClientResponse(BaseModel):
     """Response model for Client."""
     id: int
@@ -52,6 +73,7 @@ class ClientResponse(BaseModel):
     groups: List[GroupRef]
     firewall_rulesets: List[FirewallRulesetRef] = []
     token: Optional[str]  # Only included for admins or owner
+    version_status: Optional[VersionStatus] = None  # Optional computed field
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -608,3 +630,14 @@ class VersionResponse(BaseModel):
     """Response model for version information."""
     managed_nebula_version: str
     nebula_version: str
+
+
+class VersionStatusResponse(BaseModel):
+    """Response model for version status check."""
+    latest_client_version: Optional[str] = None
+    latest_nebula_version: Optional[str] = None
+    client_advisories: List[SecurityAdvisoryInfo] = []
+    nebula_advisories: List[SecurityAdvisoryInfo] = []
+    last_checked: Optional[datetime] = None
+    
+    model_config = ConfigDict(from_attributes=True)
