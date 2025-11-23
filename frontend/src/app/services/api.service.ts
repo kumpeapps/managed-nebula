@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { Client, Group, FirewallRuleset, IPPool, IPGroup, AvailableIP, CACertificate, User, ClientUpdateRequest, ClientCreateRequest, ClientCertificate, ClientConfigDownload, Settings, SettingsUpdate, DockerComposeTemplate, PlaceholdersResponse, Permission, VersionResponse } from '../models';
+import { Client, Group, FirewallRuleset, IPPool, IPGroup, AvailableIP, CACertificate, User, ClientUpdateRequest, ClientCreateRequest, ClientCertificate, ClientConfigDownload, Settings, SettingsUpdate, DockerComposeTemplate, PlaceholdersResponse, Permission, VersionResponse, VersionStatusResponse } from '../models';
 
 @Injectable({
   providedIn: 'root'
@@ -319,5 +319,10 @@ export class ApiService {
   // Version endpoint
   getVersion(): Observable<VersionResponse> {
     return this.http.get<VersionResponse>(`${this.apiUrl}/version`, { withCredentials: true });
+  }
+
+  // Version status endpoint
+  getVersionStatus(): Observable<VersionStatusResponse> {
+    return this.http.get<VersionStatusResponse>(`${this.apiUrl}/version-status`, { withCredentials: true });
   }
 }
