@@ -7,6 +7,7 @@ from pathlib import Path
 import httpx
 import subprocess
 
+__version__ = "1.0.0"
 
 STATE_DIR = Path(os.getenv("NEBULA_STATE_DIR", "/var/lib/nebula"))
 CONFIG_PATH = Path("/etc/nebula/config.yml")

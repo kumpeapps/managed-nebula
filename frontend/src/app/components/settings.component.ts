@@ -2,7 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { AuthService } from '../services/auth.service';
 import { ApiService } from '../services/api.service';
 import { NotificationService } from '../services/notification.service';
-import { Settings } from '../models';
+import { Settings, VersionResponse } from '../models';
+import { environment } from '../../environments/environment';
 
 @Component({
     selector: 'app-settings',
@@ -121,6 +122,23 @@ import { Settings } from '../models';
             
             <div class="form-actions">
               <button class="save-btn" (click)="saveSettings()">Save Changes</button>
+            </div>
+          </div>
+
+          <div class="setting-section version-section">
+            <div class="version-info">
+              <div class="version-item">
+                <span class="version-label">Frontend Version:</span>
+                <span class="version-value">{{frontendVersion}}</span>
+              </div>
+              <div class="version-item">
+                <span class="version-label">Server Version:</span>
+                <span class="version-value">{{serverVersion || 'Loading...'}}</span>
+              </div>
+              <div class="version-item">
+                <span class="version-label">Nebula Version:</span>
+                <span class="version-value">{{nebulaVersion || 'Loading...'}}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -438,6 +456,37 @@ import { Settings } from '../models';
         width: 100%;
       }
     }
+
+    .version-section {
+      border-top: 2px solid #e0e0e0;
+      padding-top: 1.5rem;
+      margin-top: 2rem;
+    }
+
+    .version-info {
+      display: flex;
+      gap: 2rem;
+      padding: 1rem;
+      background: #f9f9f9;
+      border-radius: 4px;
+      flex-wrap: wrap;
+    }
+
+    .version-item {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .version-label {
+      font-weight: 600;
+      color: #666;
+    }
+
+    .version-value {
+      color: #333;
+      font-family: monospace;
+    }
   `],
     standalone: false
 })
@@ -453,6 +502,9 @@ export class SettingsComponent implements OnInit {
   placeholders: any[] = [];
   previewTemplate: string = '';
   templateOriginal: string = '';
+  frontendVersion: string = environment.version;
+  serverVersion: string = '';
+  nebulaVersion: string = '';
 
   constructor(
     private authService: AuthService,
@@ -467,6 +519,7 @@ export class SettingsComponent implements OnInit {
     }
     this.loadSettings();
     this.loadPlaceholders();
+    this.loadVersions();
   }
 
   loadSettings(): void {
@@ -553,5 +606,19 @@ export class SettingsComponent implements OnInit {
 
   onTemplateChange(): void {
     this.updatePreview();
+  }
+
+  loadVersions(): void {
+    this.apiService.getVersion().subscribe({
+      next: (version: VersionResponse) => {
+        this.serverVersion = version.managed_nebula_version;
+        this.nebulaVersion = version.nebula_version;
+      },
+      error: (err: any) => {
+        console.error('Failed to load version info:', err);
+        this.serverVersion = 'Error';
+        this.nebulaVersion = 'Error';
+      }
+    });
   }
 }

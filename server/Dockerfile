@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.6
 FROM python:3.11-slim
 
+ARG VERSION=dev-latest
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
@@ -14,20 +16,18 @@ RUN set -eux; \
             default-libmysqlclient-dev \
             nano \
             rustc cargo; \
-        if ! apt-get install -y --no-install-recommends nebula; then \
-            echo "Debian package 'nebula' not found; installing from upstream release"; \
-            arch="$(dpkg --print-architecture)"; \
-            case "$arch" in \
-                amd64) neb_arch="amd64" ;; \
-                arm64) neb_arch="arm64" ;; \
-                armhf|armel|arm) neb_arch="arm" ;; \
-                *) echo "Unsupported architecture: $arch"; exit 1 ;; \
-            esac; \
-            NEBULA_VERSION="1.9.7"; \
-            curl -fsSL -o /tmp/nebula.tar.gz "https://github.com/slackhq/nebula/releases/download/v${NEBULA_VERSION}/nebula-linux-${neb_arch}.tar.gz"; \
-            tar -C /usr/local/bin -xzvf /tmp/nebula.tar.gz nebula nebula-cert; \
-            rm -f /tmp/nebula.tar.gz; \
-        fi; \
+        echo "Installing Nebula v1.9.7 from upstream release (Debian package is outdated)"; \
+        arch="$(dpkg --print-architecture)"; \
+        case "$arch" in \
+            amd64) neb_arch="amd64" ;; \
+            arm64) neb_arch="arm64" ;; \
+            armhf|armel|arm) neb_arch="arm" ;; \
+            *) echo "Unsupported architecture: $arch"; exit 1 ;; \
+        esac; \
+        NEBULA_VERSION="1.9.7"; \
+        curl -fsSL -o /tmp/nebula.tar.gz "https://github.com/slackhq/nebula/releases/download/v${NEBULA_VERSION}/nebula-linux-${neb_arch}.tar.gz"; \
+        tar -C /usr/local/bin -xzvf /tmp/nebula.tar.gz nebula nebula-cert; \
+        rm -f /tmp/nebula.tar.gz; \
         rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

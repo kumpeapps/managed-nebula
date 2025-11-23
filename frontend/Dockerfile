@@ -1,6 +1,8 @@
 # Multi-stage build: Node build + Nginx serve
 FROM node:20-alpine AS build
 
+ARG VERSION=dev-latest
+
 WORKDIR /app
 
 # Copy package files and install dependencies
@@ -12,6 +14,11 @@ RUN npm ci --no-audit --no-fund
 
 # Copy source code and build
 COPY . .
+
+# Update version in environment files
+RUN sed -i "s/version: '.*'/version: '${VERSION}'/" src/environments/environment.ts && \
+    sed -i "s/version: '.*'/version: '${VERSION}'/" src/environments/environment.prod.ts
+
 RUN npm run build:prod
 
 # Production stage - nginx

@@ -4,6 +4,7 @@ import Cocoa
 class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     private var configuration: Configuration
     private let keychainService: KeychainService
+    private let nebulaManager: NebulaManager
     
     var onSave: ((Configuration) -> Void)?
     
@@ -14,12 +15,13 @@ class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     private let autoStartCheckbox = NSButton(checkboxWithTitle: "Auto-start Nebula", target: nil, action: nil)
     private let launchAtLoginCheckbox = NSButton(checkboxWithTitle: "Launch at login", target: nil, action: nil)
     
-    init(configuration: Configuration, keychainService: KeychainService) {
+    init(configuration: Configuration, keychainService: KeychainService, nebulaManager: NebulaManager) {
         self.configuration = configuration
         self.keychainService = keychainService
+        self.nebulaManager = nebulaManager
         
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 320),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 360),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -80,6 +82,16 @@ class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         launchAtLoginCheckbox.frame = NSRect(x: 20, y: 110, width: 200, height: 20)
         launchAtLoginCheckbox.state = configuration.launchAtLogin ? .on : .off
         contentView.addSubview(launchAtLoginCheckbox)
+        
+        // Version information
+        let appVersion = getAppVersion()
+        let nebulaVersion = nebulaManager.getNebulaVersion()
+        
+        let versionLabel = NSTextField(labelWithString: "ManagedNebula v\(appVersion) • Nebula v\(nebulaVersion)")
+        versionLabel.frame = NSRect(x: 20, y: 65, width: 350, height: 20)
+        versionLabel.font = NSFont.systemFont(ofSize: 10)
+        versionLabel.textColor = .secondaryLabelColor
+        contentView.addSubview(versionLabel)
         
         // Buttons
         let saveButton = NSButton()
@@ -165,5 +177,13 @@ class PreferencesWindowController: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         // Nothing extra for now; controller will be released by owner
+    }
+    
+    /// Get application version from bundle
+    private func getAppVersion() -> String {
+        if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+            return version
+        }
+        return "Unknown"
     }
 }
