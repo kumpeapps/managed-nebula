@@ -1,0 +1,141 @@
+name: Check Nebula Updates
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Weekly on Monday at 9 AM UTC
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Check latest Nebula version
+        id: check
+        run: |
+          # Get latest release from GitHub API
+          LATEST=$(curl -s https://api.github.com/repos/slackhq/nebula/releases/latest | jq -r .tag_name)
+          echo "latest=$LATEST" >> $GITHUB_OUTPUT
+          echo "Latest Nebula version: $LATEST"
+          
+          # Check current versions in our codebase
+          SERVER_VER=$(grep 'NEBULA_VERSION=' server/Dockerfile | head -1 | cut -d'"' -f2)
+          CLIENT_VER=$(grep 'NEBULA_VERSION=' client/Dockerfile | head -1 | cut -d'"' -f2)
+          MACOS_VER=$(grep 'NEBULA_VERSION=' macos_client/install.sh | head -1 | cut -d'"' -f2)
+          
+          echo "server_ver=$SERVER_VER" >> $GITHUB_OUTPUT
+          echo "client_ver=$CLIENT_VER" >> $GITHUB_OUTPUT
+          echo "macos_ver=$MACOS_VER" >> $GITHUB_OUTPUT
+          
+          echo "Current versions:"
+          echo "  Server: $SERVER_VER"
+          echo "  Client: $CLIENT_VER"
+          echo "  macOS:  $MACOS_VER"
+          
+          # Check if update is needed (strip 'v' prefix for comparison)
+          LATEST_NUM="${LATEST#v}"
+          if [ "v$SERVER_VER" != "$LATEST" ] || [ "v$CLIENT_VER" != "$LATEST" ] || [ "$MACOS_VER" != "$LATEST" ]; then
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+            echo "✅ Update needed!"
+          else
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+            echo "✅ All versions are up to date"
+          fi
+      
+      - name: Check for existing issue
+        id: existing
+        if: steps.check.outputs.update_needed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'dependencies,nebula-update'
+            });
+            
+            const latest = '${{ steps.check.outputs.latest }}';
+            const existing = issues.data.find(issue => 
+              issue.title.includes(`Update Nebula to ${latest}`)
+            );
+            
+            core.setOutput('exists', existing ? 'true' : 'false');
+            if (existing) {
+              core.setOutput('issue_number', existing.number);
+            }
+      
+      - name: Create issue if update needed
+        if: steps.check.outputs.update_needed == 'true' && steps.existing.outputs.exists != 'true'
+        uses: actions/github-script@v7
+        env:
+          LATEST: ${{ steps.check.outputs.latest }}
+          SERVER_VER: ${{ steps.check.outputs.server_ver }}
+          CLIENT_VER: ${{ steps.check.outputs.client_ver }}
+          MACOS_VER: ${{ steps.check.outputs.macos_ver }}
+        with:
+          script: |
+            const latest = process.env.LATEST;
+            const latestNum = latest.replace('v', '');
+            
+            const body = `## 🚀 New Nebula Version Available
+            
+            A new version of Nebula has been released: **${latest}**
+            
+            ### Current Versions
+            - **Server Docker**: ${process.env.SERVER_VER}
+            - **Client Docker**: ${process.env.CLIENT_VER}
+            - **macOS Installer**: ${process.env.MACOS_VER}
+            
+            ### Files to Update
+            - [ ] \`server/Dockerfile\` (line 26)
+            - [ ] \`client/Dockerfile\` (line 20)
+            - [ ] \`macos_client/install.sh\` (line 6)
+            - [ ] \`macos_client/DEPLOYMENT_READY.md\`
+            - [ ] \`.github/workflows/macos-release.yml\`
+            
+            ### Release Notes
+            View the release notes: https://github.com/slackhq/nebula/releases/tag/${latest}
+            
+            ### Security Check
+            🔒 Check for security advisories: https://github.com/slackhq/nebula/security/advisories
+            
+            ### Action Items
+            1. Review release notes for breaking changes
+            2. Update version in all files listed above
+            3. Test in development environment
+            4. Create PR following branching strategy (target \`dev\` branch)
+            5. Update any documentation references
+            
+            ---
+            *This issue was automatically created by the Nebula update checker workflow.*`;
+            
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Update Nebula to ${latest}`,
+              body: body,
+              labels: ['dependencies', 'nebula-update', 'enhancement']
+            });
+            
+            core.info(`Created issue #${issue.data.number}`);
+      
+      - name: Comment on existing issue
+        if: steps.check.outputs.update_needed == 'true' && steps.existing.outputs.exists == 'true'
+        uses: actions/github-script@v7
+        env:
+          ISSUE_NUMBER: ${{ steps.existing.outputs.issue_number }}
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: parseInt(process.env.ISSUE_NUMBER),
+              body: '👋 This issue is still relevant. The update has not been applied yet.'
+            });

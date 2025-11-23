@@ -5,7 +5,7 @@
 ### 1. Professional Installers
 - ✅ **PKG Installer** (26MB) - Complete package with:
   - ManagedNebula.app
-  - Nebula v1.8.2 binaries (nebula + nebula-cert)
+  - Nebula v1.9.7 binaries (nebula + nebula-cert)
   - LaunchDaemon for auto-start
   - Pre/post-install scripts for setup
   
