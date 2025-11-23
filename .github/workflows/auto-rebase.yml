@@ -38,7 +38,7 @@ jobs:
             
             # Parse YAML and extract branch pairs
             # Format: source_branch: [target_branch1, target_branch2]
-            python3 << 'EOF'
+            python3 << 'EOF' >> "$GITHUB_OUTPUT"
           import yaml
           import json
           import sys
@@ -69,7 +69,10 @@ jobs:
               print(f"Error reading config: {e}", file=sys.stderr)
               print("branches=")
           EOF
-          } >> "$GITHUB_OUTPUT"
+          else
+            echo "Config file not found, skipping rebase"
+            echo "branches=" >> "$GITHUB_OUTPUT"
+          fi
       
       - name: Rebase target branches
         if: steps.config.outputs.branches != ''
