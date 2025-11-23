@@ -27,6 +27,27 @@ import { User, Client } from '../models';
             <h3>Blocked Clients</h3>
             <p class="stat-number">{{ blockedClients }}</p>
           </div>
+          
+          <div class="stat-card version-health">
+            <h3>Version Health</h3>
+            <div class="version-stats">
+              <div class="version-stat">
+                <span class="version-icon">🟢</span>
+                <span class="version-count">{{ currentVersionClients }}</span>
+                <span class="version-label">Current</span>
+              </div>
+              <div class="version-stat">
+                <span class="version-icon">🟡</span>
+                <span class="version-count">{{ outdatedClients }}</span>
+                <span class="version-label">Outdated</span>
+              </div>
+              <div class="version-stat">
+                <span class="version-icon">🔴</span>
+                <span class="version-count">{{ vulnerableClients }}</span>
+                <span class="version-label">Vulnerable</span>
+              </div>
+            </div>
+          </div>
         </div>
         
         <div class="recent-clients">
@@ -149,6 +170,37 @@ import { User, Client } from '../models';
       background: #f8d7da;
       color: #721c24;
     }
+    
+    .version-health {
+      grid-column: span 1;
+    }
+    
+    .version-stats {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    
+    .version-stat {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+    }
+    
+    .version-icon {
+      font-size: 1.2rem;
+    }
+    
+    .version-count {
+      font-weight: bold;
+      color: #333;
+      min-width: 2rem;
+    }
+    
+    .version-label {
+      color: #666;
+    }
   `],
     standalone: false
 })
@@ -158,6 +210,9 @@ export class DashboardComponent implements OnInit {
   lighthouses = 0;
   blockedClients = 0;
   recentClients: Client[] = [];
+  currentVersionClients = 0;
+  outdatedClients = 0;
+  vulnerableClients = 0;
 
   constructor(
     private authService: AuthService,
@@ -176,11 +231,39 @@ export class DashboardComponent implements OnInit {
         this.lighthouses = clients.filter(c => c.is_lighthouse).length;
         this.blockedClients = clients.filter(c => c.is_blocked).length;
         this.recentClients = clients.slice(0, 10);
+        
+        // Calculate version health statistics
+        this.calculateVersionHealth(clients);
       },
       error: (error: unknown) => {
         console.error('Failed to load dashboard data:', error);
       }
     });
+  }
+
+  calculateVersionHealth(clients: Client[]): void {
+    this.currentVersionClients = 0;
+    this.outdatedClients = 0;
+    this.vulnerableClients = 0;
+    
+    for (const client of clients) {
+      if (!client.version_status) {
+        // Unknown status - don't count
+        continue;
+      }
+      
+      const clientStatus = client.version_status.client_version_status;
+      const nebulaStatus = client.version_status.nebula_version_status;
+      
+      // Prioritize: vulnerable > outdated > current
+      if (clientStatus === 'vulnerable' || nebulaStatus === 'vulnerable') {
+        this.vulnerableClients++;
+      } else if (clientStatus === 'outdated' || nebulaStatus === 'outdated') {
+        this.outdatedClients++;
+      } else if (clientStatus === 'current' && nebulaStatus === 'current') {
+        this.currentVersionClients++;
+      }
+    }
   }
 
 }

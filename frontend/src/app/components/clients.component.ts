@@ -74,9 +74,14 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
                   </td>
                   <td class="hide-mobile">
                     <div class="version-info" style="font-size: 0.85em; line-height: 1.4;">
-                      <div *ngIf="client.client_version">Client: {{client.client_version}}</div>
-                      <div *ngIf="client.nebula_version">Nebula: {{client.nebula_version}}</div>
-                      <div *ngIf="!client.client_version && !client.nebula_version" class="text-muted">Unknown</div>
+                      <span class="version-status-icon" [title]="getVersionStatusTitle(client)" style="cursor: help; margin-right: 0.5em;">
+                        {{getVersionStatusIcon(client)}}
+                      </span>
+                      <div style="display: inline-block;">
+                        <div *ngIf="client.client_version">Client: {{client.client_version}}</div>
+                        <div *ngIf="client.nebula_version">Nebula: {{client.nebula_version}}</div>
+                        <div *ngIf="!client.client_version && !client.nebula_version" class="text-muted">Unknown</div>
+                      </div>
                     </div>
                   </td>
                   <td class="hide-mobile">
@@ -698,6 +703,58 @@ export class ClientsComponent implements OnInit {
         this.isLoading = false;
       }
     });
+  }
+
+  getVersionStatusIcon(client: Client): string {
+    // Return an emoji icon based on version status
+    if (!client.client_version && !client.nebula_version) {
+      return '⚪'; // Unknown - gray circle
+    }
+    if (client.version_status) {
+      const clientStatus = client.version_status.client_version_status;
+      const nebulaStatus = client.version_status.nebula_version_status;
+      
+      // If either is vulnerable, show red
+      if (clientStatus === 'vulnerable' || nebulaStatus === 'vulnerable') {
+        return '🔴'; // Vulnerable - red circle
+      }
+      // If either is outdated, show yellow
+      if (clientStatus === 'outdated' || nebulaStatus === 'outdated') {
+        return '🟡'; // Outdated - yellow circle
+      }
+      // If both are current, show green
+      if (clientStatus === 'current' && nebulaStatus === 'current') {
+        return '🟢'; // Current - green circle
+      }
+    }
+    return '⚪'; // Unknown by default
+  }
+
+  getVersionStatusTitle(client: Client): string {
+    // Return tooltip text for version status
+    if (!client.client_version && !client.nebula_version) {
+      return 'Version unknown - client has not reported version information';
+    }
+    if (client.version_status) {
+      const clientStatus = client.version_status.client_version_status;
+      const nebulaStatus = client.version_status.nebula_version_status;
+      const advisories = [
+        ...client.version_status.client_advisories,
+        ...client.version_status.nebula_advisories
+      ];
+      
+      if (advisories.length > 0) {
+        return `⚠️ ${advisories.length} security ${advisories.length === 1 ? 'advisory' : 'advisories'} - update recommended`;
+      }
+      if (clientStatus === 'outdated' || nebulaStatus === 'outdated') {
+        const daysBehind = client.version_status.days_behind;
+        return `Outdated - ${daysBehind ? daysBehind + ' days behind latest release' : 'update available'}`;
+      }
+      if (clientStatus === 'current' && nebulaStatus === 'current') {
+        return 'Up to date ✓';
+      }
+    }
+    return 'Version status unknown';
   }
 
   viewClient(id: number): void {
