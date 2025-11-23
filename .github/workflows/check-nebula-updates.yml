@@ -27,7 +27,7 @@ jobs:
           # Check current versions in our codebase
           SERVER_VER=$(grep 'NEBULA_VERSION=' server/Dockerfile | head -1 | cut -d'"' -f2)
           CLIENT_VER=$(grep 'NEBULA_VERSION=' client/Dockerfile | head -1 | cut -d'"' -f2)
-          MACOS_VER=$(grep 'NEBULA_VERSION=' macos_client/install.sh | head -1 | cut -d'"' -f2)
+          MACOS_VER=$(grep 'NEBULA_VERSION=' macos_client/install.sh | head -1 | sed -E 's/.*:-([^}]+).*/\1/')
           
           echo "server_ver=$SERVER_VER" >> $GITHUB_OUTPUT
           echo "client_ver=$CLIENT_VER" >> $GITHUB_OUTPUT
