@@ -39,6 +39,7 @@ export interface Client {
   firewall_rulesets: FirewallRulesetRef[];
   token?: string | null; // only for admins
   owner?: UserRef | null; // owner information
+  version_status?: VersionStatus | null; // optional computed field
 }
 
 export interface ClientPermission {
@@ -251,4 +252,34 @@ export interface ClientCreateRequest {
 export interface VersionResponse {
   managed_nebula_version: string;
   nebula_version: string;
+}
+
+// Security advisory information
+export interface SecurityAdvisoryInfo {
+  id: string;
+  severity: string;
+  summary: string;
+  affected_versions: string;
+  patched_version: string | null;
+  published_at: string;
+  url: string;
+  cve_id: string | null;
+}
+
+// Version status information for a client
+export interface VersionStatus {
+  client_version_status: string; // current, outdated, vulnerable, unknown
+  nebula_version_status: string; // current, outdated, vulnerable, unknown
+  client_advisories: SecurityAdvisoryInfo[];
+  nebula_advisories: SecurityAdvisoryInfo[];
+  days_behind: number | null;
+}
+
+// Version status response from server
+export interface VersionStatusResponse {
+  latest_client_version: string | null;
+  latest_nebula_version: string | null;
+  client_advisories: SecurityAdvisoryInfo[];
+  nebula_advisories: SecurityAdvisoryInfo[];
+  last_checked: string | null;
 }
