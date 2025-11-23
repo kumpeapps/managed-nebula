@@ -1,10 +1,8 @@
 """End-to-end tests for token management and GitHub Secret Scanning."""
-import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 import hmac
 import hashlib
-import json
 
 
 client = TestClient(app)

@@ -1,11 +1,8 @@
 """Public endpoints (no authentication required)."""
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from typing import List
 
 from ..db import get_session
-from ..models.system_settings import SystemSettings
 from ..models.schemas import GitHubSecretScanningPattern
 from ..services.token_manager import get_token_prefix
 from ..core.github_verification import get_github_pattern_regex

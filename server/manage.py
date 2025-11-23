@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from app.db import AsyncSessionLocal
 from app.models.user import User
 from app.models.client import Client, Group, ClientToken, IPAssignment, IPPool, IPGroup, FirewallRuleset, FirewallRule, client_groups, client_firewall_rulesets, ruleset_rules
-from app.models.permissions import UserGroup, UserGroupMembership, GroupPermission, ClientPermission, Permission, user_group_permissions
+from app.models.permissions import UserGroup, UserGroupMembership, ClientPermission, Permission, user_group_permissions
 from app.models.ca import CACertificate
 from app.models.settings import GlobalSettings
 from app.core.auth import hash_password
