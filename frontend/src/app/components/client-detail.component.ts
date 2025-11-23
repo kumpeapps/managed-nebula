@@ -79,6 +79,36 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
                 </div>
               </div>
 
+              <!-- Version Status Section -->
+              <div class="version-status-section" *ngIf="client.version_status">
+                <h4>Version Status</h4>
+                <div class="version-status-grid">
+                  <div class="version-status-item">
+                    <span class="status-icon">{{ getVersionStatusIcon(client.version_status.client_version_status) }}</span>
+                    <span class="status-label">Client: {{ client.version_status.client_version_status }}</span>
+                  </div>
+                  <div class="version-status-item">
+                    <span class="status-icon">{{ getVersionStatusIcon(client.version_status.nebula_version_status) }}</span>
+                    <span class="status-label">Nebula: {{ client.version_status.nebula_version_status }}</span>
+                  </div>
+                </div>
+                
+                <div class="advisory-list" *ngIf="hasAdvisories(client.version_status)">
+                  <h5>⚠️ Security Advisories</h5>
+                  <div class="advisory" *ngFor="let advisory of getAllAdvisories(client.version_status)">
+                    <div class="advisory-header">
+                      <span class="advisory-id">{{ advisory.id }}</span>
+                      <span class="advisory-severity" [class]="'severity-' + advisory.severity">{{ advisory.severity }}</span>
+                    </div>
+                    <p class="advisory-summary">{{ advisory.summary }}</p>
+                    <div class="advisory-footer">
+                      <small>Affected: {{ advisory.affected_versions }}</small>
+                      <a [href]="advisory.url" target="_blank" class="advisory-link">View Details →</a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <h3>IP Configuration</h3>
               <div class="form-row">
                 <div class="form-group">
@@ -725,6 +755,134 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
         padding: 0.5rem 0.25rem;
       }
     }
+    
+    /* Version Status Styles */
+    .version-status-section {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin: 1.5rem 0;
+    }
+    
+    .version-status-section h4 {
+      margin-top: 0;
+      margin-bottom: 1rem;
+      color: #333;
+      font-size: 1.1rem;
+    }
+    
+    .version-status-section h5 {
+      margin-top: 1.5rem;
+      margin-bottom: 0.75rem;
+      color: #333;
+      font-size: 1rem;
+    }
+    
+    .version-status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    
+    .version-status-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem;
+      background: white;
+      border-radius: 6px;
+      border: 1px solid #e0e0e0;
+    }
+    
+    .status-icon {
+      font-size: 1.5rem;
+    }
+    
+    .status-label {
+      font-weight: 500;
+      text-transform: capitalize;
+    }
+    
+    .advisory-list {
+      margin-top: 1rem;
+    }
+    
+    .advisory {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 6px;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+    }
+    
+    .advisory-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+    
+    .advisory-id {
+      font-weight: 600;
+      color: #333;
+    }
+    
+    .advisory-severity {
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    
+    .severity-critical {
+      background: #dc3545;
+      color: white;
+    }
+    
+    .severity-high {
+      background: #fd7e14;
+      color: white;
+    }
+    
+    .severity-medium {
+      background: #ffc107;
+      color: #333;
+    }
+    
+    .severity-low {
+      background: #17a2b8;
+      color: white;
+    }
+    
+    .advisory-summary {
+      margin: 0.5rem 0;
+      color: #333;
+    }
+    
+    .advisory-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+    }
+    
+    .advisory-footer small {
+      color: #666;
+    }
+    
+    .advisory-link {
+      color: #007bff;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    
+    .advisory-link:hover {
+      text-decoration: underline;
+    }
   `],
     standalone: false
 })
@@ -1153,5 +1311,31 @@ export class ClientDetailComponent implements OnInit {
       },
       error: (err: any) => this.notificationService.notify('Failed to revoke permission: ' + (err.error?.detail || 'Unknown error'))
     });
+  }
+
+  // Version status helper methods
+  getVersionStatusIcon(status: string): string {
+    switch (status) {
+      case 'current':
+        return '🟢';
+      case 'outdated':
+        return '🟡';
+      case 'vulnerable':
+        return '🔴';
+      default:
+        return '⚪';
+    }
+  }
+
+  hasAdvisories(versionStatus: any): boolean {
+    return (versionStatus.client_advisories && versionStatus.client_advisories.length > 0) ||
+           (versionStatus.nebula_advisories && versionStatus.nebula_advisories.length > 0);
+  }
+
+  getAllAdvisories(versionStatus: any): any[] {
+    return [
+      ...(versionStatus.client_advisories || []),
+      ...(versionStatus.nebula_advisories || [])
+    ];
   }
 }
