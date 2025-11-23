@@ -327,6 +327,27 @@ launchctl load /Library/LaunchDaemons/com.managednebula.helper.plist
 
 # Load log rotation daemon
 launchctl load /Library/LaunchDaemons/com.managednebula.logrotate.plist
+
+# Check if Nebula was running before upgrade and restart if needed
+if [ -f /tmp/.nebula-was-running ]; then
+    NEBULA_WAS_RUNNING=$(cat /tmp/.nebula-was-running)
+    if [ "$NEBULA_WAS_RUNNING" = "1" ]; then
+        echo "Restarting Nebula (was running before upgrade)..."
+        # Give the helper daemon a moment to start
+        sleep 2
+        # Load and start the nebula daemon
+        launchctl load /Library/LaunchDaemons/com.managednebula.nebula.plist
+        echo "✓ Nebula restarted with updated binaries"
+    fi
+    # Clean up state file
+    rm -f /tmp/.nebula-was-running
+fi
+
+echo "Installation complete!"
+echo ""
+echo "To verify Nebula version:"
+echo "  /usr/local/bin/nebula -version"
+echo ""
 POSTEOF
 
 chmod +x "${PKG_SCRIPTS}/postinstall"
@@ -339,6 +360,17 @@ cat > "${PKG_SCRIPTS}/preinstall" << 'PREEOF'
 # Users should run the uninstaller app first if they want a clean install
 
 echo "Pre-installation: Stopping existing services..."
+
+# Track if nebula was running before upgrade
+NEBULA_WAS_RUNNING=0
+if pgrep -f "nebula -config" > /dev/null 2>&1; then
+    NEBULA_WAS_RUNNING=1
+    echo "Detected Nebula is currently running - will restart after upgrade"
+    # Save state to temp file for postinstall
+    echo "1" > /tmp/.nebula-was-running
+else
+    echo "0" > /tmp/.nebula-was-running
+fi
 
 # Check if ManagedNebula is already installed
 if [ -d "/Applications/ManagedNebula.app" ] || \
