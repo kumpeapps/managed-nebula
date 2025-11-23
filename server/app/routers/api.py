@@ -49,6 +49,8 @@ from ..models.schemas import (
     UserGroupResponse,
     UserGroupMembershipAdd,
     VersionResponse,
+    VersionStatusResponse,
+    SecurityAdvisoryInfo,
     UserGroupMembershipResponse,
     ClientCertificateResponse,
     ClientConfigDownloadResponse,
@@ -217,6 +219,85 @@ async def get_version():
     return VersionResponse(
         managed_nebula_version=server_version,
         nebula_version=nebula_version
+    )
+
+
+@router.get("/version-status", response_model=VersionStatusResponse)
+async def get_version_status(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user)
+):
+    """Get version status with latest releases and security advisories.
+    
+    This endpoint returns information about the latest versions available
+    for both managed-nebula and Nebula, as well as any active security
+    advisories. Results are cached to avoid excessive GitHub API calls.
+    
+    Returns:
+        VersionStatusResponse: Latest version information and advisories
+    """
+    from ..services.github_api import get_github_client
+    
+    # Get GitHub token from system settings if available
+    github_token = None
+    try:
+        github_token_setting = await session.execute(
+            select(SystemSettings).where(SystemSettings.key == "github_api_token")
+        )
+        token_row = github_token_setting.scalar_one_or_none()
+        if token_row:
+            github_token = token_row.value
+    except Exception as e:
+        logger.debug(f"Could not fetch GitHub token from settings: {e}")
+    
+    github_client = get_github_client(token=github_token)
+    
+    # Get latest releases
+    latest_client_release = await github_client.get_latest_release("kumpeapps", "managed-nebula")
+    latest_nebula_release = await github_client.get_latest_release("slackhq", "nebula")
+    
+    # Get security advisories
+    client_advisories_raw = await github_client.get_security_advisories("kumpeapps", "managed-nebula")
+    nebula_advisories_raw = await github_client.get_security_advisories("slackhq", "nebula")
+    
+    # Convert to schema format
+    def convert_advisory(adv: dict) -> SecurityAdvisoryInfo:
+        vulnerabilities = adv.get("vulnerabilities", [])
+        affected_versions = "unknown"
+        patched_version = None
+        
+        if vulnerabilities:
+            vuln = vulnerabilities[0]
+            affected_range = vuln.get("vulnerable_version_range", "")
+            if affected_range:
+                affected_versions = affected_range
+            
+            patched = vuln.get("patched_versions", "")
+            if patched:
+                patched_version = patched
+        
+        severity_str = adv.get("severity", "unknown").lower()
+        
+        return SecurityAdvisoryInfo(
+            id=adv.get("ghsa_id", adv.get("id", "unknown")),
+            severity=severity_str,
+            summary=adv.get("summary", "No summary available"),
+            affected_versions=affected_versions,
+            patched_version=patched_version,
+            published_at=adv.get("published_at", ""),
+            url=adv.get("html_url", ""),
+            cve_id=adv.get("cve_id")
+        )
+    
+    client_advisories = [convert_advisory(a) for a in client_advisories_raw]
+    nebula_advisories = [convert_advisory(a) for a in nebula_advisories_raw]
+    
+    return VersionStatusResponse(
+        latest_client_version=latest_client_release.version if latest_client_release else None,
+        latest_nebula_version=latest_nebula_release.version if latest_nebula_release else None,
+        client_advisories=client_advisories,
+        nebula_advisories=nebula_advisories,
+        last_checked=datetime.utcnow()
     )
 
 
