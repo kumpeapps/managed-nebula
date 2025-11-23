@@ -20,6 +20,7 @@ services:
       - SERVER_URL=${SERVER_URL:?Set SERVER_URL to your Managed Nebula server URL}
       - POLL_INTERVAL_HOURS=${POLL_INTERVAL_HOURS:-24}
       - START_NEBULA=${START_NEBULA:-true}
+      - ALLOW_SELF_SIGNED_CERT=${ALLOW_SELF_SIGNED_CERT:-false}
     cap_add:
       - NET_ADMIN
     devices:

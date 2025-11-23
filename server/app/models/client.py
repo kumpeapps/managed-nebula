@@ -121,9 +121,9 @@ class ClientCertificate(Base):
     # lazy owner relationship
     # from .user import User  # avoid circular import
     # owner: Mapped["User" | None] = relationship("User")
-    # Store as string to align with tests providing string timestamps
-    not_before: Mapped[str] = mapped_column(String(32))
-    not_after: Mapped[str] = mapped_column(String(32))
+    # Changed to DateTime for proper date arithmetic
+    not_before: Mapped[datetime] = mapped_column(DateTime)
+    not_after: Mapped[datetime] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
     # Metadata for lifecycle and revocation
     fingerprint: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)

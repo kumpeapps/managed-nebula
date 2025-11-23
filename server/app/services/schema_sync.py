@@ -75,6 +75,9 @@ async def sync_schema(engine: AsyncEngine, Base: type[DeclarativeBase]) -> None:
             "is_blocked": "BOOLEAN DEFAULT 0 NOT NULL",
             "blocked_at": "DATETIME",
             "owner_user_id": "INTEGER",
+            "client_version": "VARCHAR(50)",
+            "nebula_version": "VARCHAR(50)",
+            "last_version_report_at": "DATETIME",
         },
         "client_certificates": {
             "fingerprint": "VARCHAR(128)",
