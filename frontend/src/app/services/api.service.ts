@@ -63,6 +63,11 @@ export class ApiService {
     return this.http.post<{ status: string; certificate_id: number; revoked_at: string }>(`${this.apiUrl}/clients/${clientId}/certificates/${certId}/revoke`, {}, { withCredentials: true });
   }
 
+  // Client token endpoints
+  reissueClientToken(clientId: number): Observable<{ id: number; token: string; client_id: number; created_at: string; old_token_id: number }> {
+    return this.http.post<{ id: number; token: string; client_id: number; created_at: string; old_token_id: number }>(`${this.apiUrl}/clients/${clientId}/token/reissue`, {}, { withCredentials: true });
+  }
+
   downloadClientConfig(clientId: number): Observable<ClientConfigDownload> {
     return this.http.get<ClientConfigDownload>(`${this.apiUrl}/clients/${clientId}/config`, { withCredentials: true });
   }
