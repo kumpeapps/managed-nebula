@@ -35,7 +35,7 @@ services:
     volumes:
       - server_data:/app/data
       # Uncomment for live code reload if Dockerfile/entrypoint supports it:
-      # - ./server/app:/app/app
+      - ./server/app:/app/app
     restart: unless-stopped
     networks:
       - nebula

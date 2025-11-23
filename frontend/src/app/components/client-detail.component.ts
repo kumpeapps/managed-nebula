@@ -153,9 +153,23 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
                   <span *ngIf="client.owner">{{ client.owner.email }}</span>
                   <span *ngIf="!client.owner" class="text-muted">Unassigned</span>
                 </div>
-                <div class="info-item" *ngIf="isAdmin && client.token">
+                <div class="info-item" *ngIf="canViewToken()">
                   <span class="label">Token:</span>
-                  <code>{{ client.token }}</code>
+                  <code *ngIf="showToken">{{ client.token || 'Not available' }}</code>
+                  <code *ngIf="!showToken">••••••••••••••••</code>
+                  <button 
+                    class="btn btn-sm btn-secondary ml-2" 
+                    (click)="showToken = !showToken"
+                    title="Toggle token visibility">
+                    <i class="fas" [ngClass]="showToken ? 'fa-eye-slash' : 'fa-eye'"></i> {{ showToken ? 'Hide' : 'Show' }}
+                  </button>
+                  <button 
+                    class="btn btn-sm btn-warning ml-2" 
+                    (click)="reissueToken()"
+                    [disabled]="isLoading"
+                    title="Generate a new token and deactivate the old one">
+                    <i class="fas fa-sync-alt"></i> Reissue
+                  </button>
                 </div>
               </div>
             </div>
@@ -697,6 +711,8 @@ export class ClientDetailComponent implements OnInit {
   clientId: number = 0;
   client: Client | null = null;
   activeTab: 'details' | 'groups' | 'firewall' | 'certificates' = 'details';
+  isLoading: boolean = false;
+  showToken: boolean = false;
   
   allGroups: Group[] = [];
   selectedGroupIds: Set<number> = new Set();
@@ -716,6 +732,13 @@ export class ClientDetailComponent implements OnInit {
   useManualIP: boolean = false;
   
   isAdmin = this.authService.isAdmin();
+
+  canViewToken(): boolean {
+    if (!this.client) return false;
+    const currentUser = this.authService.getCurrentUser();
+    if (!currentUser) return false;
+    return this.isAdmin || !!(this.client.owner && this.client.owner.id === currentUser.id);
+  }
 
   // Ownership & Permissions
   allUsers: any[] = [];
@@ -882,6 +905,30 @@ export class ClientDetailComponent implements OnInit {
     });
   }
 
+  reissueToken(): void {
+    if (!confirm('Are you sure you want to reissue the token? The old token will be deactivated immediately.')) {
+      return;
+    }
+    
+    this.isLoading = true;
+    this.apiService.reissueClientToken(this.clientId).subscribe({
+      next: (response: { id: number; token: string; client_id: number; created_at: string; old_token_id: number }) => {
+        this.isLoading = false;
+        // Show the new token to the user
+        alert(`New token generated:\n\n${response.token}\n\nPlease copy this token now and save it securely. You can view it again by clicking the 'Show' button.`);
+        // Reload client to get the updated token
+        this.loadClient();
+        // Auto-show the new token
+        this.showToken = true;
+        this.notificationService.notify('Token reissued successfully', 'success');
+      },
+      error: (err: any) => {
+        this.isLoading = false;
+        this.notificationService.notify('Failed to reissue token: ' + (err.error?.detail || 'Unknown error'));
+      }
+    });
+  }
+
   revokeCertificate(certId: number): void {
     if (!confirm('Are you sure you want to revoke this certificate? This cannot be undone.')) {
       return;
@@ -941,11 +988,21 @@ export class ClientDetailComponent implements OnInit {
   }
 
   loadIPGroups(poolId?: number): void {
+    if (!poolId) {
+      this.allIPGroups = [];
+      return;
+    }
     this.apiService.getIPGroups(poolId).subscribe({
       next: (groups: any[]) => {
         this.allIPGroups = groups;
       },
-      error: (err: any) => this.notificationService.notify('Failed to load IP groups')
+      error: (err: any) => {
+        // If 403, user doesn't have permission - silently fail
+        if (err.status !== 403) {
+          this.notificationService.notify('Failed to load IP groups');
+        }
+        this.allIPGroups = [];
+      }
     });
   }
 
