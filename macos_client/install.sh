@@ -3,7 +3,7 @@
 
 set -e
 
-NEBULA_VERSION="v1.8.2"
+NEBULA_VERSION="v1.9.7"
 NEBULA_URL="https://github.com/slackhq/nebula/releases/download/${NEBULA_VERSION}/nebula-darwin.zip"
 INSTALL_DIR="/usr/local/bin"
 
