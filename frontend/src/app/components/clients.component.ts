@@ -47,6 +47,7 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
                   <th class="hide-mobile">Owner</th>
                   <th>IP Address</th>
                   <th>Status</th>
+                  <th class="hide-mobile">Version</th>
                   <th class="hide-mobile">Groups</th>
                   <th class="hide-mobile">Rulesets</th>
                   <th class="hide-mobile">Last Config Download</th>
@@ -69,6 +70,13 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
                       <span *ngIf="client.is_lighthouse" class="badge badge-info">Lighthouse</span>
                       <span *ngIf="client.is_blocked" class="badge badge-danger">Blocked</span>
                       <span *ngIf="!client.is_lighthouse && !client.is_blocked" class="badge badge-success">Active</span>
+                    </div>
+                  </td>
+                  <td class="hide-mobile">
+                    <div class="version-info" style="font-size: 0.85em; line-height: 1.4;">
+                      <div *ngIf="client.client_version">Client: {{client.client_version}}</div>
+                      <div *ngIf="client.nebula_version">Nebula: {{client.nebula_version}}</div>
+                      <div *ngIf="!client.client_version && !client.nebula_version" class="text-muted">Unknown</div>
                     </div>
                   </td>
                   <td class="hide-mobile">
