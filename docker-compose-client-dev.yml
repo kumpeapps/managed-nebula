@@ -1,0 +1,43 @@
+# Development Nebula client container connecting to local Managed Nebula server
+# - Rebuilds from local client source
+# - Connects to development server at http://localhost:8080 (via host.docker.internal)
+# - Requires NET_ADMIN and /dev/net/tun
+# - Generates or persists keypair under mounted volumes
+# - Fetches config and certs from the server using CLIENT_TOKEN
+#
+# Usage (macOS/Linux):
+#   export CLIENT_TOKEN=YOUR_TOKEN_HERE
+#   docker compose -f docker-compose-client-dev.yml up -d --build
+#
+# Notes:
+# - Uses local ./client directory for building
+# - Connects to server at http://host.docker.internal:8080/api
+# - network_mode: host is recommended for Linux; on macOS use bridge mode
+
+services:
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    image: managed-nebula-client:dev
+    environment:
+      - CLIENT_TOKEN=${CLIENT_TOKEN:?Set CLIENT_TOKEN to your client token}
+      - SERVER_URL=https://localhost:4200/api
+      - POLL_INTERVAL_HOURS=${POLL_INTERVAL_HOURS:-24}
+      - START_NEBULA=${START_NEBULA:-true}
+      - ALLOW_SELF_SIGNED_CERT=${ALLOW_SELF_SIGNED_CERT:-true}
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - "/dev/net/tun:/dev/net/tun"
+    privileged: false
+    # On macOS, use bridge networking; on Linux, you can use host mode
+    network_mode: host
+    volumes:
+      - nebula_etc:/etc/nebula
+      - nebula_var:/var/lib/nebula
+    restart: unless-stopped
+
+volumes:
+  nebula_etc:
+  nebula_var:
