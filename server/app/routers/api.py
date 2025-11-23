@@ -79,7 +79,7 @@ from ..services.ip_allocator import ensure_default_pool, allocate_ip_from_pool
 from ..services.token_manager import generate_client_token, get_token_prefix, get_token_preview
 from ..core.auth import require_permission, get_current_user
 from ..core.config import settings
-from ..core.github_verification import verify_github_signature, get_github_pattern_regex
+from ..core.github_verification import verify_github_signature
 from ..models.user import User
 from ..models.client import Group, FirewallRule, IPGroup, client_groups, client_firewall_rulesets
 from ..models.permissions import ClientPermission, UserGroup, UserGroupMembership
