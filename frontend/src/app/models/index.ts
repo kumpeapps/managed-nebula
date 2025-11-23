@@ -32,6 +32,9 @@ export interface Client {
   created_at: string;
   config_last_changed_at: string | null;
   last_config_download_at: string | null;
+  client_version: string | null;
+  nebula_version: string | null;
+  last_version_report_at: string | null;
   groups: GroupRef[];
   firewall_rulesets: FirewallRulesetRef[];
   token?: string | null; // only for admins

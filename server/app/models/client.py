@@ -91,6 +91,10 @@ class Client(Base):
     # Blocking state
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
     blocked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Version tracking
+    client_version: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    nebula_version: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    last_version_report_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     groups = relationship("Group", secondary=client_groups, back_populates="clients", lazy="selectin")
     firewall_rulesets = relationship("FirewallRuleset", secondary=client_firewall_rulesets, back_populates="clients")

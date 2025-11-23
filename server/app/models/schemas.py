@@ -45,6 +45,9 @@ class ClientResponse(BaseModel):
     created_at: datetime
     config_last_changed_at: Optional[datetime]
     last_config_download_at: Optional[datetime]
+    client_version: Optional[str] = None
+    nebula_version: Optional[str] = None
+    last_version_report_at: Optional[datetime] = None
     owner: Optional[UserRef]  # Owner of the client
     groups: List[GroupRef]
     firewall_rulesets: List[FirewallRulesetRef] = []
@@ -366,6 +369,8 @@ class ClientConfigRequest(BaseModel):
     """Request model for client config download (used by client agent)."""
     token: str
     public_key: str
+    client_version: Optional[str] = None
+    nebula_version: Optional[str] = None
 
 
 # ============ Settings Schemas ============

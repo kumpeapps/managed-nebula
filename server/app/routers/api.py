@@ -480,9 +480,15 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
         inline_cert_pem=client_cert_pem,
     )
 
-    # Update last config download timestamp
+    # Update last config download timestamp and version info
     try:
         client.last_config_download_at = datetime.utcnow()
+        if body.client_version:
+            client.client_version = body.client_version
+        if body.nebula_version:
+            client.nebula_version = body.nebula_version
+        if body.client_version or body.nebula_version:
+            client.last_version_report_at = datetime.utcnow()
         await session.commit()
     except Exception:
         # Timestamp update is non-critical; log and continue
