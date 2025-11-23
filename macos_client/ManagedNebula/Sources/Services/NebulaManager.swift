@@ -287,6 +287,39 @@ class NebulaManager {
         try startNebula()
     }
     
+    /// Get Nebula binary version
+    func getNebulaVersion() -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: nebulaBinaryPath)
+        process.arguments = ["-version"]
+        
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        
+        do {
+            try process.run()
+            process.waitUntilExit()
+            
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let output = String(data: data, encoding: .utf8) {
+                // Parse version from output like "Version: 1.8.2"
+                let lines = output.components(separatedBy: "\n")
+                for line in lines {
+                    if line.hasPrefix("Version:") {
+                        return line.replacingOccurrences(of: "Version:", with: "").trimmingCharacters(in: .whitespaces)
+                    }
+                }
+                // Fallback: return first non-empty line
+                return lines.first(where: { !$0.isEmpty })?.trimmingCharacters(in: .whitespaces) ?? "Unknown"
+            }
+        } catch {
+            print("[NebulaManager] Failed to get Nebula version: \(error)")
+        }
+        
+        return "Unknown"
+    }
+    
     // MARK: - Private Helpers
     
     private func calculateConfigHash(config: String, cert: String, caCerts: [String]) -> String {

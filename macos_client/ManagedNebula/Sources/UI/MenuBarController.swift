@@ -123,6 +123,19 @@ class MenuBarController: NSObject, NSWindowDelegate {
         
         menu.addItem(NSMenuItem.separator())
         
+        // Version information
+        let appVersion = getAppVersion()
+        let appVersionItem = NSMenuItem(title: "ManagedNebula: v\(appVersion)", action: nil, keyEquivalent: "")
+        appVersionItem.isEnabled = false
+        menu.addItem(appVersionItem)
+        
+        let nebulaVersion = nebulaManager.getNebulaVersion()
+        let nebulaVersionItem = NSMenuItem(title: "Nebula: v\(nebulaVersion)", action: nil, keyEquivalent: "")
+        nebulaVersionItem.isEnabled = false
+        menu.addItem(nebulaVersionItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
         // Quit
         let quitMenuItem = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
         quitMenuItem.target = self
@@ -242,7 +255,8 @@ class MenuBarController: NSObject, NSWindowDelegate {
 
         let controller = PreferencesWindowController(
             configuration: configuration,
-            keychainService: keychainService
+            keychainService: keychainService,
+            nebulaManager: nebulaManager
         )
         controller.onSave = { [weak self] newConfig in
             print("[MenuBarController] Saving preferences...")
@@ -374,5 +388,13 @@ class MenuBarController: NSObject, NSWindowDelegate {
         alert.alertStyle = .warning
         alert.addButton(withTitle: "OK")
         alert.runModal()
+    }
+    
+    /// Get application version from bundle
+    private func getAppVersion() -> String {
+        if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+            return version
+        }
+        return "Unknown"
     }
 }

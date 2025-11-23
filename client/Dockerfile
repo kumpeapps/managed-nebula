@@ -1,5 +1,8 @@
 # syntax=docker/dockerfile:1.6
 FROM python:3.11-slim
+
+ARG VERSION=dev-latest
+
 LABEL org.opencontainers.image.source https://github.com/kumpeapps/managed-nebula
 
 RUN set -eux; \
@@ -8,20 +11,18 @@ RUN set -eux; \
             ca-certificates curl iproute2 iputils-ping \
             build-essential gcc python3-dev libffi-dev libssl-dev pkg-config \
             rustc cargo; \
-        if ! apt-get install -y --no-install-recommends nebula; then \
-            echo "Debian package 'nebula' not found; installing from upstream release"; \
-            arch="$(dpkg --print-architecture)"; \
-            case "$arch" in \
-                amd64) neb_arch="amd64" ;; \
-                arm64) neb_arch="arm64" ;; \
-                armhf|armel|arm) neb_arch="arm" ;; \
-                *) echo "Unsupported architecture: $arch"; exit 1 ;; \
-            esac; \
-            NEBULA_VERSION="1.9.7"; \
-            curl -fsSL -o /tmp/nebula.tar.gz "https://github.com/slackhq/nebula/releases/download/v${NEBULA_VERSION}/nebula-linux-${neb_arch}.tar.gz"; \
-            tar -C /usr/local/bin -xzvf /tmp/nebula.tar.gz nebula nebula-cert; \
-            rm -f /tmp/nebula.tar.gz; \
-        fi; \
+        arch="$(dpkg --print-architecture)"; \
+        case "$arch" in \
+            amd64) neb_arch="amd64" ;; \
+            arm64) neb_arch="arm64" ;; \
+            armhf|armel|arm) neb_arch="arm" ;; \
+            *) echo "Unsupported architecture: $arch"; exit 1 ;; \
+        esac; \
+        NEBULA_VERSION="1.9.7"; \
+        curl -fsSL -o /tmp/nebula.tar.gz \
+            "https://github.com/slackhq/nebula/releases/download/v${NEBULA_VERSION}/nebula-linux-${neb_arch}.tar.gz"; \
+        tar -C /usr/local/bin -xzvf /tmp/nebula.tar.gz nebula nebula-cert; \
+        rm -f /tmp/nebula.tar.gz; \
         rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -34,6 +35,10 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     && pip install --no-cache-dir --prefer-binary -r /app/requirements.txt
 
 COPY . /app
+
+# Update version in agent.py
+RUN sed -i "s/__version__ = .*/__version__ = \"${VERSION}\"/" /app/agent.py
+
 RUN chmod +x /app/entrypoint.sh
 
 ENV CLIENT_TOKEN="" \
