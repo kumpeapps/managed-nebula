@@ -4,7 +4,6 @@ import string
 import re
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import Optional
 
 
 async def get_token_prefix(session: AsyncSession) -> str:

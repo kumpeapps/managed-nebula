@@ -1,7 +1,6 @@
 """GitHub webhook signature verification utilities."""
 import hmac
 import hashlib
-from typing import Optional
 
 
 def verify_github_signature(
