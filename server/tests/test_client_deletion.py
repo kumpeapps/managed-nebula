@@ -19,6 +19,7 @@ from app.models.client import Group, FirewallRuleset
 from app.core.auth import hash_password
 from app.db import get_session, async_session_maker
 import asyncio
+from datetime import datetime
 
 
 @pytest.fixture
@@ -102,8 +103,8 @@ async def test_delete_client_cascades_certificates():
         cert = ClientCertificate(
             client_id=client_id,
             pem_cert="TEST_CERT_PEM",
-            not_before="2025-01-01 00:00:00",
-            not_after="2025-12-31 23:59:59",
+            not_before=datetime(2025, 1, 1, 0, 0, 0),
+            not_after=datetime(2025, 12, 31, 23, 59, 59),
             fingerprint="test_fingerprint",
             revoked=False
         )
@@ -275,8 +276,8 @@ async def test_delete_client_with_all_relations():
         cert = ClientCertificate(
             client_id=client_id,
             pem_cert="FULL_TEST_CERT",
-            not_before="2025-01-01 00:00:00",
-            not_after="2025-12-31 23:59:59",
+            not_before=datetime(2025, 1, 1, 0, 0, 0),
+            not_after=datetime(2025, 12, 31, 23, 59, 59),
             revoked=False
         )
         session.add(cert)
