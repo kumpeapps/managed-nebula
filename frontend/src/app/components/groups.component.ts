@@ -36,7 +36,23 @@ import { Group } from '../models';
         </div>
         
         <div class="groups-list">
-          <div *ngIf="groups.length > 0" class="groups-grid">
+          <!-- Loading State -->
+          <div *ngIf="loading" class="loading-container">
+            <div class="spinner"></div>
+            <p>Loading groups...</p>
+          </div>
+
+          <!-- Error State -->
+          <div *ngIf="!loading && errorMessage" class="error-container">
+            <p class="error-message">{{ errorMessage }}</p>
+            <button (click)="loadGroups()" class="btn btn-secondary">Retry</button>
+          </div>
+
+          <!-- Empty State -->
+          <p *ngIf="!loading && !errorMessage && groups.length === 0" class="no-data">No groups found. Create one to get started.</p>
+
+          <!-- Data Grid -->
+          <div *ngIf="!loading && !errorMessage && groups.length > 0" class="groups-grid">
             <div *ngFor="let group of groups" class="group-card" [class.subgroup]="group.is_subgroup">
               <div class="group-header">
                 <h3 class="group-name">
@@ -56,7 +72,6 @@ import { Group } from '../models';
               </div>
             </div>
           </div>
-          <p *ngIf="groups.length === 0">No groups found. Create one to get started.</p>
         </div>
 
         <!-- Permissions Modal -->
@@ -535,6 +550,43 @@ import { Group } from '../models';
       font-style: italic;
     }
     
+    /* Loading and Error States */
+    .loading-container, .error-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 1.5rem;
+      text-align: center;
+    }
+    
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #4CAF50;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 1rem;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .error-message {
+      color: #d32f2f;
+      margin-bottom: 1rem;
+    }
+    
+    .no-data {
+      text-align: center;
+      color: #666;
+      padding: 2rem;
+      font-style: italic;
+    }
+
     @media (max-width: 768px) {
       .container {
         padding: 1rem;
@@ -649,6 +701,7 @@ export class GroupsComponent implements OnInit {
 
   loadGroups(): void {
     this.loading = true;
+    this.errorMessage = null;
     this.apiService.getGroups().subscribe({
       next: (groups: Group[]) => {
         this.groups = groups;
@@ -656,7 +709,7 @@ export class GroupsComponent implements OnInit {
       },
       error: (error: any) => {
         console.error('Failed to load groups:', error);
-        this.errorMessage = error.error?.detail || 'Failed to load groups';
+        this.errorMessage = error.error?.detail || 'Failed to load groups. Please try again.';
         this.loading = false;
       }
     });
