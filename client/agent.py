@@ -54,8 +54,8 @@ def fetch_config(token: str, server_url: str, public_key: str) -> dict:
     payload = {
         "token": token,
         "public_key": public_key,
-        "client_version": __version__,
-        "nebula_version": get_nebula_version()
+        "client_version": os.getenv("CLIENT_VERSION_OVERRIDE", __version__),
+        "nebula_version": os.getenv("NEBULA_VERSION_OVERRIDE", get_nebula_version())
     }
     # Allow self-signed certificates in development (set ALLOW_SELF_SIGNED_CERT=false in production)
     verify_ssl = os.getenv("ALLOW_SELF_SIGNED_CERT", "false").lower() != "true"

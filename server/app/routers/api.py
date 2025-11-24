@@ -50,6 +50,7 @@ from ..models.schemas import (
     UserGroupMembershipAdd,
     VersionResponse,
     VersionStatusResponse,
+    VersionStatus,
     SecurityAdvisoryInfo,
     UserGroupMembershipResponse,
     ClientCertificateResponse,
@@ -144,6 +145,33 @@ async def build_client_response(client: Client, session: AsyncSession, user: Use
         if owner:
             owner_ref = UserRef(id=owner.id, email=owner.email)
 
+    # Compute version status if versions are available
+    version_status = None
+    if client.client_version or client.nebula_version:
+        from ..services.advisory_checker import check_client_version_status
+        
+        # Get GitHub token from system settings if available
+        github_token = None
+        try:
+            github_token_setting = await session.execute(
+                select(SystemSettings).where(SystemSettings.key == "github_api_token")
+            )
+            token_row = github_token_setting.scalar_one_or_none()
+            if token_row:
+                github_token = token_row.value
+        except Exception:
+            pass
+        
+        try:
+            status_dict = await check_client_version_status(
+                client.client_version,
+                client.nebula_version,
+                github_token
+            )
+            version_status = VersionStatus(**status_dict)
+        except Exception as e:
+            logger.warning(f"Failed to compute version status for client {client.id}: {e}")
+
     return ClientResponse(
         id=client.id,
         name=client.name,
@@ -163,7 +191,8 @@ async def build_client_response(client: Client, session: AsyncSession, user: Use
         groups=[GroupRef(id=g.id, name=g.name) for g in client.groups],
         firewall_rulesets=[FirewallRulesetRef(
             id=rs.id, name=rs.name) for rs in client.firewall_rulesets],
-        token=token_value
+        token=token_value,
+        version_status=version_status
     )
 
 
