@@ -9,16 +9,24 @@ itsdangerous==2.2.0
 bcrypt==4.2.1
 passlib[bcrypt]==1.7.4
 python-jose[cryptography]==3.4.0
+ecdsa>=0.19.0
 apscheduler==3.11.0
 httpx==0.28.1
 PyYAML==6.0.2
 email-validator==2.2.0
 aiosqlite==0.20.0
 uvicorn-worker==0.2.0
-cryptography==44.0.1
+cryptography>=44.0.2
 ipaddress==1.0.23
 pytest==8.3.4
 pytest-asyncio==0.24.0
 aiomysql==0.3.2
 asyncmy==0.2.10
 pre-commit==4.0.1
+# Security updates for transitive dependencies
+urllib3>=2.5.0
+certifi>=2025.11.12
+idna>=3.11
+setuptools>=75.0.0
+wheel>=0.45.0
+starlette>=0.41.3
