@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .github_api import get_github_client
-from .version_parser import parse_version, compare_versions
+from .version_parser import compare_versions
 
 logger = logging.getLogger(__name__)
 
