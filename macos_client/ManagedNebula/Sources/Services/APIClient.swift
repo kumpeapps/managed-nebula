@@ -21,7 +21,14 @@ class APIClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
         let requestBody = ClientConfigRequest(token: token, publicKey: publicKey, clientVersion: clientVersion, nebulaVersion: nebulaVersion)
-        request.httpBody = try JSONEncoder().encode(requestBody)
+        let encoder = JSONEncoder()
+        request.httpBody = try encoder.encode(requestBody)
+        
+        // Debug log the request body
+        if let bodyString = String(data: request.httpBody!, encoding: .utf8) {
+            print("[APIClient] Request body: \(bodyString)")
+        }
+        print("[APIClient] Client version: \(clientVersion ?? "nil"), Nebula version: \(nebulaVersion ?? "nil")")
         
         let (data, response) = try await session.data(for: request)
         
