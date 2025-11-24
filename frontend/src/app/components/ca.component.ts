@@ -95,7 +95,7 @@ import { CACertificate } from '../models';
             <td>
               <span class="badge" [ngClass]="ca.can_sign ? 'badge-yes' : 'badge-no'">{{ ca.can_sign ? 'Yes' : 'No' }}</span>
             </td>
-            <td>{{ ca.not_before | date:'short' }} → {{ ca.not_after | date:'short' }}</td>
+            <td>{{ ca.not_before | localDate:'short' }} → {{ ca.not_after | localDate:'short' }}</td>
             <td class="actions-cell">
               <button *ngIf="ca.can_sign && !ca.is_active" class="btn btn-sm btn-primary" (click)="setSigningCA(ca.id)">Set as Signing</button>
               <button class="btn btn-sm btn-danger" (click)="deleteCA(ca.id)" [disabled]="ca.is_active" [title]="ca.is_active ? 'Cannot delete active CA' : 'Delete CA'">Delete</button>

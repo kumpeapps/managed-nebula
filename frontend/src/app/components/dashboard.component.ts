@@ -84,7 +84,7 @@ import { User, Client } from '../models';
                     <span *ngIf="client.is_blocked" class="badge badge-danger">Blocked</span>
                     <span *ngIf="!client.is_blocked" class="badge badge-success">OK</span>
                   </td>
-                  <td class="hide-mobile">{{ client.last_config_download_at ? (client.last_config_download_at | date:'short') : 'Never' }}</td>
+                  <td class="hide-mobile">{{ client.last_config_download_at ? (client.last_config_download_at | localDate:'short') : 'Never' }}</td>
                 </tr>
               </tbody>
             </table>

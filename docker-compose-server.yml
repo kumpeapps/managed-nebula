@@ -41,6 +41,7 @@ services:
       - SSL_CERT_NAME=${SSL_CERT_NAME:-tls.crt}
       - SSL_KEY_NAME=${SSL_KEY_NAME:-tls.key}
       - DOMAIN=${DOMAIN:-localhost}
+      - API_TEST_DELAY=${API_TEST_DELAY:-0}  # Set to milliseconds for testing (e.g., 2000 = 2s)
     ports:
       - "80:80"
       - "443:443"

@@ -63,7 +63,7 @@ import { Group } from '../models';
               </div>
               <div class="group-meta">
                 <span>Clients: {{ group.client_count }}</span>
-                <span *ngIf="group.created_at">Created: {{ group.created_at | date:'short' }}</span>
+                <span *ngIf="group.created_at">Created: {{ group.created_at | localDate:'short' }}</span>
                 <span *ngIf="group.parent_name" class="parent-info">Parent: {{ group.parent_name }}</span>
               </div>
               <div class="group-actions">

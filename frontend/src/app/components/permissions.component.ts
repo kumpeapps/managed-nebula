@@ -38,12 +38,14 @@ interface GroupPermissionStatus {
       <div class="container">
         <h2 class="title">Permissions Management</h2>
       
-      <div *ngIf="loading" class="loading">
+      <div *ngIf="loading" class="loading-container">
+        <div class="spinner"></div>
         <p>Loading permissions...</p>
       </div>
       
-      <div *ngIf="error" class="error">
-        {{ error }}
+      <div *ngIf="!loading && error" class="error-container">
+        <p>{{ error }}</p>
+        <button (click)="loadData()" class="btn btn-primary">Retry</button>
       </div>
       
       <div *ngIf="!loading && !error" class="permissions-grid">
@@ -133,16 +135,52 @@ interface GroupPermissionStatus {
       color: #333;
     }
 
-    .loading, .error {
-      text-align: center;
-      padding: 40px;
-      font-size: 16px;
+    .loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 4rem 2rem;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 
-    .error {
-      color: #d32f2f;
-      background: #ffebee;
-      border-radius: 4px;
+    .loading-container p {
+      margin-top: 1rem;
+      color: #666;
+      font-size: 1rem;
+    }
+
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #2196F3;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .error-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 4rem 2rem;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .error-container p {
+      color: #f44336;
+      margin-bottom: 1rem;
+      font-size: 1rem;
     }
 
     .permissions-grid {
@@ -375,6 +413,16 @@ interface GroupPermissionStatus {
       display: inline-flex;
       align-items: center;
       gap: 8px;
+      transition: background 0.3s;
+    }
+
+    .btn-primary {
+      background: #2196F3;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #1976D2;
     }
 
     .btn-secondary {
