@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.6
-FROM python:3.13-slim
+FROM python:3.12-slim
 
 ARG VERSION=dev-latest
 
@@ -37,11 +37,15 @@ COPY requirements.txt /app/requirements.txt
 # Reduce parallelism during builds to avoid OOM/segfault on constrained builders (especially ARM/QEMU)
 ENV MAKEFLAGS="-j1"
 
+# Install build dependencies for greenlet and other C extensions
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     pip install --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir --prefer-binary -r /app/requirements.txt
+    # Install greenlet separately first with verbose output for debugging
+    pip install --verbose greenlet==3.0.0 && \
+    # Then install remaining requirements
+    pip install --prefer-binary -r /app/requirements.txt
 
 COPY . /app
 
