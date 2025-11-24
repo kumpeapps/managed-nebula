@@ -97,7 +97,7 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
                     </div>
                   </td>
                   <td class="hide-mobile">
-                    <span *ngIf="client.last_config_download_at">{{ client.last_config_download_at | date:'short' }}</span>
+                    <span *ngIf="client.last_config_download_at">{{ client.last_config_download_at | localDate:'short' }}</span>
                     <span *ngIf="!client.last_config_download_at" class="text-muted">Never</span>
                   </td>
                   <td>

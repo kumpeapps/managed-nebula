@@ -20,6 +20,14 @@ if [ ! -f "$CERT_DIR/$CERT_NAME" ] || [ ! -f "$CERT_DIR/$KEY_NAME" ]; then
   chmod 600 "$CERT_DIR/$KEY_NAME" || true
 fi
 
+# Inject API_TEST_DELAY into environment.js if it exists
+API_TEST_DELAY="${API_TEST_DELAY:-0}"
+if [ -f "/usr/share/nginx/html/assets/environment.js" ]; then
+  echo "[entrypoint] Setting API_TEST_DELAY to ${API_TEST_DELAY}ms"
+  sed -i "s/apiTestDelay = [0-9]*/apiTestDelay = ${API_TEST_DELAY}/" \
+    /usr/share/nginx/html/assets/environment.js
+fi
+
 # Render nginx.conf from template
 sed "s#__CERT_NAME__#${CERT_NAME}#g; s#__KEY_NAME__#${KEY_NAME}#g" \
   /etc/nginx/nginx-ssl.conf.template > /etc/nginx/nginx.conf

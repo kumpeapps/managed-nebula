@@ -71,7 +71,7 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
                 <div class="form-group">
                   <label>Client Version</label>
                   <div class="readonly-field">{{ client.client_version || 'Unknown' }}</div>
-                  <small class="text-muted" *ngIf="client.last_version_report_at">Last reported: {{ client.last_version_report_at | date:'short' }}</small>
+                  <small class="text-muted" *ngIf="client.last_version_report_at">Last reported: {{ client.last_version_report_at | localDate:'short' }}</small>
                 </div>
                 <div class="form-group">
                   <label>Nebula Version</label>
@@ -180,15 +180,15 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
               <div class="info-grid">
                 <div class="info-item">
                   <span class="label">Created:</span>
-                  <span>{{ client.created_at | date:'medium' }}</span>
+                  <span>{{ client.created_at | localDate:'medium' }}</span>
                 </div>
                 <div class="info-item">
                   <span class="label">Config Last Changed:</span>
-                  <span>{{ (client.config_last_changed_at | date:'medium') || 'Never' }}</span>
+                  <span>{{ (client.config_last_changed_at | localDate:'medium') || 'Never' }}</span>
                 </div>
                 <div class="info-item">
                   <span class="label">Last Config Download:</span>
-                  <span>{{ (client.last_config_download_at | date:'medium') || 'Never' }}</span>
+                  <span>{{ (client.last_config_download_at | localDate:'medium') || 'Never' }}</span>
                 </div>
                 <div class="info-item">
                   <span class="label">Owner:</span>
@@ -359,8 +359,8 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
                 <tbody>
                   <tr *ngFor="let cert of certificates">
                     <td>{{ cert.id }}</td>
-                    <td>{{ cert.not_before | date:'short' }}</td>
-                    <td>{{ cert.not_after | date:'short' }}</td>
+                    <td>{{ cert.not_before | localDate:'short' }}</td>
+                    <td>{{ cert.not_after | localDate:'short' }}</td>
                     <td>{{ cert.issued_for_ip_cidr || '—' }}</td>
                     <td>
                       <span *ngIf="!cert.revoked && isValidCert(cert)" class="badge badge-success">Valid</span>
