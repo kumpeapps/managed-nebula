@@ -15,6 +15,29 @@ import { environment } from '../../environments/environment';
         <h2>Settings</h2>
         
         <div class="settings-container">
+          <!-- Version Information Section - Prominent at top -->
+          <div class="setting-section version-section-top">
+            <div class="version-info-prominent">
+              <div class="version-header">
+                <h3>📦 System Version Information</h3>
+              </div>
+              <div class="version-grid">
+                <div class="version-card">
+                  <span class="version-label">Frontend</span>
+                  <span class="version-value">{{frontendVersion}}</span>
+                </div>
+                <div class="version-card">
+                  <span class="version-label">Server</span>
+                  <span class="version-value">{{serverVersion || 'Loading...'}}</span>
+                </div>
+                <div class="version-card">
+                  <span class="version-label">Nebula</span>
+                  <span class="version-value">{{nebulaVersion || 'Loading...'}}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="setting-section">
             <h3>Nebula Configuration</h3>
             <p class="help-text">Global settings that affect all Nebula client configurations</p>
@@ -122,23 +145,6 @@ import { environment } from '../../environments/environment';
             
             <div class="form-actions">
               <button class="save-btn" (click)="saveSettings()">Save Changes</button>
-            </div>
-          </div>
-
-          <div class="setting-section version-section">
-            <div class="version-info">
-              <div class="version-item">
-                <span class="version-label">Frontend Version:</span>
-                <span class="version-value">{{frontendVersion}}</span>
-              </div>
-              <div class="version-item">
-                <span class="version-label">Server Version:</span>
-                <span class="version-value">{{serverVersion || 'Loading...'}}</span>
-              </div>
-              <div class="version-item">
-                <span class="version-label">Nebula Version:</span>
-                <span class="version-value">{{nebulaVersion || 'Loading...'}}</span>
-              </div>
             </div>
           </div>
         </div>
@@ -457,35 +463,73 @@ import { environment } from '../../environments/environment';
       }
     }
 
-    .version-section {
-      border-top: 2px solid #e0e0e0;
-      padding-top: 1.5rem;
-      margin-top: 2rem;
+    /* Version Section - Prominent Top Style */
+    .version-section-top {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 8px;
+      padding: 0;
+      margin-bottom: 2rem;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      border: none;
     }
 
-    .version-info {
-      display: flex;
-      gap: 2rem;
+    .version-section-top h3 {
+      color: white;
+      border: none;
+      padding: 0;
+      margin: 0;
+      font-size: 1.2rem;
+    }
+
+    .version-info-prominent {
+      padding: 1.5rem;
+    }
+
+    .version-header {
+      margin-bottom: 1rem;
+    }
+
+    .version-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    .version-card {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 6px;
       padding: 1rem;
-      background: #f9f9f9;
-      border-radius: 4px;
-      flex-wrap: wrap;
-    }
-
-    .version-item {
       display: flex;
+      flex-direction: column;
       gap: 0.5rem;
-      align-items: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
     }
 
-    .version-label {
+    .version-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+
+    .version-card .version-label {
+      font-size: 0.85rem;
       font-weight: 600;
       color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
-    .version-value {
+    .version-card .version-value {
+      font-size: 1.25rem;
+      font-weight: 700;
       color: #333;
-      font-family: monospace;
+      font-family: 'Courier New', monospace;
+    }
+
+    @media (max-width: 768px) {
+      .version-grid {
+        grid-template-columns: 1fr;
+      }
     }
   `],
     standalone: false

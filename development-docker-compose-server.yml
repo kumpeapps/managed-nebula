@@ -20,9 +20,13 @@
 
 services:
   server:
-    build: ./server
+    build:
+      context: ./server
+      args:
+        VERSION: ${APP_VERSION:-dev-latest}
     image: managed-nebula-server:dev-local
     environment:
+      - APP_VERSION=${APP_VERSION:-dev-latest}
       - DB_URL=${DB_URL:-sqlite+aiosqlite:///./data/app.db}
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
