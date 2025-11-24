@@ -5,7 +5,8 @@ ARG VERSION=dev-latest
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    APP_VERSION=${VERSION}
 LABEL org.opencontainers.image.source https://github.com/kumpeapps/managed-nebula
 RUN set -eux; \
         apt-get update; \
