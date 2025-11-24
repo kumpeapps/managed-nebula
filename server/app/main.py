@@ -48,9 +48,16 @@ async def lifespan(app: FastAPI):
     # Bootstrap defaults
     await bootstrap_defaults()
     
+    # Start scheduler (must be done after event loop is running)
+    from .core.scheduler import start_scheduler
+    await start_scheduler(app)
+    
     yield
     
-    # Shutdown (if needed in future)
+    # Shutdown scheduler
+    if hasattr(app.state, 'scheduler'):
+        app.state.scheduler.shutdown()
+        print("[scheduler] Shutdown background scheduler")
 
 
 async def bootstrap_defaults():
