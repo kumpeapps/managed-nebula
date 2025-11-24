@@ -322,9 +322,17 @@ POST /v1/client/config
 ```json
 {
   "token": "client_token_here",
-  "public_key": "-----BEGIN NEBULA ED25519 PUBLIC KEY-----\n...\n-----END NEBULA ED25519 PUBLIC KEY-----\n"
+  "public_key": "-----BEGIN NEBULA ED25519 PUBLIC KEY-----\n...\n-----END NEBULA ED25519 PUBLIC KEY-----\n",
+  "client_version": "1.0.0",
+  "nebula_version": "1.9.7"
 }
 ```
+
+**Note**: `client_version` and `nebula_version` are optional fields. The macOS client automatically detects:
+- Client version from the application bundle (`CFBundleShortVersionString`)
+- Nebula version by executing `nebula -version`
+
+These versions are reported to the server for tracking and security advisory purposes.
 
 ### Response
 ```json

@@ -116,7 +116,11 @@ NebulaManager.generateKeypair()
     ↓
 NebulaManager.readPublicKey()
     ↓
-APIClient.fetchConfig(token, publicKey)
+PollingService.getClientVersion() (from bundle)
+    ↓
+NebulaManager.getNebulaVersion() (via nebula -version)
+    ↓
+APIClient.fetchConfig(token, publicKey, clientVersion, nebulaVersion)
     ↓
 [POST /v1/client/config]
     ↓
@@ -231,13 +235,23 @@ Content-Type: application/json
 struct ClientConfigRequest: Codable {
     let token: String
     let publicKey: String
+    let clientVersion: String?
+    let nebulaVersion: String?
     
     enum CodingKeys: String, CodingKey {
         case token
         case publicKey = "public_key"
+        case clientVersion = "client_version"
+        case nebulaVersion = "nebula_version"
     }
 }
 ```
+
+**Version Reporting**: The macOS client automatically detects and reports version information:
+- **Client Version**: Extracted from application bundle (`CFBundleShortVersionString`)
+- **Nebula Version**: Detected by executing `nebula -version` command
+- **Environment Override**: Supports `CLIENT_VERSION_OVERRIDE` for testing
+- **Server Integration**: Enables version tracking, security advisories, and outdated client detection in the web UI
 
 ### Response Model
 ```swift

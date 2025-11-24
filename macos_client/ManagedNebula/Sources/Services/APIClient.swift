@@ -13,14 +13,14 @@ class APIClient {
     }
     
     /// Fetch configuration from server
-    func fetchConfig(token: String, publicKey: String) async throws -> ClientConfigResponse {
+    func fetchConfig(token: String, publicKey: String, clientVersion: String? = nil, nebulaVersion: String? = nil) async throws -> ClientConfigResponse {
         let url = URL(string: "\(serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")))/v1/client/config")!
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let requestBody = ClientConfigRequest(token: token, publicKey: publicKey)
+        let requestBody = ClientConfigRequest(token: token, publicKey: publicKey, clientVersion: clientVersion, nebulaVersion: nebulaVersion)
         request.httpBody = try JSONEncoder().encode(requestBody)
         
         let (data, response) = try await session.data(for: request)

@@ -17,6 +17,21 @@ class PollingService {
         self.isManuallyDisconnected = configuration.isManuallyDisconnected ?? false
     }
     
+    /// Get client version from application bundle
+    private func getClientVersion() -> String {
+        // Check for environment override (for testing)
+        if let override = ProcessInfo.processInfo.environment["CLIENT_VERSION_OVERRIDE"] {
+            return override
+        }
+        
+        // Get version from bundle
+        if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+            return version
+        }
+        
+        return "unknown"
+    }
+    
     /// Start polling for configuration updates
     func startPolling() {
         // Perform initial check immediately
@@ -62,10 +77,14 @@ class PollingService {
             // Read public key
             let publicKey = try nebulaManager.readPublicKey()
             
+            // Detect versions
+            let clientVersion = getClientVersion()
+            let nebulaVersion = nebulaManager.getNebulaVersion()
+            
             // Fetch config from server
             onStatusChange?(.connecting)
             let apiClient = APIClient(serverURL: configuration.serverURL)
-            let response = try await apiClient.fetchConfig(token: token, publicKey: publicKey)
+            let response = try await apiClient.fetchConfig(token: token, publicKey: publicKey, clientVersion: clientVersion, nebulaVersion: nebulaVersion)
             
             // Write configuration and check if it changed
             let configChanged = try nebulaManager.writeConfiguration(response)
