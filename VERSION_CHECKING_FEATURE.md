@@ -40,6 +40,33 @@ The Version Checking and Security Advisory System automatically monitors client 
 - Prevents excessive API calls and rate limiting
 - Graceful fallback to cached data if API is unavailable
 
+## Client Version Reporting
+
+### Python Client (Docker/Linux)
+The Python client (`client/agent.py`) automatically reports version information in every config request:
+- **Client version**: From `__version__` constant (default: "1.0.0")
+- **Nebula version**: Detected by executing `nebula -version`
+- **Environment overrides**: `CLIENT_VERSION_OVERRIDE` and `NEBULA_VERSION_OVERRIDE`
+
+### macOS Native Client
+The macOS client (`macos_client/`) reports version information starting from this release:
+- **Client version**: From application bundle (`CFBundleShortVersionString`)
+- **Nebula version**: Detected by executing `nebula -version`
+- **Environment override**: `CLIENT_VERSION_OVERRIDE` (for testing)
+- **Implementation**: Automatic detection in `PollingService.checkForUpdates()`
+
+Both clients send version information as optional fields in the `/v1/client/config` POST request:
+```json
+{
+  "token": "client_token",
+  "public_key": "...",
+  "client_version": "1.0.0",
+  "nebula_version": "1.9.7"
+}
+```
+
+**Note**: Clients not reporting version information will show "Unknown" status in the web UI. Older clients or clients with version detection failures will continue to work but won't receive version status indicators.
+
 ## API Endpoints
 
 ### GET /api/v1/version-status
