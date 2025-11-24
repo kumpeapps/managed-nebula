@@ -14,6 +14,7 @@ services:
   server:
     image: ghcr.io/kumpeapps/managed-nebula/server:latest
     environment:
+      - APP_VERSION=${APP_VERSION:-1.0.0}
       - DB_URL=${DB_URL:-sqlite+aiosqlite:///./data/app.db}
       - SECRET_KEY=${SECRET_KEY:-change-me}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
