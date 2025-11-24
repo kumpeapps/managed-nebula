@@ -24,9 +24,18 @@ class PollingService {
             return override
         }
         
-        // Get version from bundle
+        // Try to get version from app bundle Info.plist (when running as .app)
         if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
             return version
+        }
+        
+        // Fall back to reading from VERSION file next to executable
+        if let executablePath = Bundle.main.executablePath {
+            let executableURL = URL(fileURLWithPath: executablePath)
+            let versionURL = executableURL.deletingLastPathComponent().appendingPathComponent("VERSION")
+            if let versionString = try? String(contentsOf: versionURL, encoding: .utf8) {
+                return versionString.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
         }
         
         return "unknown"
@@ -80,6 +89,8 @@ class PollingService {
             // Detect versions
             let clientVersion = getClientVersion()
             let nebulaVersion = nebulaManager.getNebulaVersion()
+            let nebulaVersionStr = nebulaVersion ?? "nil"
+            print("[PollingService] Detected client version: \(clientVersion), nebula version: \(nebulaVersionStr)")
             
             // Fetch config from server
             onStatusChange?(.connecting)
