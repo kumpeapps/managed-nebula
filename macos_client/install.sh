@@ -95,8 +95,15 @@ echo ""
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
+# Set version
+VERSION="${VERSION:-1.0.0}"
+
 echo "Building release binary..."
 swift build -c release
+
+# Create VERSION file next to the binary
+echo "${VERSION}" > .build/release/VERSION
+echo "✓ Created VERSION file with version: ${VERSION}"
 
 if [ ! -f ".build/release/ManagedNebula" ]; then
     echo "✗ Build failed"
@@ -116,8 +123,10 @@ if [[ $REPLY =~ ^[Nn]$ ]]; then
     echo "You can run it manually: ./.build/release/ManagedNebula"
 else
     sudo cp .build/release/ManagedNebula "${INSTALL_DIR}/"
+    sudo cp .build/release/VERSION "${INSTALL_DIR}/"
     sudo chmod +x "${INSTALL_DIR}/ManagedNebula"
     echo "✓ Installed to ${INSTALL_DIR}/ManagedNebula"
+    echo "✓ Installed VERSION file to ${INSTALL_DIR}/VERSION"
 fi
 
 echo ""

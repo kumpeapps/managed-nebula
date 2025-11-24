@@ -22,7 +22,10 @@ if [ ! -f ".build/release/${APP_NAME}" ]; then
     exit 1
 fi
 
+# Create VERSION file next to the binary
+echo "${VERSION}" > .build/release/VERSION
 echo "✓ Build complete"
+echo "✓ Created VERSION file with version: ${VERSION}"
 echo ""
 
 # Create bundle structure
@@ -44,12 +47,13 @@ mkdir -p "${BUNDLE_DIR}/Contents/Resources"
 echo "✓ Bundle structure created"
 echo ""
 
-# Copy binary
-echo "Step 3: Copying binary..."
+# Copy binary and VERSION file
+echo "Step 3: Copying binary and VERSION file..."
 cp ".build/release/${APP_NAME}" "${BUNDLE_DIR}/Contents/MacOS/"
+cp ".build/release/VERSION" "${BUNDLE_DIR}/Contents/MacOS/"
 chmod +x "${BUNDLE_DIR}/Contents/MacOS/${APP_NAME}"
 
-echo "✓ Binary copied"
+echo "✓ Binary and VERSION file copied"
 echo ""
 
 # Create Info.plist

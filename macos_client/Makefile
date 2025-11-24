@@ -27,11 +27,15 @@ help:
 build:
 	@echo "Building ManagedNebula (release)..."
 	swift build -c release
+	@echo "$${VERSION:-1.0.0}" > $(BUILD_DIR)/release/VERSION
+	@echo "Created VERSION file with version: $$(cat $(BUILD_DIR)/release/VERSION)"
 	@echo "Build complete: $(BUILD_DIR)/release/$(BINARY_NAME)"
 
 debug:
 	@echo "Building ManagedNebula (debug)..."
 	swift build
+	@echo "$${VERSION:-1.0.0-dev}" > $(BUILD_DIR)/debug/VERSION
+	@echo "Created VERSION file with version: $$(cat $(BUILD_DIR)/debug/VERSION)"
 	@echo "Build complete: $(BUILD_DIR)/debug/$(BINARY_NAME)"
 
 clean:
