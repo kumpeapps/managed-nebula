@@ -12,6 +12,20 @@ import { User, Client } from '../models';
       <div class="container">
         <h2>Dashboard</h2>
         
+        <!-- Loading State -->
+        <div *ngIf="isLoading" class="loading-container">
+          <div class="spinner"></div>
+          <p>Loading dashboard...</p>
+        </div>
+
+        <!-- Error State -->
+        <div *ngIf="!isLoading && error" class="error-container">
+          <p class="error-message">{{ error }}</p>
+          <button (click)="loadDashboardData()" class="btn btn-secondary">Retry</button>
+        </div>
+
+        <!-- Dashboard Content -->
+        <div *ngIf="!isLoading && !error">
         <div class="stats-grid">
           <div class="stat-card">
             <h3>Total Clients</h3>
@@ -77,6 +91,8 @@ import { User, Client } from '../models';
           </div>
           <p *ngIf="recentClients.length === 0">No clients found.</p>
         </div>
+        </div>
+        <!-- End Dashboard Content -->
       </div>
     </div>
   `,
@@ -201,6 +217,67 @@ import { User, Client } from '../models';
     .version-label {
       color: #666;
     }
+
+    /* Loading and Error States */
+    .loading-container {
+      text-align: center;
+      padding: 3rem;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #4CAF50;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .loading-container p {
+      color: #666;
+      margin: 0;
+    }
+
+    .error-container {
+      background: #f8d7da;
+      border: 1px solid #f5c6cb;
+      border-radius: 8px;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    .error-message {
+      color: #721c24;
+      margin: 0 0 1rem 0;
+      font-weight: 500;
+    }
+
+    .btn {
+      padding: 0.5rem 1.5rem;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 500;
+    }
+
+    .btn-secondary {
+      background: #6c757d;
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: #5a6268;
+    }
   `],
     standalone: false
 })
@@ -213,6 +290,8 @@ export class DashboardComponent implements OnInit {
   currentVersionClients = 0;
   outdatedClients = 0;
   vulnerableClients = 0;
+  isLoading = false;
+  error = '';
 
   constructor(
     private authService: AuthService,
@@ -225,6 +304,8 @@ export class DashboardComponent implements OnInit {
   }
 
   loadDashboardData(): void {
+    this.isLoading = true;
+    this.error = '';
     this.apiService.getClients().subscribe({
       next: (clients: Client[]) => {
         this.totalClients = clients.length;
@@ -234,9 +315,12 @@ export class DashboardComponent implements OnInit {
         
         // Calculate version health statistics
         this.calculateVersionHealth(clients);
+        this.isLoading = false;
       },
       error: (error: unknown) => {
         console.error('Failed to load dashboard data:', error);
+        this.error = 'Failed to load dashboard data. Please try again.';
+        this.isLoading = false;
       }
     });
   }
