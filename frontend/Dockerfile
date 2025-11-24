@@ -38,6 +38,10 @@ RUN chmod +x /opt/managed-nebula/install-systemd-service.sh
 # Copy built Angular app from build stage
 COPY --from=build /app/dist/managed-nebula-frontend /usr/share/nginx/html
 
+# Create environment.js for runtime configuration
+RUN mkdir -p /usr/share/nginx/html/assets && \
+    echo "window.__env = window.__env || {}; window.__env.apiTestDelay = 0;" > /usr/share/nginx/html/assets/environment.js
+
 # Expose ports 80 and 443
 EXPOSE 80 443
 

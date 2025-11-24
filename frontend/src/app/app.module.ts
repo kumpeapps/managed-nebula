@@ -2,7 +2,7 @@ import { NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { provideHttpClient, withInterceptorsFromDi, HTTP_INTERCEPTORS } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
-import { CommonModule } from '@angular/common';
+import { CommonModule, DatePipe } from '@angular/common';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
@@ -28,6 +28,7 @@ import { ApiService } from './services/api.service';
 import { NotificationService } from './services/notification.service';
 import { AuthGuard } from './guards/auth.guard';
 import { AuthInterceptor } from './interceptors/auth.interceptor';
+import { LocalDatePipe } from './pipes/local-date.pipe';
 
 @NgModule({
   declarations: [
@@ -47,7 +48,8 @@ import { AuthInterceptor } from './interceptors/auth.interceptor';
     SettingsComponent,
     ProfileComponent,
     NavbarComponent,
-    NotificationsComponent
+    NotificationsComponent,
+    LocalDatePipe
   ],
   imports: [
     BrowserModule,
@@ -65,7 +67,8 @@ import { AuthInterceptor } from './interceptors/auth.interceptor';
     AuthService,
     ApiService,
     NotificationService,
-    AuthGuard
+    AuthGuard,
+    DatePipe
   ],
   bootstrap: [AppComponent]
 })

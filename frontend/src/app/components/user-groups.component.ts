@@ -90,7 +90,7 @@ import { UserGroup } from '../models';
                 <tbody>
                   <tr *ngFor="let member of members">
                     <td>{{ member.user?.email }}</td>
-                    <td>{{ member.added_at | date:'short' }}</td>
+                    <td>{{ member.added_at | localDate:'short' }}</td>
                     <td>
                       <button (click)="removeMember(member.user!.id)" class="btn btn-xs btn-danger">Remove</button>
                     </td>
@@ -132,8 +132,20 @@ import { UserGroup } from '../models';
           </div>
         </div>
 
+        <!-- Loading State -->
+        <div *ngIf="isLoading" class="loading-container">
+          <div class="spinner"></div>
+          <p>Loading user groups...</p>
+        </div>
+
+        <!-- Error State -->
+        <div *ngIf="!isLoading && error" class="error-container">
+          <p>{{ error }}</p>
+          <button (click)="loadUserGroups()" class="btn btn-primary">Retry</button>
+        </div>
+
         <!-- User Groups List -->
-        <div class="user-groups-list">
+        <div *ngIf="!isLoading && !error" class="user-groups-list">
           <div *ngIf="userGroups.length > 0" class="user-groups-grid">
             <div *ngFor="let ug of userGroups" class="user-group-card">
               <div class="ug-header">
@@ -145,7 +157,7 @@ import { UserGroup } from '../models';
               
               <div class="ug-meta">
                 <span>Members: {{ ug.member_count || 0 }}</span>
-                <span>Created: {{ ug.created_at | date:'short' }}</span>
+                <span>Created: {{ ug.created_at | localDate:'short' }}</span>
               </div>
               
               <div class="ug-actions" *ngIf="canManage(ug)">
@@ -438,6 +450,54 @@ import { UserGroup } from '../models';
       font-style: italic;
     }
     
+    .loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 4rem 2rem;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .loading-container p {
+      margin-top: 1rem;
+      color: #666;
+      font-size: 1rem;
+    }
+    
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #4CAF50;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .error-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 4rem 2rem;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .error-container p {
+      color: #dc3545;
+      margin-bottom: 1rem;
+      font-size: 1rem;
+    }
+    
     @media (max-width: 768px) {
       .container {
         padding: 1rem;
@@ -500,7 +560,8 @@ export class UserGroupsComponent implements OnInit {
   editData: any = { name: '', description: '' };
   creating = false;
   updating = false;
-  loading = false;
+  isLoading = false;
+  error = '';
   
   // Members management
   members: any[] = [];
@@ -521,15 +582,17 @@ export class UserGroupsComponent implements OnInit {
   }
 
   loadUserGroups(): void {
-    this.loading = true;
+    this.isLoading = true;
+    this.error = '';
     this.apiService.getUserGroups().subscribe({
       next: (userGroups: UserGroup[]) => {
         this.userGroups = userGroups;
-        this.loading = false;
+        this.isLoading = false;
       },
       error: (error: any) => {
         console.error('Failed to load user groups:', error);
-        this.loading = false;
+        this.error = 'Failed to load user groups: ' + (error.error?.detail || 'Unknown error');
+        this.isLoading = false;
       }
     });
   }

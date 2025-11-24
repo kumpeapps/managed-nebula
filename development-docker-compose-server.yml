@@ -34,6 +34,7 @@ services:
       - ENABLE_SCHEMA_AUTOSYNC=${ENABLE_SCHEMA_AUTOSYNC:-true}
       - DEBUG_AUTH=${DEBUG_AUTH:-true}
       - EXTERNALLY_MANAGED_USERS=${EXTERNALLY_MANAGED_USERS:-false}
+      - TZ=${TZ:-America/Chicago}
     ports:
       - "8080:8080"   # Direct access for API debugging (also proxied via frontend)
     volumes:
@@ -58,6 +59,8 @@ services:
       - SSL_CERT_NAME=${SSL_CERT_NAME:-tls.crt}
       - SSL_KEY_NAME=${SSL_KEY_NAME:-tls.key}
       - DOMAIN=${DOMAIN:-localhost}
+      - API_TEST_DELAY=${API_TEST_DELAY:-0}
+      - TZ=${TZ:-America/Chicago}
     ports:
       - "4200:443"
     # volumes:

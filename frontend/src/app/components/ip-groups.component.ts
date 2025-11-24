@@ -89,7 +89,17 @@ import { IPGroup, IPPool } from '../models';
           </select>
         </div>
         
-        <div class="groups-list">
+        <div *ngIf="isLoading" class="loading-container">
+          <div class="spinner"></div>
+          <p>Loading IP groups...</p>
+        </div>
+
+        <div *ngIf="!isLoading && error" class="error-container">
+          <p>{{ error }}</p>
+          <button (click)="loadIPGroups()" class="btn btn-primary">Retry</button>
+        </div>
+
+        <div *ngIf="!isLoading && !error" class="groups-list">
           <div *ngIf="ipGroups.length > 0" class="groups-grid">
             <div *ngFor="let group of ipGroups" class="group-card">
               <div class="group-header">
@@ -348,6 +358,54 @@ import { IPGroup, IPPool } from '../models';
       color: #666;
     }
     
+    .loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 4rem 2rem;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .loading-container p {
+      margin-top: 1rem;
+      color: #666;
+      font-size: 1rem;
+    }
+    
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #2196F3;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .error-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 4rem 2rem;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .error-container p {
+      color: #f44336;
+      margin-bottom: 1rem;
+      font-size: 1rem;
+    }
+    
     @media (max-width: 768px) {
       .container {
         padding: 1rem;
@@ -415,6 +473,8 @@ export class IPGroupsComponent implements OnInit {
   selectedGroup: IPGroup | null = null;
   creating = false;
   updating = false;
+  isLoading = false;
+  error = '';
 
   constructor(
     private authService: AuthService,
@@ -440,13 +500,17 @@ export class IPGroupsComponent implements OnInit {
   }
 
   loadIPGroups(): void {
+    this.isLoading = true;
+    this.error = '';
     this.apiService.getIPGroups(this.filterPoolId || undefined).subscribe({
       next: (groups: IPGroup[]) => {
         this.ipGroups = groups;
+        this.isLoading = false;
       },
       error: (error: any) => {
         console.error('Failed to load IP groups:', error);
-        alert('Failed to load IP groups: ' + (error.error?.detail || 'Unknown error'));
+        this.error = 'Failed to load IP groups: ' + (error.error?.detail || 'Unknown error');
+        this.isLoading = false;
       }
     });
   }
