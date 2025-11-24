@@ -11,13 +11,22 @@ from .config import settings
 
 
 def init_scheduler(app):
+    """Initialize scheduler but don't start it yet (will be started in lifespan)."""
     scheduler = AsyncIOScheduler()
 
     # Daily check for CA rotation
     scheduler.add_job(check_ca_rotation, CronTrigger(hour=3, minute=0))
     scheduler.add_job(cleanup_old_cas, CronTrigger(hour=4, minute=0))
-    scheduler.start()
+    
+    # Don't start here - will be started in lifespan context when event loop is running
     app.state.scheduler = scheduler
+
+
+async def start_scheduler(app):
+    """Start the scheduler (must be called from async context with running event loop)."""
+    if hasattr(app.state, 'scheduler'):
+        app.state.scheduler.start()
+        print("[scheduler] Started background scheduler")
 
 
 async def check_ca_rotation():
