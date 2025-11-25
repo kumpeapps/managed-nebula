@@ -100,6 +100,7 @@ jobs:
           docker buildx build --push \
             --build-arg VERSION=${GITHUB_REF#refs/tags/} \
             --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:${GITHUB_REF#refs/tags/} \
+            --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
             --cache-from type=gha,scope=frontend-main \
             --cache-to type=gha,mode=max,scope=frontend-tag \
             --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
