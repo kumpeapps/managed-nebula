@@ -593,6 +593,10 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
 
     # Determine OS-specific paths based on os_type from request or client record
     os_type = body.os_type or client.os_type or "docker"
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Client {client.name} requesting config with os_type: {os_type} (request: {body.os_type}, stored: {client.os_type})")
+    
     if os_type == "windows":
         key_path = "C:/ProgramData/Nebula/host.key"
         ca_path = "C:/ProgramData/Nebula/ca.crt"
@@ -605,6 +609,8 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
         key_path = "/var/lib/nebula/host.key"
         ca_path = "/etc/nebula/ca.crt"
         cert_path = "/etc/nebula/host.crt"
+    
+    logger.info(f"Generated config paths for {os_type}: key={key_path}, ca={ca_path}, cert={cert_path}")
     
     # Build config YAML; embed CA bundle inline to support multiple CAs
     config_yaml = build_nebula_config(
