@@ -60,8 +60,15 @@ logger = setup_logging()
 
 def ensure_directories() -> None:
     """Ensure all required directories exist with proper permissions"""
-    NEBULA_DIR.mkdir(parents=True, exist_ok=True)
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        NEBULA_DIR.mkdir(parents=True, exist_ok=True)
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        logger.error(f"Failed to create Nebula directory {NEBULA_DIR}: {e}")
+        raise
+    if not NEBULA_DIR.exists():
+        logger.critical(f"Nebula directory {NEBULA_DIR} does not exist after mkdir. Check permissions!")
+        raise RuntimeError(f"Nebula directory {NEBULA_DIR} does not exist after mkdir.")
     
     # Set restrictive permissions on the nebula directory (Windows ACLs)
     try:
