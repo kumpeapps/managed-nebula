@@ -1,0 +1,227 @@
+name: Build and Release Windows Client
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Get version from release tag
+      id: get_version
+      shell: pwsh
+      run: |
+        if ("${{ github.event_name }}" -eq "release") {
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+        } else {
+          $version = "${{ github.event.inputs.version }}"
+        }
+        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        echo "Building version: $version"
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller pywin32 httpx pyyaml cryptography
+    
+    - name: Download Nebula binaries
+      shell: pwsh
+      run: |
+        $nebulaVersion = "1.9.7"
+        $nebulaUrl = "https://github.com/slackhq/nebula/releases/download/v$nebulaVersion/nebula-windows-amd64.zip"
+        $nebulaTmp = "windows_client\nebula-tmp"
+        
+        New-Item -ItemType Directory -Force -Path $nebulaTmp | Out-Null
+        
+        Write-Host "Downloading Nebula v$nebulaVersion..."
+        Invoke-WebRequest -Uri $nebulaUrl -OutFile "$nebulaTmp\nebula.zip"
+        
+        Write-Host "Extracting Nebula binaries..."
+        Expand-Archive -Path "$nebulaTmp\nebula.zip" -DestinationPath $nebulaTmp -Force
+        
+        if (!(Test-Path "$nebulaTmp\nebula.exe")) {
+          throw "Failed to extract Nebula binaries"
+        }
+        
+        Write-Host "Nebula binaries ready"
+    
+    - name: Update version in agent.py
+      shell: pwsh
+      run: |
+        $agentPath = "windows_client\agent.py"
+        $content = Get-Content $agentPath -Raw
+        $content = $content -replace '__version__ = ".*"', "__version__ = `"${{ steps.get_version.outputs.VERSION }}`""
+        Set-Content -Path $agentPath -Value $content
+        Write-Host "Updated version to ${{ steps.get_version.outputs.VERSION }}"
+    
+    - name: Build Agent executable
+      shell: pwsh
+      working-directory: windows_client
+      run: |
+        Write-Host "Building NebulaAgent.exe..."
+        pyinstaller --onefile `
+          --name "NebulaAgent" `
+          --icon="installer\nebula.ico" `
+          --add-data "config.py;." `
+          --hidden-import=win32timezone `
+          --hidden-import=win32serviceutil `
+          --hidden-import=win32service `
+          --hidden-import=win32event `
+          --hidden-import=servicemanager `
+          agent.py
+        
+        if (!(Test-Path "dist\NebulaAgent.exe")) {
+          throw "Agent build failed"
+        }
+        Write-Host "Agent executable built successfully"
+    
+    - name: Build Service executable
+      shell: pwsh
+      working-directory: windows_client
+      run: |
+        Write-Host "Building NebulaAgentService.exe..."
+        pyinstaller --onefile `
+          --name "NebulaAgentService" `
+          --icon="installer\nebula.ico" `
+          --add-data "config.py;." `
+          --add-data "agent.py;." `
+          --hidden-import=win32timezone `
+          --hidden-import=win32serviceutil `
+          --hidden-import=win32service `
+          --hidden-import=win32event `
+          --hidden-import=servicemanager `
+          service.py
+        
+        if (!(Test-Path "dist\NebulaAgentService.exe")) {
+          throw "Service build failed"
+        }
+        Write-Host "Service executable built successfully"
+    
+    - name: Prepare distribution package
+      shell: pwsh
+      run: |
+        $version = "${{ steps.get_version.outputs.VERSION }}"
+        $pkgDir = "windows_client\dist\NebulaAgent-$version"
+        
+        New-Item -ItemType Directory -Force -Path $pkgDir | Out-Null
+        
+        # Copy executables
+        Copy-Item "windows_client\dist\NebulaAgent.exe" $pkgDir
+        Copy-Item "windows_client\dist\NebulaAgentService.exe" $pkgDir
+        
+        # Copy Nebula binaries
+        Copy-Item "windows_client\nebula-tmp\nebula.exe" $pkgDir
+        Copy-Item "windows_client\nebula-tmp\nebula-cert.exe" $pkgDir
+        
+        # Copy installer scripts
+        Copy-Item "windows_client\installer\install.ps1" $pkgDir
+        Copy-Item "windows_client\installer\uninstall.ps1" $pkgDir
+        
+        # Copy icon
+        Copy-Item "windows_client\installer\nebula.ico" $pkgDir
+        
+        # Create version file
+        Set-Content -Path "$pkgDir\VERSION" -Value $version
+        
+        # Create example config
+        @"
+        # Managed Nebula Agent Configuration
+        [agent]
+        server_url = https://your-server.example.com:8080
+        client_token = your-client-token-here
+        poll_interval_hours = 24
+        log_level = INFO
+        auto_start_nebula = true
+        "@ | Set-Content -Path "$pkgDir\agent.ini.example"
+        
+        # Copy README
+        Copy-Item "windows_client\README.md" $pkgDir
+        
+        Write-Host "Distribution package prepared at $pkgDir"
+    
+    - name: Create ZIP archive
+      shell: pwsh
+      run: |
+        $version = "${{ steps.get_version.outputs.VERSION }}"
+        $pkgDir = "windows_client\dist\NebulaAgent-$version"
+        $zipPath = "windows_client\dist\NebulaAgent-windows-$version.zip"
+        
+        Compress-Archive -Path "$pkgDir\*" -DestinationPath $zipPath -Force
+        
+        Write-Host "Created: $zipPath"
+        Get-Item $zipPath | Format-List Name, Length
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: NebulaAgent-windows-${{ steps.get_version.outputs.VERSION }}
+        path: |
+          windows_client/dist/NebulaAgent-windows-${{ steps.get_version.outputs.VERSION }}.zip
+          windows_client/dist/NebulaAgent-${{ steps.get_version.outputs.VERSION }}/
+        retention-days: 30
+    
+    - name: Upload to Release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          windows_client/dist/NebulaAgent-windows-${{ steps.get_version.outputs.VERSION }}.zip
+        body: |
+          # Managed Nebula Windows Client ${{ steps.get_version.outputs.VERSION }}
+          
+          ## Installation
+          
+          1. Download and extract `NebulaAgent-windows-${{ steps.get_version.outputs.VERSION }}.zip`
+          2. Right-click `install.ps1` and select "Run with PowerShell" as Administrator
+          3. Edit `C:\ProgramData\Nebula\agent.ini` with your server URL and client token
+          4. Start the service: `Start-Service NebulaAgent`
+          
+          ## Package Contents
+          - `NebulaAgent.exe` - Agent CLI tool
+          - `NebulaAgentService.exe` - Windows Service executable
+          - `nebula.exe` - Nebula VPN binary (v1.9.7)
+          - `nebula-cert.exe` - Nebula certificate tool
+          - `install.ps1` - PowerShell installer
+          - `uninstall.ps1` - PowerShell uninstaller
+          - `agent.ini.example` - Example configuration
+          
+          ## System Requirements
+          - Windows 10/11 or Windows Server 2019/2022
+          - Administrator privileges for installation
+          
+          ## Quick Start
+          ```powershell
+          # Install (as Administrator)
+          .\install.ps1 -Token "your-client-token" -ServerUrl "https://your-server:8080"
+          
+          # Check status
+          Get-Service NebulaAgent
+          NebulaAgent.exe --status
+          
+          # View logs
+          Get-Content C:\ProgramData\Nebula\logs\agent.log -Tail 50
+          ```
+          
+          For detailed documentation, see the [README](https://github.com/kumpeapps/managed-nebula/blob/main/windows_client/README.md)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
