@@ -7,11 +7,11 @@ echo "=========================================="
 
 # Install Python dependencies
 echo "Installing Python dependencies..."
-pip3 install -r requirements.txt
+pip3 install --break-system-packages -r requirements.txt
 
 # Install pre-commit and ggshield
 echo "Installing pre-commit and ggshield..."
-pip3 install pre-commit ggshield
+pip3 install --break-system-packages pre-commit ggshield
 
 # Install pre-commit hooks
 echo "Installing pre-commit git hooks..."
