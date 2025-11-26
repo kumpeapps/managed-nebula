@@ -145,14 +145,35 @@ if errorlevel 1 (
 echo Service executable built
 echo.
 
+REM Build the GUI executable
+echo Step 6: Building GUI executable...
+pyinstaller --onefile --windowed ^
+    --name "%APP_NAME%GUI" ^
+    --icon=installer\nebula.ico ^
+    --add-data "config.py;." ^
+    --add-data "agent.py;." ^
+    --add-data "installer\nebula.ico;installer" ^
+    --hidden-import=win32timezone ^
+    --hidden-import=pystray._win32 ^
+    gui.py
+
+if errorlevel 1 (
+    echo Error: PyInstaller GUI build failed
+    exit /b 1
+)
+
+echo GUI executable built
+echo.
+
 REM Prepare distribution package
-echo Step 6: Preparing distribution package...
+echo Step 7: Preparing distribution package...
 set "PKG_DIR=%DIST_DIR%\%APP_NAME%-%VERSION%"
 mkdir "%PKG_DIR%"
 
 REM Copy executables
 copy "%DIST_DIR%\%APP_NAME%.exe" "%PKG_DIR%\"
 copy "%DIST_DIR%\%APP_NAME%Service.exe" "%PKG_DIR%\"
+copy "%DIST_DIR%\%APP_NAME%GUI.exe" "%PKG_DIR%\"
 
 REM Copy Nebula binaries
 copy "%NEBULA_TMP%\nebula.exe" "%PKG_DIR%\"
@@ -161,6 +182,9 @@ copy "%NEBULA_TMP%\nebula-cert.exe" "%PKG_DIR%\"
 REM Copy installer scripts
 copy "%SCRIPT_DIR%\installer\install.ps1" "%PKG_DIR%\"
 copy "%SCRIPT_DIR%\installer\uninstall.ps1" "%PKG_DIR%\"
+
+REM Copy icon
+copy "%SCRIPT_DIR%\installer\nebula.ico" "%PKG_DIR%\"
 
 REM Create version file
 echo %VERSION%> "%PKG_DIR%\VERSION"
@@ -180,18 +204,19 @@ echo Distribution package prepared
 echo.
 
 REM Create ZIP archive
-echo Step 7: Creating ZIP archive...
+echo Step 8: Creating ZIP archive...
 powershell -Command "Compress-Archive -Path '%PKG_DIR%\*' -DestinationPath '%DIST_DIR%\%APP_NAME%-%VERSION%.zip' -Force"
 
 echo ZIP archive created: %DIST_DIR%\%APP_NAME%-%VERSION%.zip
 echo.
 
 REM Cleanup
-echo Step 8: Cleaning up...
+echo Step 9: Cleaning up...
 rmdir /s /q "%NEBULA_TMP%"
 rmdir /s /q "%BUILD_DIR%"
 del /q "%DIST_DIR%\%APP_NAME%.exe" 2>nul
 del /q "%DIST_DIR%\%APP_NAME%Service.exe" 2>nul
+del /q "%DIST_DIR%\%APP_NAME%GUI.exe" 2>nul
 
 echo Cleanup complete
 echo.
@@ -208,18 +233,20 @@ echo.
 echo Package contents:
 echo   - %APP_NAME%.exe (Agent CLI)
 echo   - %APP_NAME%Service.exe (Windows Service)
+echo   - %APP_NAME%GUI.exe (GUI Configuration App)
 echo   - nebula.exe (Nebula VPN binary)
 echo   - nebula-cert.exe (Nebula certificate tool)
 echo   - install.ps1 (PowerShell installer)
 echo   - uninstall.ps1 (PowerShell uninstaller)
+echo   - nebula.ico (Application icon)
 echo   - agent.ini.example (Example configuration)
 echo   - README.md (Documentation)
 echo.
 echo Next steps:
 echo   1. Copy the package to target Windows machine
 echo   2. Run install.ps1 as Administrator
-echo   3. Configure agent.ini with server URL and token
-echo   4. Start the NebulaAgent service
+echo   3. Run NebulaAgentGUI.exe to configure
+echo   4. Or manually edit agent.ini and start the service
 echo.
 
 endlocal
