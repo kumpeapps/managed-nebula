@@ -10,11 +10,14 @@ on:
       - 'client/**'
       - 'docker-compose.yml'
       - '.github/workflows/push-client.yml'
+  release:
+    types: [published]
   workflow_dispatch:
 
 env:
   DOCKER_CLIENT_TIMEOUT: 300
   COMPOSE_HTTP_TIMEOUT: 300
+  RELEASE_TITLE: ${{ github.event.release.name || '' }}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -22,6 +25,17 @@ concurrency:
 
 jobs:
   build-and-push-client:
+    # On releases: run if title has "client" (any case) or no platform keywords specified
+    if: >
+      github.event_name != 'release' || (
+        contains(env.RELEASE_TITLE, 'client') || contains(env.RELEASE_TITLE, 'Client') || (
+          !contains(env.RELEASE_TITLE, 'windows') && !contains(env.RELEASE_TITLE, 'Windows') &&
+          !contains(env.RELEASE_TITLE, 'macos') && !contains(env.RELEASE_TITLE, 'macOS') &&
+          !contains(env.RELEASE_TITLE, 'server') && !contains(env.RELEASE_TITLE, 'Server') &&
+          !contains(env.RELEASE_TITLE, 'frontend') && !contains(env.RELEASE_TITLE, 'Frontend') &&
+          !contains(env.RELEASE_TITLE, 'client') && !contains(env.RELEASE_TITLE, 'Client')
+        )
+      )
     timeout-minutes: 120
     runs-on: ubuntu-latest
     steps:

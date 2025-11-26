@@ -4,8 +4,32 @@ on:
   release:
     types: [published]
 
+env:
+  RELEASE_TITLE: ${{ github.event.release.name || '' }}
+
 jobs:
   build:
+    # Run if title has "macos" (any case) or no platform keywords specified
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'release' &&
+        (
+          contains(env.RELEASE_TITLE, 'macos') ||
+          contains(env.RELEASE_TITLE, 'macOS') ||
+          (
+            !contains(env.RELEASE_TITLE, 'windows') &&
+            !contains(env.RELEASE_TITLE, 'Windows') &&
+            !contains(env.RELEASE_TITLE, 'macos') &&
+            !contains(env.RELEASE_TITLE, 'macOS') &&
+            !contains(env.RELEASE_TITLE, 'server') &&
+            !contains(env.RELEASE_TITLE, 'Server') &&
+            !contains(env.RELEASE_TITLE, 'frontend') &&
+            !contains(env.RELEASE_TITLE, 'Frontend') &&
+            !contains(env.RELEASE_TITLE, 'client') &&
+            !contains(env.RELEASE_TITLE, 'Client')
+          )
+        )
+      )
     permissions:
       contents: write
     runs-on: macos-latest
