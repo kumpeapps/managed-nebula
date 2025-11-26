@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime
@@ -1050,7 +1050,22 @@ async def delete_client(
             f"Deleting client {client_id} (name: {client.name}) by user {user.email} (id: {user.id})"
         )
 
-        # Delete the client (CASCADE will handle related records)
+        # Manual cleanup only for tables lacking DB-level CASCADE
+        await session.execute(delete(ClientCertificate).where(ClientCertificate.client_id == client_id))
+        await session.execute(delete(ClientToken).where(ClientToken.client_id == client_id))
+        await session.execute(delete(IPAssignment).where(IPAssignment.client_id == client_id))
+        await session.execute(delete(ClientPermission).where(ClientPermission.client_id == client_id))
+        # Null out logs referencing this client (SET NULL semantics)
+        await session.execute(
+            GitHubSecretScanningLog.__table__.update()
+            .where(GitHubSecretScanningLog.client_id == client_id)
+            .values(client_id=None)
+        )
+
+        # Let ORM handle association tables (client_groups, client_firewall_rulesets)
+        # to avoid double-deletion rowcount mismatches
+
+        # Finally delete the client itself; ORM will flush association deletions first
         await session.delete(client)
         await session.commit()
 

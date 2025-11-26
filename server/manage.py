@@ -220,11 +220,15 @@ async def make_admin(email: str):
             print(f"❌ User with email '{email}' not found!")
             return False
 
-        # Ensure Administrators group exists
+        # Ensure Administrators group exists with is_admin=True
         admins = (await session.execute(select(UserGroup).where(UserGroup.name == "Administrators"))).scalars().first()
         if not admins:
             admins = UserGroup(name="Administrators", description="Administrators with full access", is_admin=True)
             session.add(admins)
+            await session.flush()
+        elif not admins.is_admin:
+            # Fix existing Administrators group
+            admins.is_admin = True
             await session.flush()
         
         # Add membership if missing
@@ -267,12 +271,17 @@ async def create_demo_data():
         # 1. Create demo users
         print("\n👥 Creating demo users...")
         
-        # Ensure Administrators group exists
+        # Ensure Administrators group exists with is_admin=True
         admins_group = (await session.execute(select(UserGroup).where(UserGroup.name == "Administrators"))).scalars().first()
         if not admins_group:
             admins_group = UserGroup(name="Administrators", description="Administrators with full access", is_admin=True)
             session.add(admins_group)
             await session.flush()
+        elif not admins_group.is_admin:
+            # Fix existing Administrators group that doesn't have is_admin set
+            admins_group.is_admin = True
+            await session.flush()
+            print("  ✅ Updated Administrators group to have admin privileges")
         
         # Create demo users if they don't exist
         demo_users = [
@@ -294,15 +303,25 @@ async def create_demo_data():
                 session.add(user)
                 await session.flush()
                 created_users[email] = user
-                
-                # Add admin user to Administrators group
-                if is_admin:
-                    session.add(UserGroupMembership(user_id=user.id, user_group_id=admins_group.id))
-                
                 print(f"  ✅ Created user: {email} (password: {password}{'  [admin]' if is_admin else ''})")
             else:
                 created_users[email] = existing
                 print(f"  ℹ️  User exists: {email}")
+            
+            # Ensure admin users are in Administrators group (for both new and existing users)
+            if is_admin:
+                existing_membership = (await session.execute(
+                    select(UserGroupMembership).where(
+                        UserGroupMembership.user_id == created_users[email].id,
+                        UserGroupMembership.user_group_id == admins_group.id
+                    )
+                )).scalars().first()
+                
+                if not existing_membership:
+                    session.add(UserGroupMembership(user_id=created_users[email].id, user_group_id=admins_group.id))
+                    print(f"  ✅ Added {email} to Administrators group")
+                else:
+                    print(f"  ℹ️  {email} already in Administrators group")
         
         # 2. Create user groups
         print("\n👥 Creating user groups...")
@@ -364,7 +383,7 @@ async def create_demo_data():
         
         # Grant read permissions to all non-admin user groups
         for group_name, group in created_user_groups.items():
-            if not group.is_admin:  # Only grant to non-admin groups
+            if group.name != "Administrators":  # Only grant to non-admin groups
                 for perm in read_permissions:
                     # Check if permission already granted
                     existing = (await session.execute(

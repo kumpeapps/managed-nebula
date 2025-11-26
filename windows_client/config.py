@@ -134,6 +134,7 @@ def load_config() -> Dict[str, Any]:
         "poll_interval_hours": 24,
         "log_level": "INFO",
         "auto_start_nebula": True,
+        "allow_self_signed_cert": False,
     }
     
     # Start with defaults
@@ -154,6 +155,7 @@ def load_config() -> Dict[str, Any]:
         "POLL_INTERVAL_HOURS": "poll_interval_hours",
         "LOG_LEVEL": "log_level",
         "AUTO_START_NEBULA": "auto_start_nebula",
+        "ALLOW_SELF_SIGNED_CERT": "allow_self_signed_cert",
     }
     
     for env_name, config_name in env_mappings.items():
@@ -162,7 +164,7 @@ def load_config() -> Dict[str, Any]:
             # Convert to appropriate type
             if config_name in ("poll_interval_hours",):
                 config[config_name] = int(env_value)
-            elif config_name in ("auto_start_nebula",):
+            elif config_name in ("auto_start_nebula", "allow_self_signed_cert"):
                 config[config_name] = env_value.lower() in ("true", "1", "yes")
             else:
                 config[config_name] = env_value

@@ -5,9 +5,8 @@ from ..db import Base
 
 # Default docker-compose template with placeholders
 DEFAULT_DOCKER_COMPOSE_TEMPLATE = """services:
-  nebula-client:
+  client:
     image: {{CLIENT_DOCKER_IMAGE}}
-    container_name: nebula-{{CLIENT_NAME}}
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
