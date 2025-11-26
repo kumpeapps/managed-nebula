@@ -192,13 +192,49 @@ jobs:
         Write-Host "Created: $zipPath"
         Get-Item $zipPath | Format-List Name, Length
     
+    - name: Install NSIS
+      shell: pwsh
+      run: |
+        choco install nsis -y
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+    
+    - name: Build NSIS Installer
+      shell: pwsh
+      run: |
+        $version = "${{ steps.get_version.outputs.VERSION }}"
+        $pkgDir = "windows_client\dist\NebulaAgent-$version"
+        $installerDir = "windows_client\installer"
+        
+        # Copy all files to installer directory for NSIS
+        Copy-Item "$pkgDir\NebulaAgent.exe" $installerDir
+        Copy-Item "$pkgDir\NebulaAgentService.exe" $installerDir
+        Copy-Item "$pkgDir\NebulaAgentGUI.exe" $installerDir
+        Copy-Item "$pkgDir\nebula.exe" $installerDir
+        Copy-Item "$pkgDir\nebula-cert.exe" $installerDir
+        Copy-Item "$pkgDir\README.md" $installerDir
+        Copy-Item "$pkgDir\agent.ini.example" $installerDir
+        
+        # Build installer
+        cd $installerDir
+        & "C:\Program Files (x86)\NSIS\makensis.exe" /DVERSION=$version installer.nsi
+        
+        if (!(Test-Path "ManagedNebula-$version-Setup.exe")) {
+          throw "NSIS build failed"
+        }
+        
+        # Move installer to dist directory
+        Move-Item "ManagedNebula-$version-Setup.exe" "..\dist\"
+        
+        Write-Host "Created: ManagedNebula-$version-Setup.exe"
+        Get-Item "..\dist\ManagedNebula-$version-Setup.exe" | Format-List Name, Length
+    
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: NebulaAgent-windows-${{ steps.get_version.outputs.VERSION }}
         path: |
+          windows_client/dist/ManagedNebula-${{ steps.get_version.outputs.VERSION }}-Setup.exe
           windows_client/dist/NebulaAgent-windows-${{ steps.get_version.outputs.VERSION }}.zip
-          windows_client/dist/NebulaAgent-${{ steps.get_version.outputs.VERSION }}/
         retention-days: 30
     
     - name: Upload to Release
@@ -206,16 +242,24 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: |
+          windows_client/dist/ManagedNebula-${{ steps.get_version.outputs.VERSION }}-Setup.exe
           windows_client/dist/NebulaAgent-windows-${{ steps.get_version.outputs.VERSION }}.zip
         body: |
           # Managed Nebula Windows Client ${{ steps.get_version.outputs.VERSION }}
           
           ## Installation
           
+          ### Option 1: Installer (Recommended)
+          1. Download `ManagedNebula-${{ steps.get_version.outputs.VERSION }}-Setup.exe`
+          2. Run the installer as Administrator
+          3. Follow the installation wizard
+          4. Launch from Start Menu or Desktop shortcut
+          5. Configure your server URL and client token in the GUI
+          
+          ### Option 2: ZIP Archive
           1. Download and extract `NebulaAgent-windows-${{ steps.get_version.outputs.VERSION }}.zip`
           2. Right-click `install.ps1` and select "Run with PowerShell" as Administrator
-          3. Run `NebulaAgentGUI.exe` to configure your server URL and client token
-          4. The service will start automatically after configuration
+          3. Run `NebulaAgentGUI.exe` to configure
           
           ## Package Contents
           - `NebulaAgent.exe` - Agent CLI tool
@@ -223,29 +267,17 @@ jobs:
           - `NebulaAgentGUI.exe` - GUI Configuration App (system tray)
           - `nebula.exe` - Nebula VPN binary (v1.9.7)
           - `nebula-cert.exe` - Nebula certificate tool
-          - `install.ps1` - PowerShell installer
-          - `uninstall.ps1` - PowerShell uninstaller
-          - `agent.ini.example` - Example configuration
           
           ## System Requirements
           - Windows 10/11 or Windows Server 2019/2022
           - Administrator privileges for installation
           
-          ## Quick Start
-          ```powershell
-          # Install (as Administrator)
-          .\install.ps1
-          
-          # Run GUI to configure
-          .\NebulaAgentGUI.exe
-          
-          # Or configure via command line
-          .\install.ps1 -Token "your-client-token" -ServerUrl "https://your-server:8080"
-          
-          # Check status
-          Get-Service NebulaAgent
-          NebulaAgent.exe --status
-          ```
+          ## Features
+          - System tray icon showing connection status
+          - Automatic Windows Service for background operation
+          - GUI for easy configuration
+          - Automatic certificate rotation
+          - Version reporting to server
           
           For detailed documentation, see the [README](https://github.com/kumpeapps/managed-nebula/blob/main/windows_client/README.md)
       env:
