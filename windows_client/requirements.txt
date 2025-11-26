@@ -1,0 +1,17 @@
+# Managed Nebula Windows Client Dependencies
+# Python 3.11+
+
+# HTTP client
+httpx==0.27.2
+
+# YAML parsing
+PyYAML==6.0.2
+
+# Windows Service support
+pywin32==308
+
+# For building standalone executable
+pyinstaller==6.11.1
+
+# Cryptography (for certificate handling)
+cryptography>=42.0.0
