@@ -69,6 +69,7 @@ class ClientResponse(BaseModel):
     client_version: Optional[str] = None
     nebula_version: Optional[str] = None
     last_version_report_at: Optional[datetime] = None
+    os_type: str = "docker"  # docker, windows, macos
     owner: Optional[UserRef]  # Owner of the client
     groups: List[GroupRef]
     firewall_rulesets: List[FirewallRulesetRef] = []
@@ -89,6 +90,7 @@ class ClientCreate(BaseModel):
     pool_id: Optional[int] = None
     ip_group_id: Optional[int] = None
     ip_address: Optional[str] = None  # Optional: specify exact IP instead of auto-allocation
+    os_type: str = "docker"  # docker, windows, macos
 
 
 class ClientUpdate(BaseModel):
@@ -97,6 +99,7 @@ class ClientUpdate(BaseModel):
     is_lighthouse: Optional[bool] = None
     public_ip: Optional[str] = None
     is_blocked: Optional[bool] = None
+    os_type: Optional[str] = None  # docker, windows, macos
     group_ids: Optional[List[int]] = None
     firewall_ruleset_ids: Optional[List[int]] = None  # Changed from firewall_rule_ids
     ip_address: Optional[str] = None  # Change IP address
@@ -393,6 +396,7 @@ class ClientConfigRequest(BaseModel):
     public_key: str
     client_version: Optional[str] = None
     nebula_version: Optional[str] = None
+    os_type: Optional[str] = "docker"  # docker, windows, macos
 
 
 # ============ Settings Schemas ============
