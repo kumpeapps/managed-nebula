@@ -265,6 +265,7 @@ jobs:
         files: |
           windows_client/dist/ManagedNebula-${{ steps.get_version.outputs.VERSION }}-Setup.exe
           windows_client/dist/NebulaAgent-windows-${{ steps.get_version.outputs.VERSION }}.zip
+        append_body: true
         body: |
           # Managed Nebula Windows Client ${{ steps.get_version.outputs.VERSION }}
           
