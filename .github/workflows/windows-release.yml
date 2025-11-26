@@ -42,7 +42,7 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pyinstaller pywin32 httpx pyyaml cryptography
+        pip install pyinstaller pywin32 httpx pyyaml cryptography pystray Pillow
     
     - name: Download Nebula binaries
       shell: pwsh
@@ -117,6 +117,26 @@ jobs:
         }
         Write-Host "Service executable built successfully"
     
+    - name: Build GUI executable
+      shell: pwsh
+      working-directory: windows_client
+      run: |
+        Write-Host "Building NebulaAgentGUI.exe..."
+        pyinstaller --onefile --windowed `
+          --name "NebulaAgentGUI" `
+          --icon="installer\nebula.ico" `
+          --add-data "config.py;." `
+          --add-data "agent.py;." `
+          --add-data "installer\nebula.ico;installer" `
+          --hidden-import=win32timezone `
+          --hidden-import=pystray._win32 `
+          gui.py
+        
+        if (!(Test-Path "dist\NebulaAgentGUI.exe")) {
+          throw "GUI build failed"
+        }
+        Write-Host "GUI executable built successfully"
+    
     - name: Prepare distribution package
       shell: pwsh
       run: |
@@ -128,6 +148,7 @@ jobs:
         # Copy executables
         Copy-Item "windows_client\dist\NebulaAgent.exe" $pkgDir
         Copy-Item "windows_client\dist\NebulaAgentService.exe" $pkgDir
+        Copy-Item "windows_client\dist\NebulaAgentGUI.exe" $pkgDir
         
         # Copy Nebula binaries
         Copy-Item "windows_client\nebula-tmp\nebula.exe" $pkgDir
@@ -193,12 +214,13 @@ jobs:
           
           1. Download and extract `NebulaAgent-windows-${{ steps.get_version.outputs.VERSION }}.zip`
           2. Right-click `install.ps1` and select "Run with PowerShell" as Administrator
-          3. Edit `C:\ProgramData\Nebula\agent.ini` with your server URL and client token
-          4. Start the service: `Start-Service NebulaAgent`
+          3. Run `NebulaAgentGUI.exe` to configure your server URL and client token
+          4. The service will start automatically after configuration
           
           ## Package Contents
           - `NebulaAgent.exe` - Agent CLI tool
-          - `NebulaAgentService.exe` - Windows Service executable
+          - `NebulaAgentService.exe` - Windows Service (background)
+          - `NebulaAgentGUI.exe` - GUI Configuration App (system tray)
           - `nebula.exe` - Nebula VPN binary (v1.9.7)
           - `nebula-cert.exe` - Nebula certificate tool
           - `install.ps1` - PowerShell installer
@@ -212,14 +234,17 @@ jobs:
           ## Quick Start
           ```powershell
           # Install (as Administrator)
+          .\install.ps1
+          
+          # Run GUI to configure
+          .\NebulaAgentGUI.exe
+          
+          # Or configure via command line
           .\install.ps1 -Token "your-client-token" -ServerUrl "https://your-server:8080"
           
           # Check status
           Get-Service NebulaAgent
           NebulaAgent.exe --status
-          
-          # View logs
-          Get-Content C:\ProgramData\Nebula\logs\agent.log -Tail 50
           ```
           
           For detailed documentation, see the [README](https://github.com/kumpeapps/managed-nebula/blob/main/windows_client/README.md)

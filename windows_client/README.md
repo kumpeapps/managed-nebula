@@ -6,6 +6,7 @@ A native Windows client for Managed Nebula that manages Nebula mesh VPN connecti
 
 - **Automatic Configuration**: Polls the Managed Nebula server for configuration updates
 - **Windows Service**: Runs as a Windows Service that starts automatically on boot
+- **GUI Configuration**: System tray application for easy configuration and monitoring
 - **Certificate Management**: Automatically generates and manages Nebula certificates
 - **Version Reporting**: Reports client and Nebula versions to the server for monitoring
 - **Secure Storage**: Uses Windows ACLs to protect private keys and configuration
@@ -36,11 +37,32 @@ Pre-built Windows executables are available from the [GitHub Releases](https://g
 
 ```powershell
 # Basic installation
-.\install.ps1 -Token "your-client-token" -ServerUrl "https://your-server:8080"
+.\install.ps1
 
-# Or install without token (configure later)
-.\install.ps1 -ServerUrl "https://your-server:8080"
+# Then run the GUI to configure
+.\NebulaAgentGUI.exe
+
+# Or install with token via command line
+.\install.ps1 -Token "your-client-token" -ServerUrl "https://your-server:8080"
 ```
+
+## GUI Application
+
+The Windows client includes a system tray GUI application (`NebulaAgentGUI.exe`) that provides:
+
+- **System Tray Icon**: Shows connection status (green = connected, gray = disconnected)
+- **Quick Actions**: Connect/Disconnect, Check for Updates, View Logs
+- **Configuration Window**: Easy setup of server URL, client token, and other settings
+- **Status Display**: Shows current connection status, agent version, and Nebula version
+
+### Using the GUI
+
+1. Run `NebulaAgentGUI.exe`
+2. The app will appear in the system tray
+3. Right-click the tray icon to access the menu
+4. Select "Configuration..." to open the settings window
+5. Enter your Server URL and Client Token
+6. Click "Save" to apply settings
 
 ### Manual Installation
 
