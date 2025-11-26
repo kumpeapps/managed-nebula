@@ -112,6 +112,7 @@ jobs:
         files: |
           macos_client/dist/*-signed.pkg
           macos_client/dist/*-signed.dmg
+        append_body: true
         body: |
           # ManagedNebula macOS Client ${{ steps.get_version.outputs.VERSION }}
           
