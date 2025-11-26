@@ -61,6 +61,7 @@ ShowUnInstDetails show
 !define MUI_FINISHPAGE_RUN_TEXT "Launch ${PRODUCT_NAME} GUI"
 !define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\README.md"
 !define MUI_FINISHPAGE_SHOWREADME_TEXT "View README"
+!define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED  ; Uncheck README by default
 
 ; --------------------------------
 ; Pages
