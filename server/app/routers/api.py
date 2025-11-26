@@ -591,6 +591,21 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
     ).scalars().all()
     revoked_fps = [fp for fp in revoked_rows if fp]
 
+    # Determine OS-specific paths based on os_type from request or client record
+    os_type = body.os_type or client.os_type or "docker"
+    if os_type == "windows":
+        key_path = "C:/ProgramData/Nebula/host.key"
+        ca_path = "C:/ProgramData/Nebula/ca.crt"
+        cert_path = "C:/ProgramData/Nebula/host.crt"
+    elif os_type == "macos":
+        key_path = "/Library/Application Support/Managed Nebula/host.key"
+        ca_path = "/Library/Application Support/Managed Nebula/ca.crt"
+        cert_path = "/Library/Application Support/Managed Nebula/host.crt"
+    else:  # docker or any other
+        key_path = "/var/lib/nebula/host.key"
+        ca_path = "/etc/nebula/ca.crt"
+        cert_path = "/etc/nebula/host.crt"
+    
     # Build config YAML; embed CA bundle inline to support multiple CAs
     config_yaml = build_nebula_config(
         client=client,
@@ -599,21 +614,23 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
         static_host_map=static_map,
         lighthouse_host_ips=lh_hosts,
         revoked_fingerprints=revoked_fps,
-        key_path="/var/lib/nebula/host.key",
-        ca_path="/etc/nebula/ca.crt",
-        cert_path="/etc/nebula/host.crt",
+        key_path=key_path,
+        ca_path=ca_path,
+        cert_path=cert_path,
         inline_ca_pem=ca_bundle,
         inline_cert_pem=client_cert_pem,
     )
 
-    # Update last config download timestamp and version info
+    # Update last config download timestamp, version info, and os_type
     try:
         client.last_config_download_at = datetime.utcnow()
         if body.client_version:
             client.client_version = body.client_version
         if body.nebula_version:
             client.nebula_version = body.nebula_version
-        if body.client_version or body.nebula_version:
+        if body.os_type:
+            client.os_type = body.os_type
+        if body.client_version or body.nebula_version or body.os_type:
             client.last_version_report_at = datetime.utcnow()
         await session.commit()
     except Exception:
@@ -627,7 +644,7 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
         "cert_not_before": not_before.isoformat(),
         "cert_not_after": not_after.isoformat(),
         "lighthouse": client.is_lighthouse,
-        "key_path": "/var/lib/nebula/host.key",
+        "key_path": key_path,
     }
 
 
