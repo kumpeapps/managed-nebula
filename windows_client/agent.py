@@ -322,6 +322,23 @@ def write_config_and_pki(
     logger.debug("CA chain certs: %d", len(ca_chain_pems))
     ensure_directories()
     
+    # Override key path for Windows (server sends Linux paths)
+    # Convert Windows path to forward slashes for YAML compatibility
+    windows_key_path = str(KEY_PATH).replace("\\", "/")
+    logger.debug("Overriding pki.key path to: %s", windows_key_path)
+    
+    # Parse YAML to override key path
+    import yaml
+    try:
+        config_dict = yaml.safe_load(config_yaml)
+        if "pki" in config_dict and "key" in config_dict["pki"]:
+            old_key_path = config_dict["pki"]["key"]
+            config_dict["pki"]["key"] = windows_key_path
+            logger.debug("Replaced key path '%s' with '%s'", old_key_path, windows_key_path)
+            config_yaml = yaml.dump(config_dict, default_flow_style=False, sort_keys=False)
+    except Exception as e:
+        logger.warning("Failed to parse/modify config YAML, using as-is: %s", e)
+    
     # Write config
     CONFIG_PATH.write_text(config_yaml)
     logger.debug("Config written to: %s", CONFIG_PATH)
