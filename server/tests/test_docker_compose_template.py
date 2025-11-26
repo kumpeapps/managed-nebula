@@ -101,8 +101,7 @@ def test_default_template_contains_placeholders():
     """Test that the default template contains expected placeholders."""
     from app.models.settings import DEFAULT_DOCKER_COMPOSE_TEMPLATE
     
-    # Check it contains expected placeholders
-    assert "{{CLIENT_NAME}}" in DEFAULT_DOCKER_COMPOSE_TEMPLATE
+    # Check it contains expected placeholders (CLIENT_NAME is added during replacement, not in template)
     assert "{{CLIENT_TOKEN}}" in DEFAULT_DOCKER_COMPOSE_TEMPLATE
     assert "{{SERVER_URL}}" in DEFAULT_DOCKER_COMPOSE_TEMPLATE
     assert "{{CLIENT_DOCKER_IMAGE}}" in DEFAULT_DOCKER_COMPOSE_TEMPLATE
@@ -111,3 +110,6 @@ def test_default_template_contains_placeholders():
     # Verify it's a string and not empty
     assert isinstance(DEFAULT_DOCKER_COMPOSE_TEMPLATE, str)
     assert len(DEFAULT_DOCKER_COMPOSE_TEMPLATE) > 0
+    
+    # Verify the service name is hardcoded to 'client' (not a placeholder)
+    assert "  client:" in DEFAULT_DOCKER_COMPOSE_TEMPLATE
