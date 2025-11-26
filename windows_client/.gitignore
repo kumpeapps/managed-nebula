@@ -1,0 +1,25 @@
+# Windows client build artifacts
+dist/
+build/
+*.spec
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# Nebula binaries (downloaded during build)
+nebula.exe
+nebula-cert.exe
+nebula-*.zip
+
+# Logs
+*.log
+logs/
