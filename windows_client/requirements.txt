@@ -15,3 +15,7 @@ pyinstaller==6.11.1
 
 # Cryptography (for certificate handling)
 cryptography>=42.0.0
+
+# GUI dependencies (system tray)
+pystray>=0.19.5
+Pillow>=10.0.0
