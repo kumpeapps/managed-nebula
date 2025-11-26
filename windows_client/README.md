@@ -20,18 +20,25 @@ A native Windows client for Managed Nebula that manages Nebula mesh VPN connecti
 
 ## Installation
 
-### Download Pre-built Release
+### Option 1: Windows Installer (Recommended)
 
-Pre-built Windows executables are available from the [GitHub Releases](https://github.com/kumpeapps/managed-nebula/releases) page.
+The easiest way to install Managed Nebula is using the Windows installer:
+
+1. Download `ManagedNebula-X.X.X-Setup.exe` from the [GitHub Releases](https://github.com/kumpeapps/managed-nebula/releases) page
+2. Run the installer as Administrator
+3. Follow the installation wizard
+4. The installer will:
+   - Install all files to `C:\Program Files\ManagedNebula`
+   - Create the Windows Service
+   - Add Start Menu and Desktop shortcuts
+   - Add the installation directory to your PATH
+5. Launch from the Start Menu or Desktop shortcut
+6. Configure your server URL and client token in the GUI
+
+### Option 2: ZIP Archive (Manual)
 
 1. Download `NebulaAgent-windows-X.X.X.zip` from the latest release
 2. Extract the ZIP file
-3. Follow the Quick Install steps below
-
-### Quick Install (PowerShell)
-
-1. Download the latest release ZIP file
-2. Extract to a temporary directory
 3. Open PowerShell as Administrator
 4. Run the installer:
 
