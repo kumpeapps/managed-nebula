@@ -105,6 +105,9 @@ log_level = INFO
 
 # Automatically start Nebula daemon
 auto_start_nebula = true
+
+# Allow self-signed SSL certificates (useful for development/testing)
+allow_self_signed_cert = false
 ```
 
 ### Environment Variables
@@ -117,7 +120,8 @@ Configuration can also be set via environment variables (takes precedence):
 | `SERVER_URL` | Managed Nebula server URL |
 | `POLL_INTERVAL_HOURS` | Update check interval (hours) |
 | `LOG_LEVEL` | Logging level |
-| `ALLOW_SELF_SIGNED_CERT` | Set to `true` to allow self-signed SSL certificates |
+| `AUTO_START_NEBULA` | Set to `true` to automatically start Nebula daemon |
+| `ALLOW_SELF_SIGNED_CERT` | Set to `true` to allow self-signed SSL certificates (useful for development/testing) |
 
 ## File Locations
 
