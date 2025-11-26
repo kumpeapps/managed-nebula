@@ -243,11 +243,12 @@ def fetch_config(token: str, server_url: str, public_key: str, config: dict = No
         "token": token,
         "public_key": public_key,
         "client_version": os.environ.get("CLIENT_VERSION_OVERRIDE", __version__),
-        "nebula_version": os.environ.get("NEBULA_VERSION_OVERRIDE", get_nebula_version())
+        "nebula_version": os.environ.get("NEBULA_VERSION_OVERRIDE", get_nebula_version()),
+        "os_type": "windows"  # Identify this as a Windows client
     }
     
     logger.info("Fetching config from %s", url)
-    logger.debug("Client version: %s, Nebula version: %s",
+    logger.debug("Client version: %s, Nebula version: %s, OS: windows",
                  payload["client_version"], payload["nebula_version"])
     
     # SSL verification (disable for self-signed certs if configured)
@@ -322,52 +323,9 @@ def write_config_and_pki(
     logger.debug("CA chain certs: %d", len(ca_chain_pems))
     ensure_directories()
     
-    # Override key path for Windows (server sends Linux paths)
-    # Convert Windows path to forward slashes for YAML compatibility
-    windows_key_path = str(KEY_PATH).replace("\\", "/")
-    logger.info("Overriding pki.key path to: %s", windows_key_path)
-    
-    # Parse YAML to override key path
-    import yaml
-    try:
-        config_dict = yaml.safe_load(config_yaml)
-        logger.debug("Successfully parsed config YAML")
-        
-        if "pki" in config_dict and "key" in config_dict["pki"]:
-            old_key_path = config_dict["pki"]["key"]
-            config_dict["pki"]["key"] = windows_key_path
-            logger.info("Replaced key path '%s' with '%s'", old_key_path, windows_key_path)
-            
-            # Dump YAML with proper formatting
-            config_yaml = yaml.dump(
-                config_dict, 
-                default_flow_style=False, 
-                sort_keys=False,
-                allow_unicode=True,
-                width=float("inf")  # Prevent line wrapping
-            )
-            logger.debug("YAML dumped successfully")
-        else:
-            logger.warning("pki.key not found in config YAML structure")
-    except Exception as e:
-        logger.error("Failed to parse/modify config YAML: %s", e, exc_info=True)
-        logger.warning("Will write original config without path modification")
-    
-    # Write config
+    # Write config (server now sends OS-specific paths)
     CONFIG_PATH.write_text(config_yaml)
     logger.info("Config written to: %s", CONFIG_PATH)
-    
-    # Verify the written config contains the correct key path
-    try:
-        written_config = CONFIG_PATH.read_text()
-        if windows_key_path in written_config:
-            logger.info("Verified: Windows key path present in written config")
-        else:
-            logger.error("WARNING: Windows key path NOT found in written config!")
-            if "/var/lib/nebula/host.key" in written_config:
-                logger.error("Linux key path still present - YAML modification failed!")
-    except Exception as e:
-        logger.warning("Failed to verify written config: %s", e)
     
     # Write certificates
     CA_PATH.write_text("".join(ca_chain_pems))

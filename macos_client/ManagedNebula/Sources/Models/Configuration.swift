@@ -76,12 +76,14 @@ struct ClientConfigRequest: Codable {
     let publicKey: String
     let clientVersion: String?
     let nebulaVersion: String?
+    let osType: String
     
     enum CodingKeys: String, CodingKey {
         case token
         case publicKey = "public_key"
         case clientVersion = "client_version"
         case nebulaVersion = "nebula_version"
+        case osType = "os_type"
     }
 }
 
