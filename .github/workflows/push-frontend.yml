@@ -17,7 +17,6 @@ on:
 env:
   DOCKER_CLIENT_TIMEOUT: 300
   COMPOSE_HTTP_TIMEOUT: 300
-  RELEASE_TITLE: ${{ github.event.release.name || '' }}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -28,12 +27,12 @@ jobs:
     # On releases: run if title has "frontend" (any case) or no platform keywords specified
     if: >
       github.event_name != 'release' || (
-        contains(env.RELEASE_TITLE, 'frontend') || contains(env.RELEASE_TITLE, 'Frontend') || (
-          !contains(env.RELEASE_TITLE, 'windows') && !contains(env.RELEASE_TITLE, 'Windows') &&
-          !contains(env.RELEASE_TITLE, 'macos') && !contains(env.RELEASE_TITLE, 'macOS') &&
-          !contains(env.RELEASE_TITLE, 'server') && !contains(env.RELEASE_TITLE, 'Server') &&
-          !contains(env.RELEASE_TITLE, 'frontend') && !contains(env.RELEASE_TITLE, 'Frontend') &&
-          !contains(env.RELEASE_TITLE, 'client') && !contains(env.RELEASE_TITLE, 'Client')
+        contains(github.event.release.name, 'frontend') || contains(github.event.release.name, 'Frontend') || (
+          !contains(github.event.release.name, 'windows') && !contains(github.event.release.name, 'Windows') &&
+          !contains(github.event.release.name, 'macos') && !contains(github.event.release.name, 'macOS') &&
+          !contains(github.event.release.name, 'server') && !contains(github.event.release.name, 'Server') &&
+          !contains(github.event.release.name, 'frontend') && !contains(github.event.release.name, 'Frontend') &&
+          !contains(github.event.release.name, 'client') && !contains(github.event.release.name, 'Client')
         )
       )
     timeout-minutes: 120
