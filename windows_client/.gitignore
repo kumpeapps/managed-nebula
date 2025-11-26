@@ -19,6 +19,7 @@ venv/
 nebula.exe
 nebula-cert.exe
 nebula-*.zip
+nebula-tmp/
 
 # Logs
 *.log
