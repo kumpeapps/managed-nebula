@@ -7,6 +7,19 @@
 !include "FileFunc.nsh"
 
 ; --------------------------------
+; Preprocessor Macros (must be defined before use)
+; --------------------------------
+
+; String contains macro (used in PATH manipulation below)
+!define StrContains "!insertmacro StrContains"
+!macro StrContains ResultVar String SubString
+  Push "${String}"
+  Push "${SubString}"
+  Call StrContains
+  Pop "${ResultVar}"
+!macroend
+
+; --------------------------------
 ; General Configuration
 ; --------------------------------
 
@@ -243,15 +256,6 @@ SectionEnd
 ; --------------------------------
 ; Helper Functions
 ; --------------------------------
-
-; String contains function
-!define StrContains "!insertmacro StrContains"
-!macro StrContains ResultVar String SubString
-  Push "${String}"
-  Push "${SubString}"
-  Call StrContains
-  Pop "${ResultVar}"
-!macroend
 
 Function StrContains
   Exch $R1 ; SubString
