@@ -19,6 +19,37 @@ branch_labels = None
 depends_on = None
 
 
+def table_exists(table_name):
+    """Check if a table exists in the database."""
+    from sqlalchemy import inspect
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    return table_name in inspector.get_table_names()
+
+
+def column_exists(table_name, column_name):
+    """Check if a column exists in a table."""
+    if not table_exists(table_name):
+        return False
+    from sqlalchemy import inspect
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    columns = [col['name'] for col in inspector.get_columns(table_name)]
+    return column_name in columns
+
+
+def index_exists(table_name, index_name):
+    """Check if an index exists on a table."""
+    if not table_exists(table_name):
+        return False
+    from sqlalchemy import inspect
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    indexes = inspector.get_indexes(table_name)
+    return any(idx['name'] == index_name for idx in indexes)
+
+
+
 def upgrade() -> None:
     # Remove role_id column from users table
     with op.batch_alter_table('users', schema=None) as batch_op:
@@ -95,7 +126,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Recreate roles table
-    op.create_table('roles',
+    if not table_exists('roles'):
+
+        op.create_table('roles',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('name', sa.String(length=50), nullable=False),
         sa.PrimaryKeyConstraint('id')

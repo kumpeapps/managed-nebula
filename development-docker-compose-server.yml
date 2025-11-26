@@ -29,8 +29,6 @@ services:
       - APP_VERSION=${APP_VERSION:-dev-latest}
       - DB_URL=${DB_URL:-sqlite+aiosqlite:///./data/app.db}
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key}
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
       - ENABLE_SCHEMA_AUTOSYNC=${ENABLE_SCHEMA_AUTOSYNC:-true}
       - DEBUG_AUTH=${DEBUG_AUTH:-true}
       - EXTERNALLY_MANAGED_USERS=${EXTERNALLY_MANAGED_USERS:-false}
@@ -39,8 +37,10 @@ services:
       - "8080:8080"   # Direct access for API debugging (also proxied via frontend)
     volumes:
       - server_data:/app/data
-      # Uncomment for live code reload if Dockerfile/entrypoint supports it:
+      # Live code reload for development:
       - ./server/app:/app/app
+      - ./server/manage.py:/app/manage.py
+      - ./server/alembic:/app/alembic
     restart: unless-stopped
     networks:
       - nebula

@@ -19,6 +19,37 @@ branch_labels = None
 depends_on = None
 
 
+def table_exists(table_name):
+    """Check if a table exists in the database."""
+    from sqlalchemy import inspect
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    return table_name in inspector.get_table_names()
+
+
+def column_exists(table_name, column_name):
+    """Check if a column exists in a table."""
+    if not table_exists(table_name):
+        return False
+    from sqlalchemy import inspect
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    columns = [col['name'] for col in inspector.get_columns(table_name)]
+    return column_name in columns
+
+
+def index_exists(table_name, index_name):
+    """Check if an index exists on a table."""
+    if not table_exists(table_name):
+        return False
+    from sqlalchemy import inspect
+    bind = op.get_bind()
+    inspector = inspect(bind)
+    indexes = inspector.get_indexes(table_name)
+    return any(idx['name'] == index_name for idx in indexes)
+
+
+
 def upgrade() -> None:
     # Create permissions table
     # For SQLite compatibility, we'll use String instead of Enum
@@ -35,8 +66,14 @@ def upgrade() -> None:
     op.create_index('ix_permissions_resource_action', 'permissions', ['resource', 'action'], unique=True)
     
     # Add new columns to user_groups table
-    op.add_column('user_groups', sa.Column('is_admin', sa.Boolean(), nullable=False, server_default='0'))
-    op.add_column('user_groups', sa.Column('updated_at', sa.DateTime(), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')))
+    if not column_exists('user_groups', 'is_admin'):
+        op.add_column('user_groups', sa.Column('is_admin', sa.Boolean(), nullable=False, server_default='0'))
+    if not column_exists('user_groups', 'updated_at'):
+        # SQLite doesn't support server_default with functions in ALTER TABLE
+        # Add as nullable, set defaults manually, then rely on application-level defaults
+        op.add_column('user_groups', sa.Column('updated_at', sa.DateTime(), nullable=True))
+        # Set default value for existing rows
+        op.execute(sa.text("UPDATE user_groups SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL"))
     
     # Create user_group_permissions association table
     op.create_table(

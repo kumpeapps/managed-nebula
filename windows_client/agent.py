@@ -235,7 +235,7 @@ def get_nebula_version() -> str:
         return "error"
 
 
-def fetch_config(token: str, server_url: str, public_key: str) -> dict:
+def fetch_config(token: str, server_url: str, public_key: str, config: dict = None) -> dict:
     """Fetch configuration from server"""
     url = server_url.rstrip("/") + "/v1/client/config"
     
@@ -250,8 +250,15 @@ def fetch_config(token: str, server_url: str, public_key: str) -> dict:
     logger.debug("Client version: %s, Nebula version: %s",
                  payload["client_version"], payload["nebula_version"])
     
-    # SSL verification (disable for self-signed certs if needed)
-    verify_ssl = os.environ.get("ALLOW_SELF_SIGNED_CERT", "false").lower() != "true"
+    # SSL verification (disable for self-signed certs if configured)
+    # Check config first, then fall back to env var
+    if config and "allow_self_signed_cert" in config:
+        verify_ssl = not config["allow_self_signed_cert"]
+    else:
+        verify_ssl = os.environ.get("ALLOW_SELF_SIGNED_CERT", "false").lower() != "true"
+    
+    if not verify_ssl:
+        logger.warning("SSL certificate verification disabled - using self-signed certificates")
     
     try:
         with httpx.Client(timeout=30, verify=verify_ssl) as client:
@@ -310,18 +317,27 @@ def write_config_and_pki(
         return False
     
     logger.info("Config changed, writing new files")
+    logger.debug("Config file size: %d bytes", len(config_yaml))
+    logger.debug("Client cert size: %d bytes", len(client_cert_pem))
+    logger.debug("CA chain certs: %d", len(ca_chain_pems))
     ensure_directories()
     
     # Write config
     CONFIG_PATH.write_text(config_yaml)
+    logger.debug("Config written to: %s", CONFIG_PATH)
     
     # Write certificates
     CA_PATH.write_text("".join(ca_chain_pems))
+    logger.debug("CA chain written to: %s", CA_PATH)
     CERT_PATH.write_text(client_cert_pem)
+    logger.debug("Client cert written to: %s", CERT_PATH)
     
     # Set restrictive permissions on key file if it exists
     if KEY_PATH.exists():
         set_key_permissions(KEY_PATH)
+        logger.debug("Key permissions set on: %s", KEY_PATH)
+    else:
+        logger.warning("Key file does not exist at: %s", KEY_PATH)
     
     return True
 
@@ -392,8 +408,13 @@ def start_nebula() -> bool:
             timeout=30
         )
         if result.returncode != 0:
-            logger.error("Config validation failed: %s", result.stderr)
+            error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+            logger.error("Config validation failed (exit code %d): %s", result.returncode, error_msg)
+            logger.debug("Config path: %s", CONFIG_PATH)
+            logger.debug("Nebula binary: %s", nebula)
             return False
+        
+        logger.info("Config validation passed")
         
         # Start Nebula in the background
         # On Windows, we use CREATE_NEW_PROCESS_GROUP to detach
@@ -423,25 +444,25 @@ def restart_nebula() -> bool:
 
 def run_once(restart_on_change: bool = False) -> bool:
     """Run single configuration fetch and update cycle"""
+    # Load full config
+    from config import load_config
+    cfg = load_config()
+    
     token = os.environ.get("CLIENT_TOKEN")
     if not token:
-        # Try reading from config file
-        from config import load_config
-        cfg = load_config()
         token = cfg.get("client_token")
     
     if not token:
         logger.error("CLIENT_TOKEN environment variable or config not set")
         return False
     
-    server_url = os.environ.get(
-        "SERVER_URL",
-        "http://localhost:8080"
-    )
+    server_url = os.environ.get("SERVER_URL")
+    if not server_url:
+        server_url = cfg.get("server_url", "http://localhost:8080")
     
     try:
         _priv, pub = ensure_keypair()
-        data = fetch_config(token, server_url, pub)
+        data = fetch_config(token, server_url, pub, config=cfg)
         
         config_yaml = data["config"]
         client_cert_pem = data.get("client_cert_pem", "")
