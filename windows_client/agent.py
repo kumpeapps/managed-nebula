@@ -29,6 +29,7 @@ LOG_DIR = NEBULA_DIR / "logs"
 AGENT_LOG = LOG_DIR / "agent.log"
 NEBULA_BIN = NEBULA_DIR / "nebula.exe"
 NEBULA_CERT_BIN = NEBULA_DIR / "nebula-cert.exe"
+WINTUN_DLL = NEBULA_DIR / "wintun.dll"
 
 # Setup logging
 def setup_logging(log_level: str = "INFO") -> logging.Logger:
@@ -406,6 +407,18 @@ def start_nebula() -> bool:
         return False
     
     logger.info("Starting Nebula daemon...")
+
+    # Preflight: check for Wintun driver DLL presence (required on Windows)
+    # Usually placed alongside nebula.exe as wintun.dll
+    wintun_candidate = Path(nebula).parent / "wintun.dll"
+    if not WINTUN_DLL.exists() and not wintun_candidate.exists():
+        logger.warning(
+            "wintun.dll not found next to nebula.exe or in %s. Nebula may fail to create the tunnel.",
+            NEBULA_DIR,
+        )
+        logger.warning(
+            "Ensure wintun.dll is present or WireGuard is installed. See https://www.wintun.net/."
+        )
     
     try:
         # Validate config first
@@ -529,6 +542,8 @@ def get_status() -> dict:
             "key": str(KEY_PATH),
             "log": str(AGENT_LOG),
             "nebula_log": str(LOG_DIR / "nebula.log"),
+            "nebula_bin": str(NEBULA_BIN),
+            "wintun_dll": str(WINTUN_DLL),
         }
     }
     
@@ -548,6 +563,13 @@ def diagnose() -> None:
         print("Paths:")
         for k, v in status["paths"].items():
             print(f"  - {k}: {v}")
+
+        # Quick file existence checks
+        print("\nFile existence checks:")
+        for k, v in status["paths"].items():
+            if k in ("log", "nebula_log", "config", "key", "nebula_bin", "wintun_dll"):
+                exists = Path(v).exists()
+                print(f"  - {k} exists: {exists}")
 
         # Show last lines of agent and nebula logs
         def tail(path: Path, lines: int = 50) -> str:
