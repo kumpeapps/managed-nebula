@@ -127,6 +127,24 @@ def find_nebula_binary() -> Optional[Path]:
     if nebula_in_path:
         return Path(nebula_in_path)
     
+    # Check common install locations and registry App Paths
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\App Paths\NebulaAgentGUI.exe") as key:
+            gui_path, _ = winreg.QueryValueEx(key, "")
+            install_dir = Path(gui_path).parent
+            candidate = install_dir / "nebula.exe"
+            if candidate.exists():
+                return candidate
+    except Exception:
+        pass
+    
+    for base in [Path(os.environ.get("ProgramFiles", r"C:\Program Files")), Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))]:
+        for name in ["ManagedNebula", "Managed Nebula"]:
+            candidate = base / name / "nebula.exe"
+            if candidate.exists():
+                return candidate
+    
     return None
 
 
@@ -141,6 +159,24 @@ def find_nebula_cert_binary() -> Optional[Path]:
     cert_in_path = shutil.which("nebula-cert.exe") or shutil.which("nebula-cert")
     if cert_in_path:
         return Path(cert_in_path)
+    
+    # Check common install locations and registry App Paths
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\App Paths\NebulaAgentGUI.exe") as key:
+            gui_path, _ = winreg.QueryValueEx(key, "")
+            install_dir = Path(gui_path).parent
+            candidate = install_dir / "nebula-cert.exe"
+            if candidate.exists():
+                return candidate
+    except Exception:
+        pass
+    
+    for base in [Path(os.environ.get("ProgramFiles", r"C:\Program Files")), Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"))]:
+        for name in ["ManagedNebula", "Managed Nebula"]:
+            candidate = base / name / "nebula-cert.exe"
+            if candidate.exists():
+                return candidate
     
     return None
 
