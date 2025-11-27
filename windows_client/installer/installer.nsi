@@ -6,6 +6,7 @@
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
 !include "WordFunc.nsh"
+!include "x64.nsh"
 
 ; --------------------------------
 ; Preprocessor Macros (must be defined before use)
@@ -141,6 +142,26 @@ Section "Main Application" SecMain
   
   ; Create uninstaller
   WriteUninstaller "$INSTDIR\Uninstall.exe"
+
+  ; Ensure wintun.dll present (download if missing)
+  IfFileExists "$INSTDIR\wintun.dll" WintunPresent 0
+  DetailPrint "wintun.dll not found; downloading Wintun..."
+  ; Download Wintun (pin a version to keep stable)
+  nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri \"https://www.wintun.net/builds/wintun-0.14.1.zip\" -OutFile \"$TEMP\\wintun.zip\""'
+  ; Expand the archive
+  nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path \"$TEMP\\wintun.zip\" -DestinationPath \"$TEMP\\wintun\" -Force"'
+  ${If} ${RunningX64}
+    CopyFiles /SILENT "$TEMP\wintun\wintun\bin\amd64\wintun.dll" "$INSTDIR\wintun.dll"
+  ${Else}
+    CopyFiles /SILENT "$TEMP\wintun\wintun\bin\x86\wintun.dll" "$INSTDIR\wintun.dll"
+  ${EndIf}
+  IfFileExists "$INSTDIR\wintun.dll" 0 WintunFail
+  DetailPrint "wintun.dll installed"
+  Goto WintunDone
+WintunFail:
+  DetailPrint "Failed to install wintun.dll; Nebula may not create the tunnel"
+WintunPresent:
+WintunDone:
 SectionEnd
 
 Section "Windows Service" SecService
