@@ -151,9 +151,17 @@ Section "Main Application" SecMain
   ; Expand the archive
   nsExec::ExecToLog 'powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path \"$TEMP\\wintun.zip\" -DestinationPath \"$TEMP\\wintun\" -Force"'
   ${If} ${RunningX64}
+    ; Place wintun.dll next to nebula.exe
     CopyFiles /SILENT "$TEMP\wintun\wintun\bin\amd64\wintun.dll" "$INSTDIR\wintun.dll"
+    ; Also place in deep path expected by some builds: dist\windows\wintun\bin\amd64
+    CreateDirectory "$INSTDIR\dist\windows\wintun\bin\amd64"
+    CopyFiles /SILENT "$TEMP\wintun\wintun\bin\amd64\wintun.dll" "$INSTDIR\dist\windows\wintun\bin\amd64\wintun.dll"
   ${Else}
+    ; 32-bit placement next to nebula.exe
     CopyFiles /SILENT "$TEMP\wintun\wintun\bin\x86\wintun.dll" "$INSTDIR\wintun.dll"
+    ; Deep path for 32-bit builds: dist\windows\wintun\bin\x86
+    CreateDirectory "$INSTDIR\dist\windows\wintun\bin\x86"
+    CopyFiles /SILENT "$TEMP\wintun\wintun\bin\x86\wintun.dll" "$INSTDIR\dist\windows\wintun\bin\x86\wintun.dll"
   ${EndIf}
   IfFileExists "$INSTDIR\wintun.dll" 0 WintunFail
   DetailPrint "wintun.dll installed"
