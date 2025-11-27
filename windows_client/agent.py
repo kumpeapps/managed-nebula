@@ -428,15 +428,26 @@ def start_nebula() -> bool:
         # On Windows, we use CREATE_NEW_PROCESS_GROUP to detach
         CREATE_NEW_PROCESS_GROUP = 0x00000200
         DETACHED_PROCESS = 0x00000008
-        
+
+        # Write nebula runtime logs to file to aid diagnosis
+        runtime_log_path = LOG_DIR / "nebula.log"
+        runtime_log = open(runtime_log_path, "ab")
+
         process = subprocess.Popen(
             [str(nebula), "-config", str(CONFIG_PATH)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=runtime_log,
+            stderr=runtime_log,
             creationflags=CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS
         )
-        
+
         logger.info("Started Nebula process (PID: %d)", process.pid)
+
+        # Give it a moment and verify it's running
+        time.sleep(1.5)
+        if not is_nebula_running():
+            logger.error("Nebula process is not running after start. See %s for details.", runtime_log_path)
+            return False
+
         return True
     except Exception as e:
         logger.error("Failed to start Nebula: %s", e)
@@ -517,10 +528,53 @@ def get_status() -> dict:
             "config": str(CONFIG_PATH),
             "key": str(KEY_PATH),
             "log": str(AGENT_LOG),
+            "nebula_log": str(LOG_DIR / "nebula.log"),
         }
     }
     
     return status
+
+
+def diagnose() -> None:
+    """Print diagnostics: file presence, adapter status, last logs."""
+    try:
+        status = get_status()
+        print("Agent/Nebula status:")
+        print(f"- agent_version: {status['agent_version']}")
+        print(f"- nebula_version: {status['nebula_version']}")
+        print(f"- nebula_running: {status['nebula_running']}")
+        print(f"- config_exists: {status['config_exists']}")
+        print(f"- keypair_exists: {status['keypair_exists']}")
+        print("Paths:")
+        for k, v in status["paths"].items():
+            print(f"  - {k}: {v}")
+
+        # Show last lines of agent and nebula logs
+        def tail(path: Path, lines: int = 50) -> str:
+            try:
+                with open(path, "rb") as f:
+                    f.seek(0, os.SEEK_END)
+                    size = f.tell()
+                    block = 1024
+                    data = b""
+                    while size > 0 and data.count(b"\n") <= lines:
+                        size = max(0, size - block)
+                        f.seek(size)
+                        data = f.read(block) + data
+                    return data.decode(errors="replace").splitlines()[-lines:]
+            except Exception:
+                return []
+
+        print("\nLast agent.log lines:")
+        for line in tail(AGENT_LOG):
+            print(line)
+
+        nebula_log = LOG_DIR / "nebula.log"
+        print("\nLast nebula.log lines:")
+        for line in tail(nebula_log):
+            print(line)
+    except Exception as e:
+        print(f"Diagnostics failed: {e}")
 
 
 def main():
@@ -554,6 +608,11 @@ def main():
         help="Show version information"
     )
     parser.add_argument(
+        "--diagnose",
+        action="store_true",
+        help="Print diagnostics for troubleshooting"
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
@@ -569,6 +628,9 @@ def main():
     if args.version:
         print(f"Managed Nebula Agent v{__version__}")
         print(f"Nebula: {get_nebula_version()}")
+        sys.exit(0)
+    if args.diagnose:
+        diagnose()
         sys.exit(0)
     
     if args.status:
