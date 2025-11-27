@@ -101,6 +101,8 @@ Section "Main Application" SecMain
   ; Copy Nebula binaries
   File "nebula.exe"
   File "nebula-cert.exe"
+  ; Include Wintun driver DLL if available (non-fatal if missing)
+  File /nonfatal "wintun.dll"
   
   ; Copy support files
   File "nebula.ico"
