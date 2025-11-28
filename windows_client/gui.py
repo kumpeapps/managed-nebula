@@ -428,8 +428,10 @@ class ConfigWindow:
                 log_progress("Checking for existing service...")
                 
                 # Check if service already exists
+                check_cmd = ["sc", "query", "NebulaAgent"]
+                log_progress(f"Running: {' '.join(check_cmd)}")
                 check_result = subprocess.run(
-                    ["sc", "query", "NebulaAgent"],
+                    check_cmd,
                     capture_output=True,
                     text=True,
                     timeout=5
@@ -438,13 +440,17 @@ class ConfigWindow:
                 if check_result.returncode == 0:
                     log_progress("Service already exists, removing...")
                     # Stop service if running
-                    subprocess.run(["sc", "stop", "NebulaAgent"], capture_output=True, timeout=5)
+                    stop_cmd = ["sc", "stop", "NebulaAgent"]
+                    log_progress(f"Running: {' '.join(stop_cmd)}")
+                    subprocess.run(stop_cmd, capture_output=True, text=True, timeout=8)
                     # Wait a moment
                     import time
                     time.sleep(1)
                     # Delete service
+                    delete_cmd = ["sc", "delete", "NebulaAgent"]
+                    log_progress(f"Running: {' '.join(delete_cmd)}")
                     delete_result = subprocess.run(
-                        ["sc", "delete", "NebulaAgent"],
+                        delete_cmd,
                         capture_output=True,
                         text=True,
                         timeout=5
@@ -457,14 +463,18 @@ class ConfigWindow:
                 log_progress("Creating Windows Service...")
                 
                 # Create service with sc
+                # Ensure proper quoting for paths with spaces and convert Path to string
+                bin_path_arg = f"binPath= \"{str(service_exe)}\""
+                create_cmd = [
+                    "sc", "create", "NebulaAgent",
+                    bin_path_arg,
+                    "start= auto",
+                    "type= share",
+                    "DisplayName= Managed Nebula Agent",
+                ]
+                log_progress(f"Running: {' '.join(create_cmd)}")
                 result = subprocess.run(
-                    [
-                        "sc", "create", "NebulaAgent",
-                        f"binPath= {service_exe}",
-                        "start= auto",
-                        "type= share",
-                        "DisplayName= Managed Nebula Agent"
-                    ],
+                    create_cmd,
                     capture_output=True,
                     text=True,
                     timeout=30  # Increased timeout
@@ -476,11 +486,13 @@ class ConfigWindow:
                     log_progress("Starting service...")
                     
                     # Start service
+                    start_cmd = ["sc", "start", "NebulaAgent"]
+                    log_progress(f"Running: {' '.join(start_cmd)}")
                     result = subprocess.run(
-                        ["sc", "start", "NebulaAgent"],
+                        start_cmd,
                         capture_output=True,
                         text=True,
-                        timeout=10
+                        timeout=15
                     )
                     
                     if result.returncode == 0:
