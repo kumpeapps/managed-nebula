@@ -169,14 +169,15 @@ echo Step 5: Building service executable...
 pyinstaller --onefile ^
     --name "%APP_NAME%Service" ^
     --icon=installer\nebula.ico ^
-    --add-data "config.py;." ^
-    --add-data "agent.py;." ^
     --hidden-import=win32timezone ^
     --hidden-import=win32serviceutil ^
     --hidden-import=win32service ^
     --hidden-import=win32event ^
     --hidden-import=servicemanager ^
     --hidden-import=yaml ^
+    --hidden-import=httpx ^
+    --hidden-import=httpx._transports.default ^
+    --hidden-import=httpx._transports.asgi ^
     service.py
 
 if errorlevel 1 (
