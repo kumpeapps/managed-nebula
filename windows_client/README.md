@@ -24,16 +24,21 @@ A native Windows client for Managed Nebula that manages Nebula mesh VPN connecti
 
 The easiest way to install Managed Nebula is using the Windows installer:
 
-1. Download `ManagedNebula-X.X.X-Setup.exe` from the [GitHub Releases](https://github.com/kumpeapps/managed-nebula/releases) page
-2. Run the installer as Administrator
-3. Follow the installation wizard
-4. The installer will:
+1. Download `ManagedNebulaInstaller-X.X.X.exe` from the [GitHub Releases](https://github.com/kumpeapps/managed-nebula/releases) page
+2. Run the installer (no admin required for file installation)
+3. Follow the installation wizard - the installer will:
    - Install all files to `C:\Program Files\ManagedNebula`
-   - Create the Windows Service
    - Add Start Menu and Desktop shortcuts
    - Add the installation directory to your PATH
-5. Launch from the Start Menu or Desktop shortcut
-6. Configure your server URL and client token in the GUI
+4. Check "Launch Managed Nebula GUI to complete setup" on the finish page
+5. In the GUI:
+   - Enter your Server URL (e.g., `https://nebula.example.com:8080`)
+   - Enter your Client Token (from web interface)
+   - Click "Save"
+   - Click "Install Service" button (requires admin - UAC prompt will appear)
+6. Service is now installed and will start automatically on boot!
+
+**Note:** Service installation is now handled by the GUI instead of the installer. This provides better error handling and allows you to reinstall the service anytime if needed.
 
 ### Option 2: ZIP Archive (Manual)
 
@@ -316,6 +321,85 @@ Or set environment variable:
 ```cmd
 set LOG_LEVEL=DEBUG
 ```
+
+## Building from Source
+
+### Prerequisites
+
+- Python 3.9 or newer
+- [PyInstaller](https://www.pyinstaller.org/)
+- [NSIS](https://nsis.sourceforge.io/) (for creating installer)
+- Required Python packages (see `requirements.txt`)
+
+### Build Steps
+
+1. Install Python dependencies:
+   ```cmd
+   pip install -r requirements.txt
+   ```
+
+2. Run the complete build script:
+   ```cmd
+   build-installer.bat
+   ```
+
+   This will:
+   - Download Nebula binaries
+   - Build all executables with PyInstaller:
+     - `NebulaAgent.exe` - CLI agent
+     - `NebulaAgentService.exe` - Windows Service executable
+     - `NebulaAgentGUI.exe` - GUI application
+   - Build NSIS installer
+   - Output: `dist\ManagedNebulaInstaller-X.X.X.exe`
+
+3. Optionally, customize the version:
+   ```cmd
+   build-installer.bat --version 1.2.3 --nebula-version 1.9.7
+   ```
+
+### Build Components Only
+
+To build just the executables without the installer:
+
+```cmd
+build.bat
+```
+
+This creates a ZIP package in `dist\` with all executables and support files.
+
+### Testing the Service
+
+After building, you can test the service executable locally:
+
+```cmd
+# Install service
+.\dist\NebulaAgentService.exe install
+
+# Start service
+.\dist\NebulaAgentService.exe start
+
+# Check status
+.\dist\NebulaAgentService.exe status
+
+# Stop service
+.\dist\NebulaAgentService.exe stop
+
+# Remove service
+.\dist\NebulaAgentService.exe remove
+```
+
+### Build Troubleshooting
+
+**PyInstaller fails**: Ensure all dependencies are installed:
+```cmd
+pip install pyinstaller pywin32 httpx pystray pyyaml
+```
+
+**NSIS not found**: Install NSIS from https://nsis.sourceforge.io/ and add to PATH
+
+**Service won't start**: Ensure `NebulaAgentService.exe` has the Windows service interface (built from `service.py`)
+
+**Missing imports**: Add `--hidden-import=<module>` to the PyInstaller command in `build-installer.bat`
 
 ## Related
 
