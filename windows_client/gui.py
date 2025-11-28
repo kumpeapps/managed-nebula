@@ -581,10 +581,11 @@ class SystemTrayApp:
         def on_save(config):
             self.update_icon()
         
-        # Run in main thread
+        # Create config window
         self.config_window = ConfigWindow(on_save=on_save)
-        # Use threading to show window without blocking tray
-        thread = threading.Thread(target=self.config_window.show, daemon=True)
+        # Use non-daemon thread to show window without blocking tray
+        # Daemon threads can cause Tkinter windows to close immediately
+        thread = threading.Thread(target=self.config_window.show, daemon=False)
         thread.start()
     
     def view_logs(self, icon=None, item=None):
