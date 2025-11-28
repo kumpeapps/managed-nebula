@@ -266,6 +266,21 @@ if __name__ == "__main__":
             print("  Get-Service NebulaAgent")
     elif sys.argv[1].lower() == "status":
         print(f"Service Status: {get_service_status()}")
+    elif sys.argv[1].lower() == "version":
+        print(f"Managed Nebula Agent Service v{__version__}")
+        print(f"Python: {sys.version}")
+        # Try to detect if running from PyInstaller bundle
+        if getattr(sys, 'frozen', False):
+            print(f"Build: PyInstaller bundle (frozen)")
+            print(f"Executable: {sys.executable}")
+        else:
+            print(f"Build: Running from Python source")
+        # Check for httpx to verify dependencies
+        try:
+            import httpx
+            print(f"httpx: {httpx.__version__}")
+        except ImportError:
+            print("httpx: NOT FOUND (service will fail)")
     else:
         # Handle standard service commands
         win32serviceutil.HandleCommandLine(NebulaAgentService)
