@@ -140,6 +140,31 @@ if not exist "%NEBULA_TMP%\nebula.exe" (
 echo Nebula binaries ready
 echo.
 
+REM Download Wintun driver
+echo Step 3b: Downloading Wintun driver...
+set "WINTUN_URL=https://www.wintun.net/builds/wintun-%WINTUN_VERSION%.zip"
+set "WINTUN_TMP=%DIST_DIR%\wintun-tmp"
+mkdir "%WINTUN_TMP%"
+
+echo   Downloading from %WINTUN_URL%
+curl -L -o "%WINTUN_TMP%\wintun.zip" "%WINTUN_URL%"
+if errorlevel 1 (
+    echo Warning: Failed to download Wintun driver (non-fatal)
+    echo Nebula may not work properly without Wintun
+) else (
+    echo   Extracting Wintun driver...
+    powershell -Command "Expand-Archive -Path '%WINTUN_TMP%\wintun.zip' -DestinationPath '%WINTUN_TMP%' -Force"
+    
+    REM Copy the appropriate architecture DLL to installer directory
+    if exist "%WINTUN_TMP%\wintun\bin\amd64\wintun.dll" (
+        copy "%WINTUN_TMP%\wintun\bin\amd64\wintun.dll" "%INSTALLER_DIR%\"
+        echo Wintun driver ready
+    ) else (
+        echo Warning: Wintun DLL not found after extraction
+    )
+)
+echo.
+
 REM Build the agent executable
 echo Step 4: Building agent executable...
 cd /d "%SCRIPT_DIR%"
@@ -170,14 +195,24 @@ pyinstaller --onefile ^
     --name "%APP_NAME%Service" ^
     --icon=installer\nebula.ico ^
     --hidden-import=win32timezone ^
+    --hidden-import=win32api ^
+    --hidden-import=win32con ^
+    --hidden-import=win32security ^
+    --hidden-import=ntsecuritycon ^
     --hidden-import=win32serviceutil ^
     --hidden-import=win32service ^
     --hidden-import=win32event ^
     --hidden-import=servicemanager ^
     --hidden-import=yaml ^
     --hidden-import=httpx ^
+    --hidden-import=httpx._transports ^
     --hidden-import=httpx._transports.default ^
-    --hidden-import=httpx._transports.asgi ^
+    --hidden-import=httpx._client ^
+    --hidden-import=h11 ^
+    --hidden-import=certifi ^
+    --hidden-import=charset_normalizer ^
+    --collect-all=httpx ^
+    --collect-all=certifi ^
     service.py
 
 if errorlevel 1 (
