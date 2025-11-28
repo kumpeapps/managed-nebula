@@ -31,6 +31,14 @@ from agent import (
     start_nebula, stop_nebula, get_status, run_once, AGENT_LOG
 )
 
+# Service management utilities
+try:
+    import subprocess
+    import ctypes
+    ADMIN_AVAILABLE = True
+except ImportError:
+    ADMIN_AVAILABLE = False
+
 
 class ConfigWindow:
     """Configuration window for Managed Nebula"""
@@ -145,6 +153,29 @@ class ConfigWindow:
         ttk.Label(status_frame, text="Nebula Version:").grid(row=2, column=0, sticky="w")
         ttk.Label(status_frame, text=get_nebula_version()).grid(row=2, column=1, sticky="w", padx=(10, 0))
         
+        # Service status
+        service_status = get_service_status()
+        service_text = {
+            "running": "Service Running",
+            "stopped": "Service Stopped",
+            "installed": "Service Installed",
+            "not_installed": "Service Not Installed",
+            "unknown": "Unknown"
+        }.get(service_status, "Unknown")
+        service_color = "green" if service_status == "running" else "orange" if service_status in ["stopped", "installed"] else "red"
+        
+        ttk.Label(status_frame, text="Windows Service:").grid(row=3, column=0, sticky="w")
+        self.service_label = ttk.Label(status_frame, text=service_text, foreground=service_color)
+        self.service_label.grid(row=3, column=1, sticky="w", padx=(10, 0))
+        
+        # Service management button
+        if service_status == "not_installed":
+            service_btn = ttk.Button(status_frame, text="Install Service", command=self._install_service, width=15)
+            service_btn.grid(row=4, column=0, columnspan=2, pady=(10, 0))
+        elif service_status == "stopped":
+            service_btn = ttk.Button(status_frame, text="Start Service", command=self._start_service, width=15)
+            service_btn.grid(row=4, column=0, columnspan=2, pady=(10, 0))
+        
         # Buttons frame
         btn_frame = ttk.Frame(main_frame)
         btn_frame.grid(row=8, column=0, columnspan=3, pady=20)
@@ -256,6 +287,170 @@ class ConfigWindow:
         status_text = "Connected" if nebula_running else "Disconnected"
         status_color = "green" if nebula_running else "red"
         self.status_label.config(text=status_text, foreground=status_color)
+    
+    def _install_service(self):
+        """Install the Windows Service"""
+        if not is_admin():
+            messagebox.showerror(
+                "Administrator Required",
+                "Installing the service requires administrator privileges.\n\n"
+                "Please run this application as Administrator."
+            )
+            return
+        
+        # Show progress dialog
+        progress_window = tk.Toplevel(self.window)
+        progress_window.title("Installing Service")
+        progress_window.geometry("400x200")
+        progress_window.transient(self.window)
+        progress_window.grab_set()
+        
+        # Center it
+        progress_window.update_idletasks()
+        x = self.window.winfo_x() + (self.window.winfo_width() - progress_window.winfo_width()) // 2
+        y = self.window.winfo_y() + (self.window.winfo_height() - progress_window.winfo_height()) // 2
+        progress_window.geometry(f"+{x}+{y}")
+        
+        progress_label = ttk.Label(progress_window, text="Installing Windows Service...")
+        progress_label.pack(pady=20)
+        
+        progress_text = tk.Text(progress_window, height=8, width=50)
+        progress_text.pack(pady=10, padx=10)
+        
+        def log_progress(msg):
+            progress_text.insert(tk.END, msg + "\n")
+            progress_text.see(tk.END)
+            progress_window.update()
+        
+        def install_thread():
+            try:
+                # Find service executable
+                service_exe = None
+                search_paths = [
+                    Path(sys.executable).parent / "NebulaAgentService.exe",
+                    Path(__file__).parent / "NebulaAgentService.exe",
+                    Path("C:/Program Files/ManagedNebula/NebulaAgentService.exe"),
+                    Path(NEBULA_DIR) / "bin" / "NebulaAgentService.exe",
+                ]
+                
+                log_progress("Searching for NebulaAgentService.exe...")
+                for path in search_paths:
+                    if path.exists():
+                        service_exe = path
+                        log_progress(f"Found: {path}")
+                        break
+                
+                if not service_exe:
+                    log_progress("ERROR: NebulaAgentService.exe not found!")
+                    log_progress("")
+                    log_progress("Please run build-installer.bat to build the service executable.")
+                    messagebox.showerror(
+                        "Service Executable Not Found",
+                        "NebulaAgentService.exe not found!\n\n"
+                        "Please build the service executable first by running:\n"
+                        "  build-installer.bat\n\n"
+                        "Or ensure it's in one of these locations:\n" +
+                        "\n".join(str(p) for p in search_paths)
+                    )
+                    progress_window.destroy()
+                    return
+                
+                log_progress("")
+                log_progress("Creating Windows Service...")
+                
+                # Create service with sc
+                result = subprocess.run(
+                    [
+                        "sc", "create", "NebulaAgent",
+                        f"binPath= {service_exe}",
+                        "start= auto",
+                        "type= share",
+                        "DisplayName= Managed Nebula Agent"
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                if result.returncode == 0:
+                    log_progress("✓ Service created successfully")
+                    log_progress("")
+                    log_progress("Starting service...")
+                    
+                    # Start service
+                    result = subprocess.run(
+                        ["sc", "start", "NebulaAgent"],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    
+                    if result.returncode == 0:
+                        log_progress("✓ Service started successfully")
+                        log_progress("")
+                        log_progress("Service installation complete!")
+                        messagebox.showinfo(
+                            "Success",
+                            "Windows Service installed and started successfully!\n\n"
+                            "The service will now start automatically on system boot."
+                        )
+                    else:
+                        log_progress(f"⚠ Warning: Service created but failed to start")
+                        log_progress(result.stderr if result.stderr else result.stdout)
+                        messagebox.showwarning(
+                            "Partial Success",
+                            "Service was created but failed to start.\n\n"
+                            "Check the Event Viewer for details.\n"
+                            "You may need to configure the service first."
+                        )
+                else:
+                    log_progress(f"✗ Failed to create service")
+                    log_progress(result.stderr if result.stderr else result.stdout)
+                    messagebox.showerror(
+                        "Installation Failed",
+                        f"Failed to create service:\n\n{result.stderr if result.stderr else result.stdout}"
+                    )
+                
+                progress_window.destroy()
+                self.show()  # Refresh window to update status
+                
+            except Exception as e:
+                log_progress(f"\nERROR: {str(e)}")
+                messagebox.showerror("Error", f"Service installation failed:\n\n{str(e)}")
+                progress_window.destroy()
+        
+        # Run installation in thread
+        thread = threading.Thread(target=install_thread, daemon=True)
+        thread.start()
+    
+    def _start_service(self):
+        """Start the Windows Service"""
+        if not is_admin():
+            messagebox.showerror(
+                "Administrator Required",
+                "Starting the service requires administrator privileges.\n\n"
+                "Please run this application as Administrator."
+            )
+            return
+        
+        try:
+            result = subprocess.run(
+                ["sc", "start", "NebulaAgent"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if result.returncode == 0:
+                messagebox.showinfo("Success", "Service started successfully!")
+                self.show()  # Refresh window
+            else:
+                messagebox.showerror(
+                    "Error",
+                    f"Failed to start service:\n\n{result.stderr if result.stderr else result.stdout}"
+                )
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to start service:\n\n{str(e)}")
     
     def _close(self):
         """Close the window"""
