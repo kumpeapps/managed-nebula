@@ -389,6 +389,14 @@ class ConfigWindow:
         
         progress_text = tk.Text(progress_window, height=10, width=60)
         progress_text.pack(pady=10, padx=10)
+
+        # Initial line so user sees activity immediately
+        progress_text.insert(tk.END, "Preparing service installation...\n")
+        progress_text.see(tk.END)
+        try:
+            progress_window.update_idletasks(); progress_window.update()
+        except tk.TclError:
+            pass
         
         def log_progress(msg):
             progress_text.insert(tk.END, msg + "\n")
@@ -558,9 +566,9 @@ class ConfigWindow:
                 except:
                     pass
         
-        # Run installation in thread
-        thread = threading.Thread(target=install_thread, daemon=True)
-        thread.start()
+        # Run installation synchronously (Tkinter not thread-safe for direct widget updates)
+        log_progress("Installer task starting...")
+        install_thread()
     
     def _start_service(self):
         """Start the Windows Service"""
