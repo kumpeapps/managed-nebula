@@ -263,6 +263,12 @@ def get_service_status() -> str:
 
 
 if __name__ == "__main__":
+    # Debug: Log command line for troubleshooting
+    if "--debug-cli" in sys.argv:
+        print(f"DEBUG: sys.argv = {sys.argv}", file=sys.stderr)
+        print(f"DEBUG: len(sys.argv) = {len(sys.argv)}", file=sys.stderr)
+        print(f"DEBUG: frozen = {getattr(sys, 'frozen', False)}", file=sys.stderr)
+    
     if len(sys.argv) == 1:
         # Running as service
         try:
@@ -286,6 +292,12 @@ if __name__ == "__main__":
             print("  Start-Service NebulaAgent")
             print("  Stop-Service NebulaAgent")
             print("  Get-Service NebulaAgent")
+    elif sys.argv[1].lower() == "debug":
+        # Run service in console mode for debugging
+        print("Running service in debug mode (console)...")
+        print("Press Ctrl+C to stop")
+        service = NebulaAgentService([])
+        service.SvcDoRun()
     elif sys.argv[1].lower() == "status":
         print(f"Service Status: {get_service_status()}")
     elif sys.argv[1].lower() == "version":
@@ -303,6 +315,20 @@ if __name__ == "__main__":
             print(f"httpx: {httpx.__version__}")
         except ImportError:
             print("httpx: NOT FOUND (service will fail)")
+        sys.exit(0)
     else:
-        # Handle standard service commands
-        win32serviceutil.HandleCommandLine(NebulaAgentService)
+        # Handle standard service commands (install, start, stop, remove, etc)
+        # Note: HandleCommandLine will print usage and exit if command is invalid
+        try:
+            # Ensure we're passing the class, not an instance
+            if not hasattr(NebulaAgentService, '_svc_name_'):
+                print("ERROR: Service class metadata missing!", file=sys.stderr)
+                sys.exit(1)
+            
+            # Let pywin32 handle the command (install, start, stop, remove, etc)
+            win32serviceutil.HandleCommandLine(NebulaAgentService)
+        except Exception as e:
+            print(f"Error handling command '{sys.argv[1]}': {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
