@@ -2,24 +2,31 @@
 
 ## Issue #114 - Service Installation Fix
 
-The service executable (`NebulaAgentService.exe`) had missing dependencies that prevented it from running without Python installed. This has been fixed in the build script.
+The service executable (`NebulaAgentService.exe`) had missing dependencies that prevented it from running without Python installed. This has been fixed with a comprehensive PyInstaller spec file.
+
+**CRITICAL: You MUST rebuild the service executable on Windows before it will work!**
 
 ## What Was Fixed
 
-1. **PyInstaller Hidden Imports** - Added all required dependencies:
-   - `httpx` and its transports (h11, certifi, charset_normalizer)
-   - Windows security modules (win32api, win32security, ntsecuritycon)
-   - Used `--collect-all` for httpx and certifi to ensure complete packaging
+1. **Created `service.spec`** - Comprehensive PyInstaller specification:
+   - All httpx dependencies (httpx, httpcore, h11, certifi)
+   - All win32 service modules (win32serviceutil, win32service, win32event, servicemanager)
+   - Windows security (win32security, ntsecuritycon)
+   - YAML parser, SSL support, logging
 
-2. **Wintun Driver** - Now automatically downloads and packages wintun.dll
-   - Downloads from wintun.net during build
-   - Packages correct architecture (amd64) into installer
-   - Nebula requires this for tunnel interface creation
+2. **Updated `build-installer.bat`** - Now uses service.spec instead of command-line args
 
-3. **Service Installation** - GUI now has proper error handling:
-   - Corrected install command arguments (`--startup auto` not `--startup=auto`)
-   - Python fallback for development/testing
-   - Detailed progress logging
+3. **Created `rebuild-service.bat`** - Quick rebuild script for service-only builds (~30 seconds)
+
+4. **Created `verify-service.bat`** - Check if executable is up-to-date
+
+5. **GUI Python Fallback** - Falls back to `python service.py install` if exe missing
+
+## Why You're Seeing the Error
+
+The old `NebulaAgentService.exe` in your `C:\Program Files (x86)\ManagedNebula\` folder was built without the dependencies. The error message shows it's still the old version.
+
+**You must rebuild it on the Windows machine to get the fixed version.**
 
 ## How to Rebuild
 
@@ -31,19 +38,40 @@ On your **development Windows machine**:
 pip install pyinstaller pywin32 httpx pyyaml pystray pillow
 ```
 
-### Build Steps
+### Quick Rebuild (Recommended - 30 seconds)
 
-1. **Clone/Pull Latest Code**:
-   ```batch
-   cd C:\path\to\managed-nebula
-   git pull
-   cd windows_client
-   ```
+**This rebuilds ONLY the service executable:**
 
-2. **Run Build Script**:
-   ```batch
-   build-installer.bat
-   ```
+```batch
+cd C:\path\to\managed-nebula
+git pull
+cd windows_client
+rebuild-service.bat
+```
+
+Output will be in `dist\NebulaAgentService.exe`
+
+**Then copy to install location:**
+
+```batch
+REM Stop old service if running
+sc stop NebulaAgent
+sc delete NebulaAgent
+
+REM Copy new executable
+copy dist\NebulaAgentService.exe "C:\Program Files (x86)\ManagedNebula\"
+```
+
+### Full Installer Rebuild (Slower - 2-3 minutes)
+
+**This builds everything - use when creating installer for distribution:**
+
+```batch
+cd C:\path\to\managed-nebula
+git pull
+cd windows_client
+build-installer.bat
+```
 
    This will:
    - Download Nebula binaries (v1.9.7)
