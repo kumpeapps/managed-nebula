@@ -305,7 +305,7 @@ Include:
 
 ## License
 
-Copyright © 2024 KumpeApps
+Copyright © 2025 KumpeApps
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
