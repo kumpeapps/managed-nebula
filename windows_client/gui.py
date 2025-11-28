@@ -433,19 +433,101 @@ class ConfigWindow:
                         break
                 
                 if not service_exe:
-                    log_progress("ERROR: NebulaAgentService.exe not found!")
+                    log_progress("WARNING: NebulaAgentService.exe not found in expected locations")
+                    log_progress("Attempting fallback: Python-based service installation...")
                     log_progress("")
-                    log_progress("Please run build-installer.bat to build the service executable.")
-                    messagebox.showerror(
-                        "Service Executable Not Found",
-                        "NebulaAgentService.exe not found!\n\n"
-                        "Please build the service executable first by running:\n"
-                        "  build-installer.bat\n\n"
-                        "Or ensure it's in one of these locations:\n" +
-                        "\n".join(str(p) for p in search_paths)
-                    )
-                    progress_window.destroy()
-                    return
+                    
+                    # Try to find service.py in the source directory
+                    service_py = None
+                    py_search_paths = [
+                        Path(__file__).parent / "service.py",
+                        Path(sys.executable).parent / "service.py",
+                        Path(NEBULA_DIR) / "service.py",
+                    ]
+                    
+                    for path in py_search_paths:
+                        if path.exists():
+                            service_py = path
+                            log_progress(f"Found service.py: {path}")
+                            break
+                    
+                    if not service_py:
+                        log_progress("ERROR: Neither NebulaAgentService.exe nor service.py found!")
+                        messagebox.showerror(
+                            "Service Files Not Found",
+                            "Could not find service executable or Python source.\n\n"
+                            "Searched for NebulaAgentService.exe in:\n" +
+                            "\n".join(str(p) for p in search_paths) +
+                            "\n\nSearched for service.py in:\n" +
+                            "\n".join(str(p) for p in py_search_paths)
+                        )
+                        progress_window.destroy()
+                        return
+                    
+                    # Use Python to install service
+                    log_progress("")
+                    log_progress("Installing via Python (fallback method)...")
+                    install_cmd = [sys.executable, str(service_py), "install", "--startup", "auto"]
+                    log_progress("Running: " + " ".join(install_cmd))
+                    
+                    try:
+                        install_result = subprocess.run(
+                            install_cmd,
+                            capture_output=True,
+                            text=True,
+                            timeout=30,
+                            cwd=str(service_py.parent)
+                        )
+                        if install_result.returncode != 0:
+                            log_progress("STDOUT:\n" + install_result.stdout)
+                            log_progress("STDERR:\n" + install_result.stderr)
+                            log_progress("✗ Python service install failed")
+                            messagebox.showerror(
+                                "Installation Failed",
+                                "Python service install failed.\n\n" + (install_result.stderr or install_result.stdout)
+                            )
+                            progress_window.destroy()
+                            self._refresh_status()
+                            return
+                        
+                        log_progress("✓ Service installed via Python")
+                        log_progress("")
+                        log_progress("Starting service...")
+                        
+                        start_cmd = ["sc", "start", "NebulaAgent"]
+                        log_progress("Running: " + " ".join(start_cmd))
+                        start_result = subprocess.run(start_cmd, capture_output=True, text=True, timeout=15)
+                        
+                        if start_result.returncode == 0:
+                            import time as _t
+                            for _i in range(10):
+                                q = subprocess.run(["sc", "query", "NebulaAgent"], capture_output=True, text=True)
+                                if "RUNNING" in q.stdout:
+                                    log_progress("✓ Service started and running")
+                                    messagebox.showinfo("Success", "Service installed and started via Python!")
+                                    break
+                                _t.sleep(1)
+                            else:
+                                log_progress("⚠ Service start timed out")
+                                messagebox.showwarning("Partial Success", "Service installed but may not be running")
+                        else:
+                            log_progress("Start output:\n" + start_result.stdout)
+                            if start_result.stderr:
+                                log_progress("Start errors:\n" + start_result.stderr)
+                            messagebox.showwarning("Partial Success", "Service installed but failed to start.\n\n" + (start_result.stderr or start_result.stdout))
+                        
+                        progress_window.destroy()
+                        self._refresh_status()
+                        return
+                        
+                    except Exception as e:
+                        log_progress(f"✗ Exception during Python install: {e}")
+                        import traceback
+                        log_progress(traceback.format_exc())
+                        messagebox.showerror("Installation Failed", f"Python service install exception:\n\n{e}")
+                        progress_window.destroy()
+                        self._refresh_status()
+                        return
                 
                 log_progress("")
                 log_progress("Checking for existing service...")
