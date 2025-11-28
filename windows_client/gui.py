@@ -56,25 +56,18 @@ class ConfigWindow:
                 self.window.focus_force()
                 return
             except tk.TclError:
-                pass
+                self.window = None
         
-        # Create either Tk() or Toplevel() depending on if root exists
-        try:
-            # Try to get existing root
-            root = tk._default_root
-            if root is None:
-                # No root exists, create one
-                self.window = tk.Tk()
-            else:
-                # Root exists, create Toplevel
-                self.window = tk.Toplevel()
-        except:
-            # Fallback to creating new Tk
-            self.window = tk.Tk()
-        
+        # Always create a new Tk root for the config window
+        # This ensures it runs independently with its own event loop
+        self.window = tk.Tk()
         self.window.title("Managed Nebula - Configuration")
         self.window.geometry("500x450")
         self.window.resizable(False, False)
+        
+        # Ensure window stays on top initially
+        self.window.attributes('-topmost', True)
+        self.window.after(100, lambda: self.window.attributes('-topmost', False))
         
         # Try to set icon
         try:
@@ -210,7 +203,22 @@ class ConfigWindow:
         y = (self.window.winfo_screenheight() // 2) - (height // 2)
         self.window.geometry(f"{width}x{height}+{x}+{y}")
         
-        self.window.mainloop()
+        # Only call mainloop if we're running standalone (not from tray)
+        # If in a thread, the thread will keep the window alive
+        try:
+            # Check if we're in the main thread
+            if threading.current_thread() is threading.main_thread():
+                self.window.mainloop()
+            else:
+                # In a background thread - keep window alive without blocking
+                while self.window and self.window.winfo_exists():
+                    try:
+                        self.window.update()
+                        self.window.after(50)  # 50ms delay
+                    except tk.TclError:
+                        break
+        except Exception as e:
+            print(f"Error in window loop: {e}")
     
     def _save(self):
         """Save configuration"""
