@@ -58,7 +58,20 @@ class ConfigWindow:
             except tk.TclError:
                 pass
         
-        self.window = tk.Tk()
+        # Create either Tk() or Toplevel() depending on if root exists
+        try:
+            # Try to get existing root
+            root = tk._default_root
+            if root is None:
+                # No root exists, create one
+                self.window = tk.Tk()
+            else:
+                # Root exists, create Toplevel
+                self.window = tk.Toplevel()
+        except:
+            # Fallback to creating new Tk
+            self.window = tk.Tk()
+        
         self.window.title("Managed Nebula - Configuration")
         self.window.geometry("500x450")
         self.window.resizable(False, False)
@@ -583,9 +596,18 @@ class SystemTrayApp:
         
         # Create config window
         self.config_window = ConfigWindow(on_save=on_save)
-        # Use non-daemon thread to show window without blocking tray
-        # Daemon threads can cause Tkinter windows to close immediately
-        thread = threading.Thread(target=self.config_window.show, daemon=False)
+        
+        # Tkinter needs to run in main thread on Windows, but pystray also needs main thread
+        # Solution: Create window in separate thread with proper exception handling
+        def show_with_error_handling():
+            try:
+                self.config_window.show()
+            except Exception as e:
+                print(f"Error showing config window: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        thread = threading.Thread(target=show_with_error_handling, daemon=False)
         thread.start()
     
     def view_logs(self, icon=None, item=None):
