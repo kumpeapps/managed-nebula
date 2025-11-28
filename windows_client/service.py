@@ -36,6 +36,28 @@ from agent import (
 )
 from config import load_config
 
+# Force-load http client stack so PyInstaller bundles dynamic modules
+try:
+    import httpx  # noqa: F401
+    import httpcore  # noqa: F401
+    import httpcore._backends.base  # noqa: F401
+    import httpcore._backends.sync  # noqa: F401
+    import httpcore._backends.auto  # noqa: F401
+    import httpcore._async.connection  # noqa: F401
+    import httpcore._async.connection_pool  # noqa: F401
+    import httpcore._async.http11  # noqa: F401
+    import httpcore._async.http_proxy  # noqa: F401
+    import httpcore._async.socks_proxy  # noqa: F401
+    import httpcore._sync.connection  # noqa: F401
+    import httpcore._sync.connection_pool  # noqa: F401
+    import httpcore._sync.http11  # noqa: F401
+    import httpcore._sync.http_proxy  # noqa: F401
+    import httpcore._sync.socks_proxy  # noqa: F401
+    import h11  # noqa: F401
+except Exception:
+    # Defer any import errors to runtime diagnostics/CLI
+    pass
+
 
 class NebulaAgentService(win32serviceutil.ServiceFramework):
     """
