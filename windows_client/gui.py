@@ -486,7 +486,8 @@ class ConfigWindow:
                 log_progress("Creating Windows Service (exe self-install)...")
                 try:
                     # Use the service executable's own pywin32 command handling: NebulaAgentService.exe install
-                    install_cmd = [str(service_exe), "install", "--startup=auto"]
+                    # win32serviceutil expects space-separated option value (no '=')
+                    install_cmd = [str(service_exe), "install", "--startup", "auto"]
                     log_progress("Running: " + " ".join(install_cmd))
                     install_result = subprocess.run(
                         install_cmd,
