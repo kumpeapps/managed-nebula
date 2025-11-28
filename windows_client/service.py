@@ -326,25 +326,98 @@ if __name__ == "__main__":
         except ImportError:
             print("httpx: NOT FOUND (service will fail)")
         sys.exit(0)
-    else:
-        # Handle standard service commands (install, start, stop, remove, etc)
-        # Note: HandleCommandLine will print usage and exit if command is invalid
+    elif sys.argv[1].lower() == "install":
+        # Handle install command directly to avoid pywin32 argument parsing issues
+        print(f"Installing {NebulaAgentService._svc_display_name_}...")
+        
+        # Parse startup mode from command line
+        startup_mode = win32service.SERVICE_DEMAND_START  # default: manual
+        for i, arg in enumerate(sys.argv):
+            if arg in ("--startup", "--startup=auto", "--startup=delayed", "--startup=disabled"):
+                if arg == "--startup" and i + 1 < len(sys.argv):
+                    startup_value = sys.argv[i + 1].lower()
+                elif "=" in arg:
+                    startup_value = arg.split("=", 1)[1].lower()
+                else:
+                    continue
+                    
+                if startup_value == "auto":
+                    startup_mode = win32service.SERVICE_AUTO_START
+                elif startup_value == "delayed":
+                    startup_mode = win32service.SERVICE_AUTO_START  # Will set delayed after
+                elif startup_value == "disabled":
+                    startup_mode = win32service.SERVICE_DISABLED
+                break
+        
         try:
-            # Ensure we're passing the class, not an instance
-            if not hasattr(NebulaAgentService, '_svc_name_'):
-                print("ERROR: Service class metadata missing!", file=sys.stderr)
-                sys.exit(1)
+            # Use the executable path for frozen apps, or Python + script path for source
+            exe_path = sys.executable if getattr(sys, 'frozen', False) else None
+            exe_args = None
             
             if debug_cli:
-                print(f"DEBUG: Calling HandleCommandLine with class: {NebulaAgentService}", file=sys.stderr)
-                print(f"DEBUG: Service name: {NebulaAgentService._svc_name_}", file=sys.stderr)
-                print(f"DEBUG: Display name: {NebulaAgentService._svc_display_name_}", file=sys.stderr)
+                print(f"DEBUG: exe_path = {exe_path}", file=sys.stderr)
+                print(f"DEBUG: startup_mode = {startup_mode}", file=sys.stderr)
             
-            # Let pywin32 handle the command (install, start, stop, remove, etc)
-            # The _exe_name_ class attribute tells pywin32 where the service executable is
+            # Install the service
+            win32serviceutil.InstallService(
+                pythonClassString=f"{__name__}.{NebulaAgentService.__name__}",
+                serviceName=NebulaAgentService._svc_name_,
+                displayName=NebulaAgentService._svc_display_name_,
+                startType=startup_mode,
+                description=NebulaAgentService._svc_description_,
+                exeName=exe_path,
+                exeArgs=exe_args
+            )
+            print(f"✓ Service '{NebulaAgentService._svc_name_}' installed successfully")
+            print(f"  Startup mode: {['Manual', 'Auto', 'Disabled'][startup_mode - 2]}")
+            sys.exit(0)
+        except Exception as e:
+            print(f"✗ Failed to install service: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+    
+    elif sys.argv[1].lower() in ("remove", "uninstall"):
+        # Handle remove command directly
+        print(f"Removing {NebulaAgentService._svc_display_name_}...")
+        try:
+            win32serviceutil.RemoveService(NebulaAgentService._svc_name_)
+            print(f"✓ Service '{NebulaAgentService._svc_name_}' removed successfully")
+            sys.exit(0)
+        except Exception as e:
+            print(f"✗ Failed to remove service: {e}", file=sys.stderr)
+            sys.exit(1)
+    
+    elif sys.argv[1].lower() == "start":
+        # Handle start command directly
+        print(f"Starting {NebulaAgentService._svc_display_name_}...")
+        try:
+            win32serviceutil.StartService(NebulaAgentService._svc_name_)
+            print(f"✓ Service '{NebulaAgentService._svc_name_}' started successfully")
+            sys.exit(0)
+        except Exception as e:
+            print(f"✗ Failed to start service: {e}", file=sys.stderr)
+            sys.exit(1)
+    
+    elif sys.argv[1].lower() == "stop":
+        # Handle stop command directly
+        print(f"Stopping {NebulaAgentService._svc_display_name_}...")
+        try:
+            win32serviceutil.StopService(NebulaAgentService._svc_name_)
+            print(f"✓ Service '{NebulaAgentService._svc_name_}' stopped successfully")
+            sys.exit(0)
+        except Exception as e:
+            print(f"✗ Failed to stop service: {e}", file=sys.stderr)
+            sys.exit(1)
+    
+    else:
+        # Fallback to HandleCommandLine for other commands (update, restart, etc)
+        try:
+            if debug_cli:
+                print(f"DEBUG: Calling HandleCommandLine for command: {sys.argv[1]}", file=sys.stderr)
             win32serviceutil.HandleCommandLine(NebulaAgentService)
         except Exception as e:
-            print(f"Error handling command '{sys.argv[1] if len(sys.argv) > 1 else 'none'}': {e}", file=sys.stderr)
+            print(f"Error handling command '{sys.argv[1]}': {e}", file=sys.stderr)
             import traceback
             traceback.print_exc()
             sys.exit(1)
