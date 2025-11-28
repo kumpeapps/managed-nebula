@@ -204,13 +204,14 @@ class ConfigWindow:
         self.service_label = ttk.Label(status_frame, text=service_text, foreground=service_color)
         self.service_label.grid(row=3, column=1, sticky="w", padx=(10, 0))
         
-        # Service management button
+        # Service management buttons
         if service_status == "not_installed":
-            service_btn = ttk.Button(status_frame, text="Install Service", command=self._install_service, width=15)
-            service_btn.grid(row=4, column=0, columnspan=2, pady=(10, 0))
+            ttk.Button(status_frame, text="Install Service", command=self._install_service, width=18).grid(row=4, column=0, columnspan=2, pady=(10, 0))
         elif service_status == "stopped":
-            service_btn = ttk.Button(status_frame, text="Start Service", command=self._start_service, width=15)
-            service_btn.grid(row=4, column=0, columnspan=2, pady=(10, 0))
+            ttk.Button(status_frame, text="Start Service", command=self._start_service, width=18).grid(row=4, column=0, columnspan=2, pady=(10, 0))
+            ttk.Button(status_frame, text="Uninstall Service", command=self._uninstall_service, width=18).grid(row=5, column=0, columnspan=2, pady=(6, 0))
+        elif service_status == "running" or service_status == "installed":
+            ttk.Button(status_frame, text="Uninstall Service", command=self._uninstall_service, width=18).grid(row=4, column=0, columnspan=2, pady=(10, 0))
         
         # Buttons frame
         btn_frame = ttk.Frame(main_frame)
@@ -386,13 +387,17 @@ class ConfigWindow:
         progress_label = ttk.Label(progress_window, text="Installing Windows Service...")
         progress_label.pack(pady=20)
         
-        progress_text = tk.Text(progress_window, height=8, width=50)
+        progress_text = tk.Text(progress_window, height=10, width=60)
         progress_text.pack(pady=10, padx=10)
         
         def log_progress(msg):
             progress_text.insert(tk.END, msg + "\n")
             progress_text.see(tk.END)
-            progress_window.update()
+            try:
+                progress_window.update_idletasks()
+                progress_window.update()
+            except tk.TclError:
+                pass
         
         def install_thread():
             try:
@@ -587,6 +592,30 @@ class ConfigWindow:
                 )
         except Exception as e:
             messagebox.showerror("Error", f"Failed to start service:\n\n{str(e)}")
+    
+    def _uninstall_service(self):
+        """Uninstall the Windows Service"""
+        if not is_admin():
+            messagebox.showerror(
+                "Administrator Required",
+                "Uninstalling the service requires administrator privileges.\n\n"
+                "Please run this application as Administrator."
+            )
+            return
+        
+        try:
+            # Stop if running
+            subprocess.run(["sc", "stop", "NebulaAgent"], capture_output=True, text=True, timeout=8)
+            # Delete service
+            result = subprocess.run(["sc", "delete", "NebulaAgent"], capture_output=True, text=True, timeout=8)
+            if result.returncode == 0:
+                messagebox.showinfo("Success", "Service uninstalled successfully!")
+                if self.window:
+                    self._refresh_status()
+            else:
+                messagebox.showerror("Error", f"Failed to uninstall service:\n\n{result.stderr if result.stderr else result.stdout}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to uninstall service:\n\n{str(e)}")
     
     def _close(self):
         """Close the window"""
