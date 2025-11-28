@@ -40,6 +40,36 @@ except ImportError:
     ADMIN_AVAILABLE = False
 
 
+def is_admin():
+    """Check if running with administrator privileges"""
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+
+
+def get_service_status():
+    """Check if Nebula Agent service is installed and its status"""
+    try:
+        result = subprocess.run(
+            ["sc", "query", "NebulaAgent"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            output = result.stdout
+            if "RUNNING" in output:
+                return "running"
+            elif "STOPPED" in output:
+                return "stopped"
+            else:
+                return "installed"
+        return "not_installed"
+    except Exception:
+        return "unknown"
+
+
 class ConfigWindow:
     """Configuration window for Managed Nebula"""
     
