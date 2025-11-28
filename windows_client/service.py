@@ -368,11 +368,11 @@ if __name__ == "__main__":
                 exeName=exe_path,
                 exeArgs=exe_args
             )
-            print(f"✓ Service '{NebulaAgentService._svc_name_}' installed successfully")
+            print(f"[OK] Service '{NebulaAgentService._svc_name_}' installed successfully")
             print(f"  Startup mode: {['Manual', 'Auto', 'Disabled'][startup_mode - 2]}")
             sys.exit(0)
         except Exception as e:
-            print(f"✗ Failed to install service: {e}", file=sys.stderr)
+            print(f"[ERROR] Failed to install service: {e}", file=sys.stderr)
             import traceback
             traceback.print_exc()
             sys.exit(1)
@@ -382,10 +382,10 @@ if __name__ == "__main__":
         print(f"Removing {NebulaAgentService._svc_display_name_}...")
         try:
             win32serviceutil.RemoveService(NebulaAgentService._svc_name_)
-            print(f"✓ Service '{NebulaAgentService._svc_name_}' removed successfully")
+            print(f"[OK] Service '{NebulaAgentService._svc_name_}' removed successfully")
             sys.exit(0)
         except Exception as e:
-            print(f"✗ Failed to remove service: {e}", file=sys.stderr)
+            print(f"[ERROR] Failed to remove service: {e}", file=sys.stderr)
             sys.exit(1)
     
     elif sys.argv[1].lower() == "start":
@@ -393,10 +393,10 @@ if __name__ == "__main__":
         print(f"Starting {NebulaAgentService._svc_display_name_}...")
         try:
             win32serviceutil.StartService(NebulaAgentService._svc_name_)
-            print(f"✓ Service '{NebulaAgentService._svc_name_}' started successfully")
+            print(f"[OK] Service '{NebulaAgentService._svc_name_}' started successfully")
             sys.exit(0)
         except Exception as e:
-            print(f"✗ Failed to start service: {e}", file=sys.stderr)
+            print(f"[ERROR] Failed to start service: {e}", file=sys.stderr)
             sys.exit(1)
     
     elif sys.argv[1].lower() == "stop":
@@ -404,10 +404,10 @@ if __name__ == "__main__":
         print(f"Stopping {NebulaAgentService._svc_display_name_}...")
         try:
             win32serviceutil.StopService(NebulaAgentService._svc_name_)
-            print(f"✓ Service '{NebulaAgentService._svc_name_}' stopped successfully")
+            print(f"[OK] Service '{NebulaAgentService._svc_name_}' stopped successfully")
             sys.exit(0)
         except Exception as e:
-            print(f"✗ Failed to stop service: {e}", file=sys.stderr)
+            print(f"[ERROR] Failed to stop service: {e}", file=sys.stderr)
             sys.exit(1)
     
     else:
