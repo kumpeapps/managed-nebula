@@ -565,6 +565,47 @@ class ConfigWindow:
                     time.sleep(1)  # Wait for service deletion to complete
                 
                 log_progress("")
+                log_progress("Checking service executable version...")
+                try:
+                    version_cmd = [str(service_exe), "version"]
+                    log_progress("Running: " + " ".join(version_cmd))
+                    version_result = subprocess.run(
+                        version_cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    version_ok = (version_result.returncode == 0 and "Managed Nebula Agent Service" in (version_result.stdout or ""))
+                    if version_result.stdout:
+                        log_progress("Version STDOUT:\n" + version_result.stdout.strip())
+                    if version_result.stderr:
+                        log_progress("Version STDERR:\n" + version_result.stderr.strip())
+                    if not version_ok:
+                        log_progress("✗ Service executable version check failed")
+                        messagebox.showerror(
+                            "Outdated Service Executable",
+                            "The installed NebulaAgentService.exe appears to be from an old build or is missing the 'version' command.\n\n"
+                            "To fix this:\n"
+                            "1. Download the latest installer from GitHub releases\n"
+                            "2. Or rebuild locally: windows_client\\rebuild-service.bat\n"
+                            "3. Then copy dist\\NebulaAgentService.exe to:\n"
+                            f"   {str(service_exe.parent)}\n\n"
+                            "After replacing, click Install Service again."
+                        )
+                        progress_window.destroy()
+                        self._refresh_status()
+                        return
+                except Exception as e:
+                    log_progress(f"Version check error: {e}")
+                    messagebox.showerror(
+                        "Outdated Service Executable",
+                        "Failed to verify service executable version. Please install the latest build and try again."
+                    )
+                    progress_window.destroy()
+                    self._refresh_status()
+                    return
+
+                log_progress("")
                 log_progress("Creating Windows Service (exe self-install)...")
                 try:
                     # Use the service executable's own pywin32 command handling: NebulaAgentService.exe install
@@ -580,23 +621,15 @@ class ConfigWindow:
                     if install_result.returncode != 0:
                         log_progress("STDOUT:\n" + install_result.stdout)
                         log_progress("STDERR:\n" + install_result.stderr)
-                        
-                        # Check if this is the old broken executable (shows usage instead of installing)
-                        if "Usage: 'NebulaAgentService.exe [options]" in install_result.stdout:
-                            log_progress("✗ This is the OLD broken executable!")
-                            log_progress("")
-                            log_progress("The service executable needs to be rebuilt with the latest code.")
-                            log_progress("This was fixed in recent commits but the installed exe is outdated.")
+                        # If install failed, avoid mislabeling as outdated by checking version again
+                        recheck_version = subprocess.run([str(service_exe), "version"], capture_output=True, text=True, timeout=10)
+                        is_outdated = not (recheck_version.returncode == 0 and "Managed Nebula Agent Service" in (recheck_version.stdout or ""))
+                        if is_outdated:
+                            log_progress("✗ Service executable appears outdated or incompatible")
                             messagebox.showerror(
                                 "Outdated Service Executable",
-                                "The installed NebulaAgentService.exe is from an old build.\n\n"
-                                "To fix this:\n"
-                                "1. Download the latest installer from GitHub releases\n"
-                                "2. Or rebuild locally: windows_client\\rebuild-service.bat\n"
-                                "3. Then copy dist\\NebulaAgentService.exe to:\n"
-                                f"   {str(service_exe.parent)}\n\n"
-                                "The service executable was rebuilt on " + 
-                                str(service_exe.stat().st_mtime) if service_exe else "unknown"
+                                "The installed NebulaAgentService.exe does not support installation commands properly.\n\n"
+                                "Please replace it with the latest build and try again."
                             )
                         else:
                             log_progress("✗ Failed to install service via executable")
