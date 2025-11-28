@@ -120,18 +120,8 @@ jobs:
       shell: pwsh
       working-directory: windows_client
       run: |
-        Write-Host "Building NebulaAgentService.exe..."
-        pyinstaller --onefile `
-          --name "NebulaAgentService" `
-          --icon="installer\nebula.ico" `
-          --add-data "config.py;." `
-          --add-data "agent.py;." `
-          --hidden-import=win32timezone `
-          --hidden-import=win32serviceutil `
-          --hidden-import=win32service `
-          --hidden-import=win32event `
-          --hidden-import=servicemanager `
-          service.py
+        Write-Host "Building NebulaAgentService.exe with service.spec..."
+        pyinstaller service.spec --clean --noconfirm
         
         if (!(Test-Path "dist\NebulaAgentService.exe")) {
           throw "Service build failed"
