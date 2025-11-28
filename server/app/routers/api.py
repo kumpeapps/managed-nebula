@@ -625,6 +625,7 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
         cert_path=cert_path,
         inline_ca_pem=ca_bundle,
         inline_cert_pem=client_cert_pem,
+        os_type=os_type,
     )
 
     # Update last config download timestamp, version info, and os_type

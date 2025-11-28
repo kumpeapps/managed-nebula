@@ -185,13 +185,20 @@ Section "Windows Service" SecService
   Sleep 1000
   
   ; Create the service
-  nsExec::ExecToLog 'sc create NebulaAgent binPath= "$INSTDIR\NebulaAgentService.exe" start= auto DisplayName= "Managed Nebula Agent"'
+  nsExec::ExecToLog 'sc create NebulaAgent binPath= "$INSTDIR\NebulaAgentService.exe" start= auto type= share DisplayName= "Managed Nebula Agent"'
   
   ; Set service description
   nsExec::ExecToLog 'sc description NebulaAgent "Managed Nebula VPN Agent - Polls server for configuration and manages the local Nebula daemon"'
   
   ; Configure service recovery options (restart on failure)
   nsExec::ExecToLog 'sc failure NebulaAgent reset= 86400 actions= restart/60000/restart/60000/restart/60000'
+  
+  ; Verify service binary exists
+  IfFileExists "$INSTDIR\NebulaAgentService.exe" 0 ServiceBinMissing
+  Goto ServiceBinOk
+ServiceBinMissing:
+  DetailPrint "WARNING: NebulaAgentService.exe missing; service may not start"
+ServiceBinOk:
   
   DetailPrint "Windows Service installed successfully"
 SectionEnd

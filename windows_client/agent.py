@@ -31,6 +31,43 @@ NEBULA_BIN = NEBULA_DIR / "nebula.exe"
 NEBULA_CERT_BIN = NEBULA_DIR / "nebula-cert.exe"
 WINTUN_DLL = NEBULA_DIR / "wintun.dll"
 
+def _inject_windows_tun_dev(config_path: Path) -> None:
+    """Inject 'dev: Nebula' into the tun section if missing (Windows only).
+    Avoids Wintun empty adapter name errors when server provided older configs.
+    Safe, idempotent: only writes if dev key absent.
+    """
+    if sys.platform.startswith("win") and config_path.exists():
+        try:
+            text = config_path.read_text().splitlines()
+            modified = False
+            for i, line in enumerate(text):
+                if line.strip() == "tun:":
+                    # Look ahead for dev key until blank or next top-level key (no leading spaces)
+                    j = i + 1
+                    saw_dev = False
+                    while j < len(text):
+                        nxt = text[j]
+                        if nxt.strip() == "":
+                            j += 1
+                            continue
+                        # new top-level section (no indent or starts without two spaces)
+                        if not nxt.startswith(" "):
+                            break
+                        if nxt.strip().startswith("dev:"):
+                            saw_dev = True
+                            break
+                        j += 1
+                    if not saw_dev:
+                        # Insert after 'tun:' line with two-space indent
+                        text.insert(i + 1, "  dev: Nebula")
+                        modified = True
+                    break
+            if modified:
+                config_path.write_text("\n".join(text) + "\n")
+                logger.info("Injected missing tun.dev into config for Windows")
+        except Exception as e:
+            logger.warning("Failed to inject tun.dev: %s", e)
+
 # Setup logging
 def setup_logging(log_level: str = "INFO") -> logging.Logger:
     """Configure logging for the agent"""
@@ -443,6 +480,9 @@ def start_nebula() -> bool:
         return False
     
     logger.info("Starting Nebula daemon...")
+
+    # Ensure Windows adapter name present to avoid empty-name Wintun failure
+    _inject_windows_tun_dev(CONFIG_PATH)
 
     # Preflight: check for Wintun driver DLL presence (required on Windows)
     # Usually placed alongside nebula.exe as wintun.dll
