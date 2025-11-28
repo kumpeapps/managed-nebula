@@ -59,10 +59,12 @@ ShowUnInstDetails show
 
 ; Finish page
 !define MUI_FINISHPAGE_RUN "$INSTDIR\NebulaAgentGUI.exe"
-!define MUI_FINISHPAGE_RUN_TEXT "Launch ${PRODUCT_NAME} GUI"
+!define MUI_FINISHPAGE_RUN_TEXT "Launch ${PRODUCT_NAME} GUI to complete setup"
 !define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\README.md"
 !define MUI_FINISHPAGE_SHOWREADME_TEXT "View README"
 !define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED  ; Uncheck README by default
+!define MUI_FINISHPAGE_TITLE "Installation Complete"
+!define MUI_FINISHPAGE_TEXT "${PRODUCT_NAME} has been installed.$\r$\n$\r$\nIMPORTANT: Launch the GUI to:$\r$\n  1. Configure your server URL and token$\r$\n  2. Install the Windows Service (requires admin)$\r$\n$\r$\nThe service will then start automatically on boot."
 
 ; --------------------------------
 ; Pages
@@ -94,7 +96,8 @@ Section "Main Application" SecMain
   SetOutPath "$INSTDIR"
   SetOverwrite on
   
-  ; Copy main executables
+  ; Copy main executables (must be built by build-installer.bat first)
+  ; If these files are missing, run: cd ..\.. && build-installer.bat
   File "NebulaAgent.exe"
   File "NebulaAgentService.exe"
   File "NebulaAgentGUI.exe"
@@ -176,31 +179,12 @@ Section "Windows Service" SecService
   ; Install and start Windows Service
   DetailPrint "Installing Windows Service..."
   
-  ; Stop service if running
-  nsExec::ExecToLog 'sc stop NebulaAgent'
-  Sleep 2000
+  ; Note: Service installation is now handled by the GUI application
+  ; Users can install the service by opening the GUI and clicking "Install Service"
+  ; This allows for better error handling and user control
   
-  ; Delete existing service if exists
-  nsExec::ExecToLog 'sc delete NebulaAgent'
-  Sleep 1000
-  
-  ; Create the service
-  nsExec::ExecToLog 'sc create NebulaAgent binPath= "$INSTDIR\NebulaAgentService.exe" start= auto type= share DisplayName= "Managed Nebula Agent"'
-  
-  ; Set service description
-  nsExec::ExecToLog 'sc description NebulaAgent "Managed Nebula VPN Agent - Polls server for configuration and manages the local Nebula daemon"'
-  
-  ; Configure service recovery options (restart on failure)
-  nsExec::ExecToLog 'sc failure NebulaAgent reset= 86400 actions= restart/60000/restart/60000/restart/60000'
-  
-  ; Verify service binary exists
-  IfFileExists "$INSTDIR\NebulaAgentService.exe" 0 ServiceBinMissing
-  Goto ServiceBinOk
-ServiceBinMissing:
-  DetailPrint "WARNING: NebulaAgentService.exe missing; service may not start"
-ServiceBinOk:
-  
-  DetailPrint "Windows Service installed successfully"
+  DetailPrint "Service installation can be completed from the GUI"
+  DetailPrint "Run NebulaAgentGUI.exe and click 'Install Service' button"
 SectionEnd
 
 Section "Add to PATH" SecPath
