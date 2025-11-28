@@ -48,6 +48,7 @@ def build_nebula_config(
     cert_path: str = "/etc/nebula/host.crt",
     inline_ca_pem: str | None = None,
     inline_cert_pem: str | None = None,
+    os_type: str = "docker",
 ) -> str:
     """Build a Nebula config YAML.
     - client_ip_cidr must include the network mask (e.g., "10.100.0.10/16"), not /32.
@@ -128,6 +129,12 @@ def build_nebula_config(
             ],
         },
     }
+
+    # Windows-specific: explicitly set adapter name to avoid empty-name error on some systems
+    if os_type == "windows":
+        # Keep name short and ASCII to avoid Windows adapter name issues
+        # Nebula/Wintun will create a Wintun adapter with this friendly name
+        cfg["tun"]["dev"] = "Nebula"
 
     # Optional punchy block - critical for NAT traversal
     try:
