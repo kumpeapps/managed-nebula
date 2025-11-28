@@ -92,7 +92,7 @@ class ConfigWindow:
         # This ensures it runs independently with its own event loop
         self.window = tk.Tk()
         self.window.title("Managed Nebula - Configuration")
-        self.window.geometry("500x450")
+        self.window.geometry("520x540")
         self.window.resizable(False, False)
         
         # Ensure window stays on top initially
@@ -214,13 +214,16 @@ class ConfigWindow:
         
         # Buttons frame
         btn_frame = ttk.Frame(main_frame)
-        btn_frame.grid(row=8, column=0, columnspan=3, pady=20)
+        btn_frame.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(20, 10))
+        main_frame.rowconfigure(8, weight=0)
+        for i in range(3):
+            main_frame.columnconfigure(i, weight=1)
         
         # Action buttons
-        ttk.Button(btn_frame, text="Save", command=self._save, width=12).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="Test Connection", command=self._test_connection, width=15).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="View Logs", command=self._view_logs, width=12).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="Cancel", command=self._close, width=12).pack(side="left", padx=5)
+        ttk.Button(btn_frame, text="Save", command=self._save, width=14).pack(side="left", padx=6, pady=4)
+        ttk.Button(btn_frame, text="Test Connection", command=self._test_connection, width=18).pack(side="left", padx=6, pady=4)
+        ttk.Button(btn_frame, text="View Logs", command=self._view_logs, width=14).pack(side="left", padx=6, pady=4)
+        ttk.Button(btn_frame, text="Cancel", command=self._close, width=14).pack(side="left", padx=6, pady=4)
         
         # Handle window close
         self.window.protocol("WM_DELETE_WINDOW", self._close)
@@ -395,10 +398,17 @@ class ConfigWindow:
             try:
                 # Find service executable
                 service_exe = None
+                # Determine common install directories for both x64 and x86 program files
+                pf = os.environ.get("ProgramFiles") or "C:/Program Files"
+                pf86 = os.environ.get("ProgramFiles(x86)") or "C:/Program Files (x86)"
+                managed_nebula_pf = Path(pf) / "ManagedNebula" / "NebulaAgentService.exe"
+                managed_nebula_pf86 = Path(pf86) / "ManagedNebula" / "NebulaAgentService.exe"
+
                 search_paths = [
                     Path(sys.executable).parent / "NebulaAgentService.exe",
                     Path(__file__).parent / "NebulaAgentService.exe",
-                    Path("C:/Program Files/ManagedNebula/NebulaAgentService.exe"),
+                    managed_nebula_pf,
+                    managed_nebula_pf86,
                     Path(NEBULA_DIR) / "bin" / "NebulaAgentService.exe",
                 ]
                 
