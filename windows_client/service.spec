@@ -34,13 +34,13 @@ a = Analysis(
         'httpx._types',
         'httpx._utils',
         
-        # httpcore (httpx dependency)
+        # httpcore (httpx dependency) - v1.x structure
         'httpcore',
         'httpcore._async',
         'httpcore._sync',
-        'httpcore.backends',
-        'httpcore.backends.sync',
-        'httpcore.backends.asyncio',
+        'httpcore._backends',
+        'httpcore._backends.sync',
+        'httpcore._backends.auto',
         
         # h11 (HTTP/1.1 protocol)
         'h11',
