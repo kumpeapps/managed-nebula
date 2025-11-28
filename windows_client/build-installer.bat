@@ -191,29 +191,8 @@ echo.
 
 REM Build the service executable
 echo Step 5: Building service executable...
-pyinstaller --onefile ^
-    --name "%APP_NAME%Service" ^
-    --icon=installer\nebula.ico ^
-    --hidden-import=win32timezone ^
-    --hidden-import=win32api ^
-    --hidden-import=win32con ^
-    --hidden-import=win32security ^
-    --hidden-import=ntsecuritycon ^
-    --hidden-import=win32serviceutil ^
-    --hidden-import=win32service ^
-    --hidden-import=win32event ^
-    --hidden-import=servicemanager ^
-    --hidden-import=yaml ^
-    --hidden-import=httpx ^
-    --hidden-import=httpx._transports ^
-    --hidden-import=httpx._transports.default ^
-    --hidden-import=httpx._client ^
-    --hidden-import=h11 ^
-    --hidden-import=certifi ^
-    --hidden-import=charset_normalizer ^
-    --collect-all=httpx ^
-    --collect-all=certifi ^
-    service.py
+echo   Using service.spec for comprehensive dependency bundling...
+pyinstaller service.spec --clean --noconfirm
 
 if errorlevel 1 (
     echo Error: PyInstaller service build failed
