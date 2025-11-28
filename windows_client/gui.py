@@ -483,43 +483,27 @@ class ConfigWindow:
                     time.sleep(1)  # Wait for service deletion to complete
                 
                 log_progress("")
-                log_progress("Creating Windows Service...")
-                
-                # Create service with sc
-                # Ensure proper quoting for paths with spaces and convert Path to string
-                bin_path_arg = f"binPath= \"{str(service_exe)}\""
-                # Order and quoting matter for sc create; avoid trailing commas
-                create_cmd = [
-                    "sc", "create", "NebulaAgent",
-                    bin_path_arg,
-                    "type= share",
-                    "start= auto",
-                    "DisplayName= \"Managed Nebula Agent\""
-                ]
-                log_progress(f"Running: {' '.join(create_cmd)}")
-                result = subprocess.run(
-                    create_cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=30  # Increased timeout
-                )
-                
-                if result.returncode == 0:
+                log_progress("Creating Windows Service (pywin32)...")
+                try:
+                    import win32serviceutil, win32service
+                    exe_path = str(service_exe)
+                    service_name = "NebulaAgent"
+                    display_name = "Managed Nebula Agent"
+                    description = "Managed Nebula VPN Agent - Polls server for configuration and manages the local Nebula daemon"
+                    # Install service
+                    win32serviceutil.InstallService(
+                        exe_path,
+                        service_name,
+                        display_name,
+                        startType=win32service.SERVICE_AUTO_START,
+                        description=description
+                    )
                     log_progress("✓ Service created successfully")
                     log_progress("")
                     log_progress("Starting service...")
-                    
                     # Start service
-                    start_cmd = ["sc", "start", "NebulaAgent"]
-                    log_progress(f"Running: {' '.join(start_cmd)}")
-                    result = subprocess.run(
-                        start_cmd,
-                        capture_output=True,
-                        text=True,
-                        timeout=15
-                    )
-                    
-                    if result.returncode == 0:
+                    try:
+                        win32serviceutil.StartService(service_name)
                         log_progress("✓ Service started successfully")
                         log_progress("")
                         log_progress("Service installation complete!")
@@ -528,21 +512,17 @@ class ConfigWindow:
                             "Windows Service installed and started successfully!\n\n"
                             "The service will now start automatically on system boot."
                         )
-                    else:
-                        log_progress(f"⚠ Warning: Service created but failed to start")
-                        log_progress(result.stderr if result.stderr else result.stdout)
+                    except Exception as e_start:
+                        log_progress(f"⚠ Warning: Service created but failed to start: {e_start}")
                         messagebox.showwarning(
                             "Partial Success",
-                            "Service was created but failed to start.\n\n"
-                            "Check the Event Viewer for details.\n"
-                            "You may need to configure the service first."
+                            f"Service was created but failed to start.\n\n{e_start}"
                         )
-                else:
-                    log_progress(f"✗ Failed to create service")
-                    log_progress(result.stderr if result.stderr else result.stdout)
+                except Exception as e_install:
+                    log_progress(f"✗ Failed to create service: {e_install}")
                     messagebox.showerror(
                         "Installation Failed",
-                        f"Failed to create service:\n\n{result.stderr if result.stderr else result.stdout}"
+                        f"Failed to create service via pywin32:\n\n{e_install}"
                     )
                 
                 progress_window.destroy()
