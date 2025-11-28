@@ -483,46 +483,118 @@ class ConfigWindow:
                     time.sleep(1)  # Wait for service deletion to complete
                 
                 log_progress("")
-                log_progress("Creating Windows Service (pywin32)...")
+                log_progress("Creating Windows Service (exe self-install)...")
                 try:
-                    import win32serviceutil, win32service
-                    exe_path = str(service_exe)
-                    service_name = "NebulaAgent"
-                    display_name = "Managed Nebula Agent"
-                    description = "Managed Nebula VPN Agent - Polls server for configuration and manages the local Nebula daemon"
-                    # Install service
-                    win32serviceutil.InstallService(
-                        exe_path,
-                        service_name,
-                        display_name,
-                        startType=win32service.SERVICE_AUTO_START,
-                        description=description
+                    # Use the service executable's own pywin32 command handling: NebulaAgentService.exe install
+                    install_cmd = [str(service_exe), "install", "--startup=auto"]
+                    log_progress("Running: " + " ".join(install_cmd))
+                    install_result = subprocess.run(
+                        install_cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=30
                     )
+                    if install_result.returncode != 0:
+                        log_progress("STDOUT:\n" + install_result.stdout)
+                        log_progress("STDERR:\n" + install_result.stderr)
+                        log_progress("✗ Failed to install service via executable")
+                        messagebox.showerror(
+                            "Installation Failed",
+                            "Service executable install failed.\n\n" + (install_result.stderr or install_result.stdout)
+                        )
+                        progress_window.destroy()
+                        self._refresh_status()
+                        return
                     log_progress("✓ Service created successfully")
                     log_progress("")
                     log_progress("Starting service...")
-                    # Start service
-                    try:
-                        win32serviceutil.StartService(service_name)
-                        log_progress("✓ Service started successfully")
-                        log_progress("")
-                        log_progress("Service installation complete!")
-                        messagebox.showinfo(
-                            "Success",
-                            "Windows Service installed and started successfully!\n\n"
-                            "The service will now start automatically on system boot."
+                    start_cmd = ["sc", "start", "NebulaAgent"]
+                    log_progress("Running: " + " ".join(start_cmd))
+                    start_result = subprocess.run(
+                        start_cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=15
+                    )
+                    if start_result.returncode != 0:
+                        log_progress("STDOUT:\n" + start_result.stdout)
+                        log_progress("STDERR:\n" + start_result.stderr)
+                        log_progress("⚠ Warning: Service created but failed initial start")
+                        # Retry once after short delay (sometimes files settle)
+                        import time as _t
+                        _t.sleep(2)
+                        log_progress("Retrying start...")
+                        retry_result = subprocess.run(
+                            start_cmd,
+                            capture_output=True,
+                            text=True,
+                            timeout=15
                         )
-                    except Exception as e_start:
-                        log_progress(f"⚠ Warning: Service created but failed to start: {e_start}")
-                        messagebox.showwarning(
-                            "Partial Success",
-                            f"Service was created but failed to start.\n\n{e_start}"
-                        )
+                        if retry_result.returncode != 0:
+                            log_progress("Retry STDOUT:\n" + retry_result.stdout)
+                            log_progress("Retry STDERR:\n" + retry_result.stderr)
+                            # Offer debug mode run to surface errors
+                            log_progress("Launching service in debug mode to capture output...")
+                            debug_cmd = [str(service_exe), "debug"]
+                            try:
+                                debug_result = subprocess.run(
+                                    debug_cmd,
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=30
+                                )
+                                log_progress("Debug Output (truncated):\n" + debug_result.stdout[:800])
+                                if debug_result.stderr:
+                                    log_progress("Debug Errors (truncated):\n" + debug_result.stderr[:800])
+                            except Exception as _de:
+                                log_progress(f"Debug run failed: {_de}")
+                            messagebox.showwarning(
+                                "Partial Success",
+                                "Service installed but failed to start.\n\n" + (retry_result.stderr or retry_result.stdout)
+                            )
+                        else:
+                            log_progress("✓ Service started successfully on retry")
+                            messagebox.showinfo(
+                                "Success",
+                                "Windows Service installed and started successfully on retry!"
+                            )
+                    else:
+                        # Poll until running or timeout
+                        import time as _t
+                        for _i in range(10):
+                            q = subprocess.run(["sc", "query", "NebulaAgent"], capture_output=True, text=True)
+                            if "RUNNING" in q.stdout:
+                                log_progress("✓ Service reported RUNNING")
+                                messagebox.showinfo(
+                                    "Success",
+                                    "Windows Service installed and started successfully!"
+                                )
+                                break
+                            _t.sleep(1)
+                        else:
+                            log_progress("⚠ Service start pending timeout; launching debug mode snapshot")
+                            debug_cmd = [str(service_exe), "debug"]
+                            try:
+                                debug_result = subprocess.run(
+                                    debug_cmd,
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=30
+                                )
+                                log_progress("Debug Output (truncated):\n" + debug_result.stdout[:800])
+                                if debug_result.stderr:
+                                    log_progress("Debug Errors (truncated):\n" + debug_result.stderr[:800])
+                            except Exception as _de:
+                                log_progress(f"Debug run failed: {_de}")
+                            messagebox.showwarning(
+                                "Partial Success",
+                                "Service installed but did not reach RUNNING state in time."
+                            )
                 except Exception as e_install:
-                    log_progress(f"✗ Failed to create service: {e_install}")
+                    log_progress(f"✗ Exception during install/start: {e_install}")
                     messagebox.showerror(
                         "Installation Failed",
-                        f"Failed to create service via pywin32:\n\n{e_install}"
+                        f"Exception during service install/start:\n\n{e_install}"
                     )
                 
                 progress_window.destroy()
