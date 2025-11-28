@@ -488,12 +488,13 @@ class ConfigWindow:
                 # Create service with sc
                 # Ensure proper quoting for paths with spaces and convert Path to string
                 bin_path_arg = f"binPath= \"{str(service_exe)}\""
+                # Order and quoting matter for sc create; avoid trailing commas
                 create_cmd = [
                     "sc", "create", "NebulaAgent",
                     bin_path_arg,
-                    "start= auto",
                     "type= share",
-                    "DisplayName= Managed Nebula Agent",
+                    "start= auto",
+                    "DisplayName= \"Managed Nebula Agent\""
                 ]
                 log_progress(f"Running: {' '.join(create_cmd)}")
                 result = subprocess.run(
