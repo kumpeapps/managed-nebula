@@ -580,11 +580,30 @@ class ConfigWindow:
                     if install_result.returncode != 0:
                         log_progress("STDOUT:\n" + install_result.stdout)
                         log_progress("STDERR:\n" + install_result.stderr)
-                        log_progress("✗ Failed to install service via executable")
-                        messagebox.showerror(
-                            "Installation Failed",
-                            "Service executable install failed.\n\n" + (install_result.stderr or install_result.stdout)
-                        )
+                        
+                        # Check if this is the old broken executable (shows usage instead of installing)
+                        if "Usage: 'NebulaAgentService.exe [options]" in install_result.stdout:
+                            log_progress("✗ This is the OLD broken executable!")
+                            log_progress("")
+                            log_progress("The service executable needs to be rebuilt with the latest code.")
+                            log_progress("This was fixed in recent commits but the installed exe is outdated.")
+                            messagebox.showerror(
+                                "Outdated Service Executable",
+                                "The installed NebulaAgentService.exe is from an old build.\n\n"
+                                "To fix this:\n"
+                                "1. Download the latest installer from GitHub releases\n"
+                                "2. Or rebuild locally: windows_client\\rebuild-service.bat\n"
+                                "3. Then copy dist\\NebulaAgentService.exe to:\n"
+                                f"   {str(service_exe.parent)}\n\n"
+                                "The service executable was rebuilt on " + 
+                                str(service_exe.stat().st_mtime) if service_exe else "unknown"
+                            )
+                        else:
+                            log_progress("✗ Failed to install service via executable")
+                            messagebox.showerror(
+                                "Installation Failed",
+                                "Service executable install failed.\n\n" + (install_result.stderr or install_result.stdout)
+                            )
                         progress_window.destroy()
                         self._refresh_status()
                         return
