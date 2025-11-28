@@ -2,6 +2,7 @@
 dist/
 build/
 *.spec
+!service.spec
 
 # Python
 __pycache__/
