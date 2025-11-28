@@ -288,6 +288,24 @@ class ConfigWindow:
         status_color = "green" if nebula_running else "red"
         self.status_label.config(text=status_text, foreground=status_color)
     
+    def _refresh_status(self):
+        """Refresh status displays including service status"""
+        # Update Nebula status
+        self._update_status()
+        
+        # Update service status if label exists
+        if hasattr(self, 'service_label'):
+            service_status = get_service_status()
+            service_text = {
+                "running": "Service Running",
+                "stopped": "Service Stopped",
+                "installed": "Service Installed",
+                "not_installed": "Service Not Installed",
+                "unknown": "Unknown"
+            }.get(service_status, "Unknown")
+            service_color = "green" if service_status == "running" else "orange" if service_status in ["stopped", "installed"] else "red"
+            self.service_label.config(text=service_text, foreground=service_color)
+    
     def _install_service(self):
         """Install the Windows Service"""
         if not is_admin():
@@ -412,7 +430,9 @@ class ConfigWindow:
                     )
                 
                 progress_window.destroy()
-                self.show()  # Refresh window to update status
+                # Refresh status without recreating window
+                if self.window:
+                    self._refresh_status()
                 
             except Exception as e:
                 log_progress(f"\nERROR: {str(e)}")
@@ -443,7 +463,9 @@ class ConfigWindow:
             
             if result.returncode == 0:
                 messagebox.showinfo("Success", "Service started successfully!")
-                self.show()  # Refresh window
+                # Refresh status without recreating window
+                if self.window:
+                    self._refresh_status()
             else:
                 messagebox.showerror(
                     "Error",
