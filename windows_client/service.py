@@ -74,6 +74,12 @@ class NebulaAgentService(win32serviceutil.ServiceFramework):
         "and manages the local Nebula daemon"
     )
     
+    # CRITICAL: For PyInstaller frozen executables, explicitly tell pywin32
+    # where the service executable is located
+    # Without this, HandleCommandLine fails to register the service properly
+    _exe_name_ = sys.executable if getattr(sys, 'frozen', False) else None
+    _exe_args_ = None  # No additional arguments needed for the service executable
+    
     def __init__(self, args):
         win32serviceutil.ServiceFramework.__init__(self, args)
         
@@ -263,9 +269,13 @@ def get_service_status() -> str:
 
 
 if __name__ == "__main__":
-    # Debug: Log command line for troubleshooting
+    # Debug: Log command line for troubleshooting (filter it out before passing to pywin32)
+    debug_cli = False
     if "--debug-cli" in sys.argv:
-        print(f"DEBUG: sys.argv = {sys.argv}", file=sys.stderr)
+        debug_cli = True
+        print(f"DEBUG: sys.argv (original) = {sys.argv}", file=sys.stderr)
+        sys.argv = [arg for arg in sys.argv if arg != "--debug-cli"]
+        print(f"DEBUG: sys.argv (filtered) = {sys.argv}", file=sys.stderr)
         print(f"DEBUG: len(sys.argv) = {len(sys.argv)}", file=sys.stderr)
         print(f"DEBUG: frozen = {getattr(sys, 'frozen', False)}", file=sys.stderr)
     
@@ -325,10 +335,16 @@ if __name__ == "__main__":
                 print("ERROR: Service class metadata missing!", file=sys.stderr)
                 sys.exit(1)
             
+            if debug_cli:
+                print(f"DEBUG: Calling HandleCommandLine with class: {NebulaAgentService}", file=sys.stderr)
+                print(f"DEBUG: Service name: {NebulaAgentService._svc_name_}", file=sys.stderr)
+                print(f"DEBUG: Display name: {NebulaAgentService._svc_display_name_}", file=sys.stderr)
+            
             # Let pywin32 handle the command (install, start, stop, remove, etc)
+            # The _exe_name_ class attribute tells pywin32 where the service executable is
             win32serviceutil.HandleCommandLine(NebulaAgentService)
         except Exception as e:
-            print(f"Error handling command '{sys.argv[1]}': {e}", file=sys.stderr)
+            print(f"Error handling command '{sys.argv[1] if len(sys.argv) > 1 else 'none'}': {e}", file=sys.stderr)
             import traceback
             traceback.print_exc()
             sys.exit(1)
