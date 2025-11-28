@@ -425,6 +425,35 @@ class ConfigWindow:
                     return
                 
                 log_progress("")
+                log_progress("Checking for existing service...")
+                
+                # Check if service already exists
+                check_result = subprocess.run(
+                    ["sc", "query", "NebulaAgent"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                
+                if check_result.returncode == 0:
+                    log_progress("Service already exists, removing...")
+                    # Stop service if running
+                    subprocess.run(["sc", "stop", "NebulaAgent"], capture_output=True, timeout=5)
+                    # Wait a moment
+                    import time
+                    time.sleep(1)
+                    # Delete service
+                    delete_result = subprocess.run(
+                        ["sc", "delete", "NebulaAgent"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if delete_result.returncode == 0:
+                        log_progress("✓ Existing service removed")
+                    time.sleep(1)  # Wait for service deletion to complete
+                
+                log_progress("")
                 log_progress("Creating Windows Service...")
                 
                 # Create service with sc
@@ -438,7 +467,7 @@ class ConfigWindow:
                     ],
                     capture_output=True,
                     text=True,
-                    timeout=10
+                    timeout=30  # Increased timeout
                 )
                 
                 if result.returncode == 0:
@@ -485,10 +514,22 @@ class ConfigWindow:
                 if self.window:
                     self._refresh_status()
                 
+            except subprocess.TimeoutExpired:
+                log_progress(f"\nERROR: Command timed out")
+                messagebox.showerror("Error", "Service installation timed out.\n\nThe sc command is not responding.")
+                try:
+                    progress_window.destroy()
+                except:
+                    pass
             except Exception as e:
                 log_progress(f"\nERROR: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 messagebox.showerror("Error", f"Service installation failed:\n\n{str(e)}")
-                progress_window.destroy()
+                try:
+                    progress_window.destroy()
+                except:
+                    pass
         
         # Run installation in thread
         thread = threading.Thread(target=install_thread, daemon=True)
