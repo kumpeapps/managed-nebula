@@ -467,7 +467,8 @@ class ConfigWindow:
                     # Use Python to install service
                     log_progress("")
                     log_progress("Installing via Python (fallback method)...")
-                    install_cmd = [sys.executable, str(service_py), "install", "--startup", "auto"]
+                    # CRITICAL: win32serviceutil expects --option=value format (NOT --option value)
+                    install_cmd = [sys.executable, str(service_py), "install", "--startup=auto"]
                     log_progress("Running: " + " ".join(install_cmd))
                     
                     try:
@@ -609,8 +610,8 @@ class ConfigWindow:
                 log_progress("Creating Windows Service (exe self-install)...")
                 try:
                     # Use the service executable's own pywin32 command handling: NebulaAgentService.exe install
-                    # win32serviceutil expects space-separated option value (no '=')
-                    install_cmd = [str(service_exe), "install", "--startup", "auto"]
+                    # CRITICAL: win32serviceutil expects --option=value format (NOT --option value)
+                    install_cmd = [str(service_exe), "install", "--startup=auto"]
                     log_progress("Running: " + " ".join(install_cmd))
                     install_result = subprocess.run(
                         install_cmd,
