@@ -14,7 +14,7 @@ rebase_branches:
   
   # Example: When develop is updated, rebase feature branches
   # develop:
-  #   - feature/experimental
+  #   - feature/experimental 
   #   - staging
   
   # Example: Single target branch (string format also supported)
