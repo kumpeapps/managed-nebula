@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Validate branch, base, and title
+    name: Validate branch, base, and title.
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
