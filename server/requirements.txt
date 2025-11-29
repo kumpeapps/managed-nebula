@@ -12,7 +12,7 @@ certifi==2025.11.12
 cffi==2.0.0
 cfgv==3.4.0
 click==8.1.8
-cryptography==46.0.3
+cryptography==44.0.1
 distlib==0.4.0
 dnspython==2.7.0
 ecdsa==0.19.1
@@ -66,6 +66,6 @@ urllib3==2.5.0
 uvicorn==0.38.0
 uvicorn-worker==0.4.0
 uvloop==0.22.1
-virtualenv==20.35.4
+virtualenv==20.26.6
 watchfiles==1.1.1
 websockets==15.0.1

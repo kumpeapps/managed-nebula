@@ -13,7 +13,7 @@ cfgv==3.5.0
 charset-normalizer==3.1.0
 click==8.1.8
 commonmark==0.9.1
-cryptography==43.0.3
+cryptography==44.0.1
 distlib==0.4.0
 dnspython==2.8.0
 ecdsa==0.19.1
@@ -77,10 +77,10 @@ typing-inspect==0.9.0
 typing-inspection==0.4.2
 typing_extensions==4.12.2
 tzlocal==5.3.1
-urllib3==2.2.3
+urllib3==2.5.0
 uvicorn==0.38.0
 uvicorn-worker==0.4.0
 uvloop==0.22.1
-virtualenv==20.21.1
+virtualenv==20.26.6
 watchfiles==1.1.1
 websockets==15.0.1
