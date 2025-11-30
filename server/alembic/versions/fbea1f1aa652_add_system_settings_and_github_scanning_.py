@@ -1,4 +1,5 @@
-"""add_system_settings_and_github_scanning_tables
+"""
+add_system_settings_and_github_scanning_tables
 
 Revision ID: fbea1f1aa652
 Revises: a108a79483a9
