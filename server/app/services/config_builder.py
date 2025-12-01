@@ -136,6 +136,11 @@ def build_nebula_config(
         # Nebula/Wintun will create a Wintun adapter with this friendly name
         cfg["tun"]["dev"] = "Nebula"
 
+    # macOS-specific: use system route table for proper TUN interface operation
+    # Required for macOS 14+ (Sonoma, Sequoia, Tahoe) to properly create utun interfaces
+    if os_type == "darwin" or os_type == "macos":
+        cfg["tun"]["use_system_route_table"] = True
+
     # Optional punchy block - critical for NAT traversal
     try:
         if settings and getattr(settings, "punchy_enabled", False):
