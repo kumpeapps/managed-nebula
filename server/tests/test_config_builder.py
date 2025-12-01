@@ -299,3 +299,98 @@ def test_no_yaml_aliases_in_config():
     config = yaml.safe_load(config_yaml)
     assert config["lighthouse"]["hosts"] == ["10.100.0.1", "10.100.0.2"]
     assert config["relay"]["relays"] == ["10.100.0.1", "10.100.0.2"]
+
+
+def test_macos_uses_system_route_table():
+    """Test that macOS clients have use_system_route_table enabled for Tahoe compatibility."""
+    # Create mock client
+    client = Mock()
+    client.name = "macos-client"
+    client.is_lighthouse = False
+    client.is_blocked = False
+    client.firewall_rulesets = []
+    
+    # Create mock settings
+    settings = Mock()
+    settings.punchy_enabled = False
+    settings.lighthouse_port = 4242
+    settings.lighthouse_hosts = "[]"
+    
+    # Test with os_type="macos"
+    config_yaml = build_nebula_config(
+        client=client,
+        client_ip_cidr="10.100.0.2/16",
+        settings=settings,
+        static_host_map={},
+        lighthouse_host_ips=[],
+        os_type="macos"
+    )
+    
+    config = yaml.safe_load(config_yaml)
+    
+    # Verify tun settings include use_system_route_table for macOS
+    assert "tun" in config
+    assert config["tun"]["use_system_route_table"] is True
+
+
+def test_darwin_uses_system_route_table():
+    """Test that darwin clients (alternative name) also have use_system_route_table enabled."""
+    # Create mock client
+    client = Mock()
+    client.name = "darwin-client"
+    client.is_lighthouse = False
+    client.is_blocked = False
+    client.firewall_rulesets = []
+    
+    # Create mock settings
+    settings = Mock()
+    settings.punchy_enabled = False
+    settings.lighthouse_port = 4242
+    settings.lighthouse_hosts = "[]"
+    
+    # Test with os_type="darwin"
+    config_yaml = build_nebula_config(
+        client=client,
+        client_ip_cidr="10.100.0.2/16",
+        settings=settings,
+        static_host_map={},
+        lighthouse_host_ips=[],
+        os_type="darwin"
+    )
+    
+    config = yaml.safe_load(config_yaml)
+    
+    # Verify tun settings include use_system_route_table for darwin
+    assert "tun" in config
+    assert config["tun"]["use_system_route_table"] is True
+
+
+def test_non_macos_no_system_route_table():
+    """Test that non-macOS clients don't have use_system_route_table set."""
+    # Create mock client
+    client = Mock()
+    client.name = "docker-client"
+    client.is_lighthouse = False
+    client.is_blocked = False
+    client.firewall_rulesets = []
+    
+    # Create mock settings
+    settings = Mock()
+    settings.punchy_enabled = False
+    settings.lighthouse_port = 4242
+    settings.lighthouse_hosts = "[]"
+    
+    # Test with default os_type (docker)
+    config_yaml = build_nebula_config(
+        client=client,
+        client_ip_cidr="10.100.0.2/16",
+        settings=settings,
+        static_host_map={},
+        lighthouse_host_ips=[]
+    )
+    
+    config = yaml.safe_load(config_yaml)
+    
+    # Verify tun settings DON'T include use_system_route_table for docker
+    assert "tun" in config
+    assert "use_system_route_table" not in config["tun"]
