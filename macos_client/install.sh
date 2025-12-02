@@ -122,6 +122,12 @@ if [[ $REPLY =~ ^[Nn]$ ]]; then
     echo "Skipping installation. Binary is at: .build/release/ManagedNebula"
     echo "You can run it manually: ./.build/release/ManagedNebula"
 else
+    # Create system-level config directory
+    echo "Creating /Library/Application Support/Managed Nebula/ directory..."
+    sudo mkdir -p "/Library/Application Support/Managed Nebula"
+    sudo chmod 755 "/Library/Application Support/Managed Nebula"
+    echo "✓ Created config directory"
+    
     sudo cp .build/release/ManagedNebula "${INSTALL_DIR}/"
     sudo cp .build/release/VERSION "${INSTALL_DIR}/"
     sudo chmod +x "${INSTALL_DIR}/ManagedNebula"

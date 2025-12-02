@@ -307,6 +307,10 @@ chown root:wheel /Library/LaunchDaemons/com.managednebula.logrotate.plist
 mkdir -p /etc/nebula
 chmod 755 /etc/nebula
 
+# Create system-level ManagedNebula config directory
+mkdir -p "/Library/Application Support/Managed Nebula"
+chmod 755 "/Library/Application Support/Managed Nebula"
+
 # Create log directory
 mkdir -p /var/log
 touch /var/log/nebula-helper.log

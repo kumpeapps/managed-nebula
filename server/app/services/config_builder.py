@@ -6,6 +6,26 @@ from ..models import Client, GlobalSettings
 from ..models.client import FirewallRule
 
 
+# Define custom YAML string classes at module level
+class LiteralStr(str):
+    """String subclass for literal block scalar (|) style in YAML."""
+    pass
+
+class QuotedPath(str):
+    """String subclass that forces quoted output in YAML."""
+    pass
+
+# Register custom representers at module level
+def _repr_literal_str(dumper, data):
+    return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
+
+def _repr_quoted_path(dumper, data):
+    return dumper.represent_scalar('tag:yaml.org,2002:str', str(data), style='"')
+
+SafeDumper.add_representer(LiteralStr, _repr_literal_str)
+SafeDumper.add_representer(QuotedPath, _repr_quoted_path)
+
+
 def _build_firewall_rule_dict(rule: FirewallRule) -> dict:
     """Convert a structured FirewallRule model into a dict for Nebula YAML."""
     rule_dict = {
@@ -104,7 +124,9 @@ def build_nebula_config(
     def quote_path_if_needed(path: str) -> str | QuotedPath:
         """Return QuotedPath if path contains spaces, otherwise return as-is."""
         if isinstance(path, str) and ' ' in path:
-            return QuotedPath(path)
+            result = QuotedPath(path)
+            print(f"[DEBUG] QuotedPath created for: {path} -> {type(result)}")
+            return result
         return path
 
     cfg = {
@@ -205,4 +227,6 @@ def build_nebula_config(
         # keep defaults on any error
         pass
 
-    return yaml.dump(cfg, Dumper=SafeDumper, sort_keys=False, default_flow_style=False)
+    result_yaml = yaml.dump(cfg, Dumper=SafeDumper, sort_keys=False, default_flow_style=False)
+    print(f"[DEBUG] YAML output key line: {[line for line in result_yaml.split(chr(10)) if 'key:' in line]}")
+    return result_yaml

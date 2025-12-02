@@ -603,6 +603,7 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
         ca_path = "C:/ProgramData/Nebula/ca.crt"
         cert_path = "C:/ProgramData/Nebula/host.crt"
     elif os_type == "macos":
+        # macOS client stores files in system Library directory
         key_path = "/Library/Application Support/Managed Nebula/host.key"
         ca_path = "/Library/Application Support/Managed Nebula/ca.crt"
         cert_path = "/Library/Application Support/Managed Nebula/host.crt"

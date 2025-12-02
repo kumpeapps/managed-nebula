@@ -1,12 +1,12 @@
 import Foundation
 
 extension FileManager {
-    /// Application support directory for ManagedNebula
+    /// Application support directory for ManagedNebula (system-level)
     static var managedNebulaDirectory: URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let managedNebula = appSupport.appendingPathComponent("ManagedNebula")
+        // Use system-level directory so Nebula can access files
+        let managedNebula = URL(fileURLWithPath: "/Library/Application Support/Managed Nebula")
         
-        // Create directory if it doesn't exist
+        // Create directory if it doesn't exist (requires admin privileges)
         try? FileManager.default.createDirectory(at: managedNebula, withIntermediateDirectories: true)
         
         return managedNebula
