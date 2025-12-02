@@ -97,12 +97,8 @@ def build_nebula_config(
         """Force double-quoted style for paths with spaces."""
         return dumper.represent_scalar('tag:yaml.org,2002:str', str(data), style='"')
 
-    # Register representer for QuotedPath
-    try:
-        SafeDumper.add_representer(QuotedPath, _repr_quoted_path)
-    except Exception:
-        # Representer already registered
-        pass
+    # Register representer for QuotedPath - must be registered each time to ensure it's active
+    SafeDumper.add_representer(QuotedPath, _repr_quoted_path)
 
     # Helper to wrap paths with spaces
     def quote_path_if_needed(path: str) -> str | QuotedPath:
@@ -209,4 +205,4 @@ def build_nebula_config(
         # keep defaults on any error
         pass
 
-    return yaml.safe_dump(cfg, sort_keys=False)
+    return yaml.dump(cfg, Dumper=SafeDumper, sort_keys=False, default_flow_style=False)

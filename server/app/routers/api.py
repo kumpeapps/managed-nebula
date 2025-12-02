@@ -595,6 +595,7 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
     os_type = body.os_type or client.os_type or "docker"
     import logging
     logger = logging.getLogger(__name__)
+    print(f"[DEBUG] Client {client.name} requesting config - request.os_type: {body.os_type}, stored.os_type: {client.os_type}, final: {os_type}")
     logger.info(f"Client {client.name} requesting config with os_type: {os_type} (request: {body.os_type}, stored: {client.os_type})")
     
     if os_type == "windows":
@@ -610,6 +611,7 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
         ca_path = "/etc/nebula/ca.crt"
         cert_path = "/etc/nebula/host.crt"
     
+    print(f"[DEBUG] Generated paths for os_type={os_type}: key={key_path}")
     logger.info(f"Generated config paths for {os_type}: key={key_path}, ca={ca_path}, cert={cert_path}")
     
     # Build config YAML; embed CA bundle inline to support multiple CAs
