@@ -574,6 +574,11 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
         lh_hosts.append(lh_ip_row.ip_address)
         static_map[lh_ip_row.ip_address] = [
             f"{lh.public_ip}:{settings.lighthouse_port if settings else 4242}"]
+    
+    # If current client is a lighthouse, exclude itself from static_host_map
+    # Lighthouses should not have their own IP in the static map
+    if client.is_lighthouse and ip_assignment.ip_address in static_map:
+        del static_map[ip_assignment.ip_address]
 
     # Build inline CA bundle (concatenated PEMs)
     ca_bundle = "".join([(c.pem_cert.decode().rstrip() + "\n") for c in cas])
@@ -1564,6 +1569,7 @@ async def download_client_config(
             status_code=409, detail="No valid certificate found for client")
 
     # Build lighthouse maps: static_host_map {nebula_ip: ["public_ip:port"]} and hosts list of nebula IPs
+    # Only include lighthouses from the same IP pool as the client
     lighthouses = (
         await session.execute(select(Client).where(Client.is_lighthouse == True))
     ).scalars().all()
@@ -1575,9 +1581,19 @@ async def download_client_config(
             continue
         if not lh.public_ip:
             continue
+        
+        # Only include lighthouse if it's in the same pool as the client (or both have no pool)
+        if ip_row.pool_id != ip_assignment.pool_id:
+            continue
+        
         lh_hosts.append(ip_row.ip_address)
         static_map[ip_row.ip_address] = [
             f"{lh.public_ip}:{settings.lighthouse_port if settings else 4242}"]
+    
+    # If current client is a lighthouse, exclude itself from static_host_map
+    # Lighthouses should not have their own IP in the static map
+    if client.is_lighthouse and ip_assignment.ip_address in static_map:
+        del static_map[ip_assignment.ip_address]
 
     # Build inline CA bundle (concatenated PEMs)
     ca_bundle = "".join([(c.pem_cert.decode().rstrip() + "\n") for c in cas])
