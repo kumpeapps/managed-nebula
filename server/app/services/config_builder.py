@@ -88,12 +88,35 @@ def build_nebula_config(
     if inline_cert_pem:
         cert_value = LiteralStr(inline_cert_pem.strip() + "\n")
 
+    # Wrapper class for paths that need quoting (contain spaces)
+    class QuotedPath(str):
+        """String subclass that forces quoted output in YAML."""
+        pass
+
+    def _repr_quoted_path(dumper, data):
+        """Force double-quoted style for paths with spaces."""
+        return dumper.represent_scalar('tag:yaml.org,2002:str', str(data), style='"')
+
+    # Register representer for QuotedPath
+    try:
+        SafeDumper.add_representer(QuotedPath, _repr_quoted_path)
+    except Exception:
+        # Representer already registered
+        pass
+
+    # Helper to wrap paths with spaces
+    def quote_path_if_needed(path: str) -> str | QuotedPath:
+        """Return QuotedPath if path contains spaces, otherwise return as-is."""
+        if isinstance(path, str) and ' ' in path:
+            return QuotedPath(path)
+        return path
+
     cfg = {
         "pki": {
             # Nebula accepts file paths or inline PEMs. If inline provided, embed directly using literal block `|`.
-            "ca": ca_value if ca_value is not None else ca_path,
-            "cert": cert_value if cert_value is not None else cert_path,
-            "key": key_path,
+            "ca": ca_value if ca_value is not None else quote_path_if_needed(ca_path),
+            "cert": cert_value if cert_value is not None else quote_path_if_needed(cert_path),
+            "key": quote_path_if_needed(key_path),
             # Distribute revocation blocklist
             "blocklist": revoked_fingerprints or [],
             # Force disconnect if a cert becomes expired/invalid
