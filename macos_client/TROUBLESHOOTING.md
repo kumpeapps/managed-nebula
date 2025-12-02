@@ -247,7 +247,7 @@ sudo make install
 
 ### Problem: TUN interface not connecting on macOS Tahoe (macOS 26) or Sequoia
 
-**Symptoms**: Nebula starts but the TUN interface (utun) is not created or connecting
+**Symptoms**: Nebula starts but the TUN interface (utun) is neither created nor connected
 
 **Solution**:
 1. **Ensure you're using the latest macOS client version**: The server now includes `use_system_route_table: true` in the TUN configuration for macOS clients, which is required for macOS 14+ (Sonoma, Sequoia, Tahoe).
