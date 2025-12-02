@@ -43,6 +43,8 @@ class PollingService {
     
     /// Start polling for configuration updates
     func startPolling() {
+        // VERSION MARKER: If you see this, you're running the NEW Dec 1 19:58 build
+        print("🔴🔴🔴 BUILD MARKER: Dec 1 19:58 - HOME EXPANSION CODE PRESENT 🔴🔴🔴")
         // Perform initial check immediately
         Task {
             await checkForUpdates()
@@ -98,7 +100,11 @@ class PollingService {
             let response = try await apiClient.fetchConfig(token: token, publicKey: publicKey, clientVersion: clientVersion, nebulaVersion: nebulaVersion)
             
             // Write configuration and check if it changed
+            let pollingDebug = "[PollingService] About to call writeConfiguration at \(Date())\n"
+            try? pollingDebug.write(toFile: "/tmp/nebula-polling-debug.log", atomically: true, encoding: .utf8)
             let configChanged = try nebulaManager.writeConfiguration(response)
+            let pollingDebug2 = pollingDebug + "writeConfiguration returned: \(configChanged)\n"
+            try? pollingDebug2.write(toFile: "/tmp/nebula-polling-debug.log", atomically: true, encoding: .utf8)
 
             try handlePostFetch(configChanged: configChanged)
             print("[PollingService] Configuration check completed successfully")
