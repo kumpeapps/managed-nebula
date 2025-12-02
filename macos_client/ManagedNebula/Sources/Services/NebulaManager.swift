@@ -60,6 +60,10 @@ class NebulaManager {
     
     /// Write configuration files
     func writeConfiguration(_ response: ClientConfigResponse) throws -> Bool {
+        // Debug log
+        let debugEntry = "[writeConfiguration] Called at \(Date())\n"
+        try? debugEntry.write(toFile: "/tmp/nebula-flow-debug.log", atomically: true, encoding: .utf8)
+        
         // Calculate hash of new configuration
         let newHash = calculateConfigHash(
             config: response.config,
@@ -70,13 +74,21 @@ class NebulaManager {
         // Calculate hash of current configuration
         let currentHash = getCurrentConfigHash()
         
+        // Debug log
+        let hashDebug = debugEntry + "New hash: \(newHash)\nCurrent hash: \(currentHash ?? "nil")\n"
+        try? hashDebug.write(toFile: "/tmp/nebula-flow-debug.log", atomically: true, encoding: .utf8)
+        
         // Check if configuration has changed
         if newHash == currentHash {
+            let unchangedDebug = hashDebug + "Config unchanged, returning false\n"
+            try? unchangedDebug.write(toFile: "/tmp/nebula-flow-debug.log", atomically: true, encoding: .utf8)
             print("[NebulaManager] Configuration unchanged, no restart needed")
             return false
         }
         
         print("[NebulaManager] Configuration changed, writing new files")
+        let changedDebug = hashDebug + "Config changed, calling writeUserConfig\n"
+        try? changedDebug.write(toFile: "/tmp/nebula-flow-debug.log", atomically: true, encoding: .utf8)
         
         // 1) Write user-viewable config and local certs
         try writeUserConfig(response.config)
@@ -92,8 +104,26 @@ class NebulaManager {
     // MARK: - File writing helpers
 
     private func writeUserConfig(_ raw: String) throws {
+        // Expand $HOME in config paths since Nebula doesn't do environment variable expansion
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+        
+        // Write debug log to file we can check
+        let debugLog = """
+        [writeUserConfig] Called at \(Date())
+        Home directory: \(homeDir)
+        Raw config contains $HOME: \(raw.contains("$HOME"))
+        Raw config first 300 chars: \(String(raw.prefix(300)))
+        """
+        try? debugLog.write(toFile: "/tmp/nebula-debug.log", atomically: true, encoding: .utf8)
+        
+        // Simple string replacement
+        let expandedConfig = raw.replacingOccurrences(of: "$HOME", with: homeDir)
+        
+        let debugLog2 = debugLog + "\nExpanded contains $HOME: \(expandedConfig.contains("$HOME"))\nExpanded first 300 chars: \(String(expandedConfig.prefix(300)))"
+        try? debugLog2.write(toFile: "/tmp/nebula-debug.log", atomically: true, encoding: .utf8)
+        
         try fileManager.writeSecure(
-            raw,
+            expandedConfig,
             to: FileManager.NebulaFiles.configFile,
             permissions: 0o644
         )
