@@ -394,3 +394,153 @@ def test_non_macos_no_system_route_table():
     # Verify tun settings DON'T include use_system_route_table for docker
     assert "tun" in config
     assert "use_system_route_table" not in config["tun"]
+
+
+def test_static_host_map_with_multiple_lighthouses():
+    """Test that static_host_map correctly includes multiple lighthouse entries."""
+    # Create mock non-lighthouse client
+    client = Mock()
+    client.name = "test-client"
+    client.is_lighthouse = False
+    client.is_blocked = False
+    client.firewall_rulesets = []
+    
+    # Create mock settings
+    settings = Mock()
+    settings.punchy_enabled = False
+    settings.lighthouse_port = 4242
+    settings.lighthouse_hosts = "[]"
+    
+    # Static map with multiple lighthouses
+    static_map = {
+        "10.100.0.1": ["1.2.3.4:4242"],
+        "10.100.0.2": ["5.6.7.8:4242"],
+        "10.100.0.3": ["9.10.11.12:4242"]
+    }
+    
+    config_yaml = build_nebula_config(
+        client=client,
+        client_ip_cidr="10.100.0.10/16",
+        settings=settings,
+        static_host_map=static_map,
+        lighthouse_host_ips=["10.100.0.1", "10.100.0.2", "10.100.0.3"]
+    )
+    
+    config = yaml.safe_load(config_yaml)
+    
+    # Verify static_host_map contains all lighthouse entries
+    assert "static_host_map" in config
+    assert len(config["static_host_map"]) == 3
+    assert "10.100.0.1" in config["static_host_map"]
+    assert "10.100.0.2" in config["static_host_map"]
+    assert "10.100.0.3" in config["static_host_map"]
+
+
+def test_static_host_map_empty_for_lighthouse_self_only():
+    """Test that lighthouse with no other lighthouses gets empty static_host_map."""
+    # Create mock lighthouse client
+    client = Mock()
+    client.name = "lighthouse-1"
+    client.is_lighthouse = True
+    client.is_blocked = False
+    client.firewall_rulesets = []
+    
+    # Create mock settings
+    settings = Mock()
+    settings.punchy_enabled = False
+    settings.lighthouse_port = 4242
+    settings.lighthouse_hosts = "[]"
+    
+    # Empty static map (lighthouse excluded itself)
+    config_yaml = build_nebula_config(
+        client=client,
+        client_ip_cidr="10.100.0.1/16",
+        settings=settings,
+        static_host_map={},
+        lighthouse_host_ips=["10.100.0.1"]
+    )
+    
+    config = yaml.safe_load(config_yaml)
+    
+    # Verify static_host_map is present but empty
+    assert "static_host_map" in config
+    assert len(config["static_host_map"]) == 0
+
+
+def test_static_host_map_lighthouse_excludes_self():
+    """Test that lighthouse does not include its own IP in static_host_map."""
+    # Create mock lighthouse client
+    client = Mock()
+    client.name = "lighthouse-1"
+    client.is_lighthouse = True
+    client.is_blocked = False
+    client.firewall_rulesets = []
+    
+    # Create mock settings
+    settings = Mock()
+    settings.punchy_enabled = False
+    settings.lighthouse_port = 4242
+    settings.lighthouse_hosts = "[]"
+    
+    # Static map contains only other lighthouses (self already excluded by API)
+    static_map = {
+        "10.100.0.2": ["5.6.7.8:4242"],
+        "10.100.0.3": ["9.10.11.12:4242"]
+    }
+    
+    config_yaml = build_nebula_config(
+        client=client,
+        client_ip_cidr="10.100.0.1/16",
+        settings=settings,
+        static_host_map=static_map,
+        lighthouse_host_ips=["10.100.0.1", "10.100.0.2", "10.100.0.3"]
+    )
+    
+    config = yaml.safe_load(config_yaml)
+    
+    # Verify static_host_map does NOT contain lighthouse's own IP
+    assert "static_host_map" in config
+    assert len(config["static_host_map"]) == 2
+    assert "10.100.0.1" not in config["static_host_map"]
+    assert "10.100.0.2" in config["static_host_map"]
+    assert "10.100.0.3" in config["static_host_map"]
+
+
+def test_static_host_map_non_lighthouse_includes_all():
+    """Test that non-lighthouse client receives all lighthouse IPs in static_host_map."""
+    # Create mock non-lighthouse client
+    client = Mock()
+    client.name = "regular-client"
+    client.is_lighthouse = False
+    client.is_blocked = False
+    client.firewall_rulesets = []
+    
+    # Create mock settings
+    settings = Mock()
+    settings.punchy_enabled = False
+    settings.lighthouse_port = 4242
+    settings.lighthouse_hosts = "[]"
+    
+    # Static map contains all lighthouses
+    static_map = {
+        "10.100.0.1": ["1.2.3.4:4242"],
+        "10.100.0.2": ["5.6.7.8:4242"],
+        "10.100.0.3": ["9.10.11.12:4242"]
+    }
+    
+    config_yaml = build_nebula_config(
+        client=client,
+        client_ip_cidr="10.100.0.10/16",
+        settings=settings,
+        static_host_map=static_map,
+        lighthouse_host_ips=["10.100.0.1", "10.100.0.2", "10.100.0.3"]
+    )
+    
+    config = yaml.safe_load(config_yaml)
+    
+    # Verify static_host_map contains all lighthouse entries
+    assert "static_host_map" in config
+    assert len(config["static_host_map"]) == 3
+    assert "10.100.0.1" in config["static_host_map"]
+    assert "10.100.0.2" in config["static_host_map"]
+    assert "10.100.0.3" in config["static_host_map"]
