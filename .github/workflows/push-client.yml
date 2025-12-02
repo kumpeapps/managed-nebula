@@ -107,9 +107,25 @@ jobs:
             --provenance=false \
             --platform linux/amd64,linux/arm64 ./client
 
-      - name: Build and Push Image (tag)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Build and Push Image (tag - pre-release, version only)
+        if: startsWith(github.ref, 'refs/tags/') && github.event_name == 'release' && github.event.release.prerelease == true
         run: |
+          echo "::notice::Pre-release detected - skipping :latest tag"
+          echo "Building and pushing version tag only: ${GITHUB_REF#refs/tags/}"
+          docker buildx build --push \
+            --build-arg VERSION=${GITHUB_REF#refs/tags/} \
+            --tag harbor.vm.kumpeapps.com/managed-nebula/client:${GITHUB_REF#refs/tags/} \
+            --cache-from type=gha,scope=client-main \
+            --cache-to type=gha,mode=max,scope=client-tag \
+            --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/client:latest \
+            --provenance=false \
+            --platform linux/amd64,linux/arm64 ./client
+
+      - name: Build and Push Image (tag - stable release or manual tag)
+        if: startsWith(github.ref, 'refs/tags/') && (github.event_name != 'release' || github.event.release.prerelease != true)
+        run: |
+          echo "::notice::Stable release or manual tag push - applying both version and :latest tags"
+          echo "Building and pushing tags: ${GITHUB_REF#refs/tags/} and latest"
           docker buildx build --push \
             --build-arg VERSION=${GITHUB_REF#refs/tags/} \
             --tag harbor.vm.kumpeapps.com/managed-nebula/client:${GITHUB_REF#refs/tags/} \
