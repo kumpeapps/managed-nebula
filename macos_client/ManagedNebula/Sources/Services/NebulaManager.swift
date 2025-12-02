@@ -93,7 +93,7 @@ class NebulaManager {
 
     private func writeUserConfig(_ raw: String) throws {
         try fileManager.writeSecure(
-            makeUserReadableConfig(from: raw),
+            raw,
             to: FileManager.NebulaFiles.configFile,
             permissions: 0o644
         )
@@ -129,23 +129,6 @@ class NebulaManager {
             let keyData = try Data(contentsOf: FileManager.NebulaFiles.privateKey)
             try keyData.write(to: stagedKey)
         }
-    }
-
-    private func makeUserReadableConfig(from raw: String) -> String {
-        var config = raw
-        config = config.replacingOccurrences(
-            of: "/var/lib/nebula/host.key",
-            with: FileManager.NebulaFiles.privateKey.path
-        )
-        config = config.replacingOccurrences(
-            of: "/etc/nebula/ca.crt",
-            with: FileManager.NebulaFiles.caCertificate.path
-        )
-        config = config.replacingOccurrences(
-            of: "/etc/nebula/host.crt",
-            with: FileManager.NebulaFiles.certificate.path
-        )
-        return config
     }
 
     private func stripTunDev(from raw: String) -> String {
