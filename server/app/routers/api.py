@@ -603,10 +603,11 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
         ca_path = "C:/ProgramData/Nebula/ca.crt"
         cert_path = "C:/ProgramData/Nebula/host.crt"
     elif os_type == "macos":
-        # macOS client stores files in system Library directory
-        key_path = "/Library/Application Support/Managed Nebula/host.key"
-        ca_path = "/Library/Application Support/Managed Nebula/ca.crt"
-        cert_path = "/Library/Application Support/Managed Nebula/host.crt"
+        # macOS: Paths match where nebula-helper.sh installs files
+        # Helper script copies keys to /var/lib/nebula/ and certs to /etc/nebula/
+        key_path = "/var/lib/nebula/host.key"
+        ca_path = "/etc/nebula/ca.crt"
+        cert_path = "/etc/nebula/host.crt"
     else:  # docker or any other
         key_path = "/var/lib/nebula/host.key"
         ca_path = "/etc/nebula/ca.crt"
