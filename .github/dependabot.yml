@@ -9,7 +9,18 @@ updates:
     directory: "/server" # Location of package manifests
     schedule:
       interval: "weekly"
+    target-branch: "dev"
   - package-ecosystem: "docker" # See documentation for possible values
     directory: "/client" # Location of package manifests
     schedule:
       interval: "weekly"
+    target-branch: "dev"
+  - package-ecosystem: "npm" # See documentation for possible values
+    directory: "/frontend" # Location of package manifests
+    schedule:
+      interval: "weekly"
+    target-branch: "dev"
+    groups:
+      npm_and_yarn:
+        patterns:
+          - "*"
