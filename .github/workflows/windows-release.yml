@@ -240,7 +240,7 @@ jobs:
         Get-Item "..\dist\ManagedNebula-$version-Setup.exe" | Format-List Name, Length
     
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: NebulaAgent-windows-${{ steps.get_version.outputs.VERSION }}
         path: |
