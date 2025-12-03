@@ -44,6 +44,13 @@ jobs:
             exit 0
           fi
 
+          # Special case: allow Dependabot PRs to target dev without title requirements
+          if [[ "$HEAD_REF" =~ ^dependabot/ && "$BASE_REF" == "dev" ]]; then
+            echo "✅ Dependabot PR: $HEAD_REF -> dev allowed"
+            echo "PR checks passed."
+            exit 0
+          fi
+
           # Allow both manual branches and Copilot-generated branches
           branch_regex='^((feature|bugfix|hotfix|docs|refactor|release)/(server|frontend|client|macos|windows|ios|android|all)-[0-9]+|copilot/.*)$'
 
