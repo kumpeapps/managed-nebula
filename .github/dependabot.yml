@@ -5,18 +5,48 @@
 
 version: 2
 updates:
-  - package-ecosystem: "docker" # See documentation for possible values
-    directory: "/server" # Location of package manifests
+  # Docker dependencies
+  - package-ecosystem: "docker"
+    directory: "/server"
     schedule:
       interval: "weekly"
     target-branch: "dev"
-  - package-ecosystem: "docker" # See documentation for possible values
-    directory: "/client" # Location of package manifests
+  - package-ecosystem: "docker"
+    directory: "/client"
     schedule:
       interval: "weekly"
     target-branch: "dev"
-  - package-ecosystem: "npm" # See documentation for possible values
-    directory: "/frontend" # Location of package manifests
+  - package-ecosystem: "docker"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    target-branch: "dev"
+
+  # Python dependencies
+  - package-ecosystem: "pip"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+    target-branch: "dev"
+  - package-ecosystem: "pip"
+    directory: "/client"
+    schedule:
+      interval: "weekly"
+    target-branch: "dev"
+  - package-ecosystem: "pip"
+    directory: "/windows_client"
+    schedule:
+      interval: "weekly"
+    target-branch: "dev"
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    target-branch: "dev"
+
+  # Node.js dependencies
+  - package-ecosystem: "npm"
+    directory: "/frontend"
     schedule:
       interval: "weekly"
     target-branch: "dev"
@@ -24,3 +54,24 @@ updates:
       npm_and_yarn:
         patterns:
           - "*"
+
+  # Swift dependencies (macOS client)
+  - package-ecosystem: "swift"
+    directory: "/macos_client"
+    schedule:
+      interval: "weekly"
+    target-branch: "dev"
+
+  # Ruby dependencies (macOS client - Fastlane)
+  - package-ecosystem: "bundler"
+    directory: "/macos_client"
+    schedule:
+      interval: "weekly"
+    target-branch: "dev"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    target-branch: "dev"
