@@ -1,5 +1,5 @@
 # Multi-stage build: Node build + Nginx serve
-FROM node:20-alpine AS build
+FROM node:25-alpine AS build
 
 ARG VERSION=dev-latest
 
