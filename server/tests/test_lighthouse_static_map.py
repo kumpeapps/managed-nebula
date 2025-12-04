@@ -90,6 +90,117 @@ def login_as_admin(client):
 
 
 @pytest.mark.skipif(shutil.which("nebula-cert") is None, reason="nebula-cert not installed")
+def test_invalid_public_key_malformed(client):
+    """Test that malformed (non-PEM) public key is rejected."""
+    admin_token = login_as_admin(client)
+    
+    # Setup: Create CA, pool, client
+    client.post(
+        "/api/v1/ca/create",
+        json={"name": "test-ca", "duration_days": 540},
+        cookies={"session": admin_token}
+    )
+    client.post(
+        "/api/v1/ip-pools",
+        json={"name": "main-pool", "cidr": "10.100.0.0/16"},
+        cookies={"session": admin_token}
+    )
+    
+    client_response = client.post(
+        "/api/v1/clients",
+        json={"name": "test-client", "is_lighthouse": False},
+        cookies={"session": admin_token}
+    )
+    assert client_response.status_code == 200
+    token = client_response.json()["token"]
+    
+    # Try to fetch config with malformed key (not PEM format)
+    config_response = client.post(
+        "/api/v1/client/config",
+        json={"token": token, "public_key": "this-is-not-a-valid-pem-key"}
+    )
+    
+    # Should return 400 Bad Request for invalid key format
+    assert config_response.status_code == 400
+    assert "public_key" in config_response.json()["detail"].lower() or "invalid" in config_response.json()["detail"].lower()
+
+
+@pytest.mark.skipif(shutil.which("nebula-cert") is None, reason="nebula-cert not installed")
+def test_invalid_public_key_wrong_type(client):
+    """Test that valid PEM but wrong key type is rejected."""
+    admin_token = login_as_admin(client)
+    
+    # Setup: Create CA, pool, client
+    client.post(
+        "/api/v1/ca/create",
+        json={"name": "test-ca", "duration_days": 540},
+        cookies={"session": admin_token}
+    )
+    client.post(
+        "/api/v1/ip-pools",
+        json={"name": "main-pool", "cidr": "10.100.0.0/16"},
+        cookies={"session": admin_token}
+    )
+    
+    client_response = client.post(
+        "/api/v1/clients",
+        json={"name": "test-client", "is_lighthouse": False},
+        cookies={"session": admin_token}
+    )
+    assert client_response.status_code == 200
+    token = client_response.json()["token"]
+    
+    # Try to fetch config with valid PEM but wrong type (RSA instead of X25519)
+    invalid_rsa_key = """-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Z3VS5JJcds3xfn/ygWR
+kaWuOjJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+-----END PUBLIC KEY-----"""
+    
+    config_response = client.post(
+        "/api/v1/client/config",
+        json={"token": token, "public_key": invalid_rsa_key}
+    )
+    
+    # Should return 400 Bad Request for unsupported key type
+    assert config_response.status_code == 400
+
+
+@pytest.mark.skipif(shutil.which("nebula-cert") is None, reason="nebula-cert not installed")
+def test_invalid_public_key_empty(client):
+    """Test that empty public key is rejected."""
+    admin_token = login_as_admin(client)
+    
+    # Setup: Create CA, pool, client
+    client.post(
+        "/api/v1/ca/create",
+        json={"name": "test-ca", "duration_days": 540},
+        cookies={"session": admin_token}
+    )
+    client.post(
+        "/api/v1/ip-pools",
+        json={"name": "main-pool", "cidr": "10.100.0.0/16"},
+        cookies={"session": admin_token}
+    )
+    
+    client_response = client.post(
+        "/api/v1/clients",
+        json={"name": "test-client", "is_lighthouse": False},
+        cookies={"session": admin_token}
+    )
+    assert client_response.status_code == 200
+    token = client_response.json()["token"]
+    
+    # Try to fetch config with empty key
+    config_response = client.post(
+        "/api/v1/client/config",
+        json={"token": token, "public_key": ""}
+    )
+    
+    # Should return 400 Bad Request for empty key
+    assert config_response.status_code == 400
+
+
+@pytest.mark.skipif(shutil.which("nebula-cert") is None, reason="nebula-cert not installed")
 def test_single_lighthouse_empty_static_map(client):
     """Test that a single lighthouse gets empty static_host_map."""
     # Setup: Create admin, CA, pool
@@ -140,6 +251,62 @@ def test_single_lighthouse_empty_static_map(client):
     assert len(config["static_host_map"]) == 0
 
 
+def _create_lighthouse(client, admin_token, name, public_ip, pool_id=None):
+    """Helper to create a lighthouse and return its data."""
+    json_data = {
+        "name": name,
+        "is_lighthouse": True,
+        "public_ip": public_ip
+    }
+    if pool_id:
+        json_data["pool_id"] = pool_id
+    
+    lh_response = client.post(
+        "/api/v1/clients",
+        json=json_data,
+        cookies={"session": admin_token}
+    )
+    assert lh_response.status_code == 200
+    lh_data = lh_response.json()
+    
+    return {
+        "id": lh_data["id"],
+        "name": lh_data["name"],
+        "token": lh_data["token"],
+        "ip": lh_data["ip_address"]
+    }
+
+
+def _verify_lighthouse_excludes_self(client, lighthouse_data, all_lighthouses):
+    """Helper to verify a lighthouse excludes itself from static_host_map."""
+    config_response = client.post(
+        "/api/v1/client/config",
+        json={"token": lighthouse_data["token"], "public_key": VALID_NEBULA_PUBLIC_KEY}
+    )
+    assert config_response.status_code == 200
+    config_data = config_response.json()
+    
+    # Parse YAML config
+    config = yaml.safe_load(config_data["config"])
+    
+    # Calculate expected other IPs (excluding self)
+    other_ips = {lh["ip"] for lh in all_lighthouses if lh["id"] != lighthouse_data["id"]}
+    
+    # Verify static_host_map exists and has correct count
+    assert "static_host_map" in config
+    assert len(config["static_host_map"]) == len(other_ips), \
+        f"Lighthouse {lighthouse_data['name']} should have {len(other_ips)} entries in static_host_map"
+    
+    # Verify self IP is NOT in the map
+    assert lighthouse_data["ip"] not in config["static_host_map"], \
+        f"Lighthouse {lighthouse_data['name']} should not have its own IP in static_host_map"
+    
+    # Verify all other lighthouse IPs ARE in the map
+    for other_ip in other_ips:
+        assert other_ip in config["static_host_map"], \
+            f"Lighthouse {lighthouse_data['name']} should have {other_ip} in static_host_map"
+
+
 @pytest.mark.skipif(shutil.which("nebula-cert") is None, reason="nebula-cert not installed")
 def test_multiple_lighthouses_self_exclusion(client):
     """Test that each lighthouse excludes itself from static_host_map."""
@@ -161,50 +328,16 @@ def test_multiple_lighthouses_self_exclusion(client):
     assert pool_response.status_code == 200
     
     # Create three lighthouses
-    lighthouses = []
-    for i in range(1, 4):
-        lh_response = client.post(
-            "/api/v1/clients",
-            json={
-                "name": f"lighthouse-{i}",
-                "is_lighthouse": True,
-                "public_ip": f"1.2.3.{i}"
-            },
-            cookies={"session": admin_token}
-        )
-        assert lh_response.status_code == 200
-        lh_data = lh_response.json()
-        
-        lighthouses.append({
-            "id": lh_data["id"],
-            "name": lh_data["name"],
-            "token": lh_data["token"],  # Token is returned in client creation response
-            "ip": lh_data["ip_address"]  # Fixed: use ip_address not ip_assignments
-        })
+    lh1 = _create_lighthouse(client, admin_token, "lighthouse-1", "1.2.3.1")
+    lh2 = _create_lighthouse(client, admin_token, "lighthouse-2", "1.2.3.2")
+    lh3 = _create_lighthouse(client, admin_token, "lighthouse-3", "1.2.3.3")
     
-    # Fetch config for each lighthouse and verify self-exclusion
-    for idx, lh in enumerate(lighthouses):
-        config_response = client.post(
-            "/api/v1/client/config",
-            json={"token": lh["token"], "public_key": VALID_NEBULA_PUBLIC_KEY}
-        )
-        assert config_response.status_code == 200
-        config_data = config_response.json()
-        
-        # Parse YAML config
-        config = yaml.safe_load(config_data["config"])
-        
-        # Verify static_host_map exists and has 2 entries (excluding self)
-        assert "static_host_map" in config
-        assert len(config["static_host_map"]) == 2, f"Lighthouse {lh['name']} should have 2 entries in static_host_map"
-        
-        # Verify self IP is NOT in the map
-        assert lh["ip"] not in config["static_host_map"], f"Lighthouse {lh['name']} should not have its own IP in static_host_map"
-        
-        # Verify other lighthouse IPs ARE in the map
-        other_ips = [other["ip"] for other in lighthouses if other["id"] != lh["id"]]
-        for other_ip in other_ips:
-            assert other_ip in config["static_host_map"], f"Lighthouse {lh['name']} should have {other_ip} in static_host_map"
+    all_lighthouses = [lh1, lh2, lh3]
+    
+    # Verify each lighthouse excludes itself from static_host_map
+    _verify_lighthouse_excludes_self(client, lh1, all_lighthouses)
+    _verify_lighthouse_excludes_self(client, lh2, all_lighthouses)
+    _verify_lighthouse_excludes_self(client, lh3, all_lighthouses)
 
 
 @pytest.mark.skipif(shutil.which("nebula-cert") is None, reason="nebula-cert not installed")
@@ -228,19 +361,11 @@ def test_non_lighthouse_includes_all_lighthouses(client):
     assert pool_response.status_code == 200
     
     # Create three lighthouses
-    lighthouse_ips = []
-    for i in range(1, 4):
-        lh_response = client.post(
-            "/api/v1/clients",
-            json={
-                "name": f"lighthouse-{i}",
-                "is_lighthouse": True,
-                "public_ip": f"1.2.3.{i}"
-            },
-            cookies={"session": admin_token}
-        )
-        assert lh_response.status_code == 200
-        lighthouse_ips.append(lh_response.json()["ip_address"])  # Fixed: use ip_address not ip_assignments
+    lh1 = _create_lighthouse(client, admin_token, "lighthouse-1", "1.2.3.1")
+    lh2 = _create_lighthouse(client, admin_token, "lighthouse-2", "1.2.3.2")
+    lh3 = _create_lighthouse(client, admin_token, "lighthouse-3", "1.2.3.3")
+    
+    expected_ips = {lh1["ip"], lh2["ip"], lh3["ip"]}
     
     # Create regular client
     regular_response = client.post(
@@ -253,7 +378,7 @@ def test_non_lighthouse_includes_all_lighthouses(client):
     )
     assert regular_response.status_code == 200
     regular_data = regular_response.json()
-    token = regular_data["token"]  # Token is returned in client creation response
+    token = regular_data["token"]
     
     # Fetch config as regular client
     config_response = client.post(
@@ -269,8 +394,7 @@ def test_non_lighthouse_includes_all_lighthouses(client):
     # Verify static_host_map contains ALL lighthouse IPs
     assert "static_host_map" in config
     assert len(config["static_host_map"]) == 3
-    for lh_ip in lighthouse_ips:
-        assert lh_ip in config["static_host_map"]
+    assert expected_ips == set(config["static_host_map"].keys())
 
 
 @pytest.mark.skipif(shutil.which("nebula-cert") is None, reason="nebula-cert not installed")

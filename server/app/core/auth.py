@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from ..db import get_session
 from ..models.user import User
+import logging
 
 """Authentication helpers and password hashing/verification.
 
@@ -12,9 +13,19 @@ We continue to hash new/updated passwords with bcrypt_sha256 to avoid bcrypt's
 allow verification against multiple common schemes supported by passlib.
 """
 
+logger = logging.getLogger(__name__)
+
 # Workaround for passlib 1.7.4 + bcrypt 5.x compatibility
 # See: https://github.com/pyca/bcrypt/issues/684
 # bcrypt 5.0 enforces 72-byte limit and removed __about__
+#
+# WARNING: This monkeypatch globally modifies bcrypt.hashpw behavior for the entire process.
+# Passwords >72 bytes will be silently truncated before hashing, which is required for
+# passlib's bcrypt_sha256 wrapper to work correctly with bcrypt 5.x.
+#
+# Our application always uses bcrypt_sha256 via passlib (not direct bcrypt), which
+# pre-hashes passwords with SHA256, so passwords should never exceed 72 bytes in practice.
+# This wrapper ensures compatibility if passlib or dependencies call bcrypt directly.
 try:
     import bcrypt as _bcrypt_module
     # Check if bcrypt 5.x (missing __about__)
@@ -28,8 +39,18 @@ try:
         _original_hashpw = _bcrypt_module.hashpw
         
         def _wrapped_hashpw(password, salt):
-            """Wrap hashpw to truncate passwords >72 bytes for passlib's wrap-bug detection."""
+            """Wrap hashpw to truncate passwords >72 bytes for passlib's wrap-bug detection.
+            
+            This is a compatibility shim for passlib 1.7.4 + bcrypt 5.x.
+            Logs a warning if truncation occurs, since this changes bcrypt's default behavior.
+            """
             if isinstance(password, bytes) and len(password) > 72:
+                logger.warning(
+                    "bcrypt password truncated from %d to 72 bytes. "
+                    "This is expected for passlib bcrypt_sha256 compatibility with bcrypt 5.x, "
+                    "but may indicate unexpected direct bcrypt usage elsewhere.",
+                    len(password)
+                )
                 password = password[:72]
             return _original_hashpw(password, salt)
         
