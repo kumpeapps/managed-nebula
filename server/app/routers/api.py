@@ -546,12 +546,20 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
 
     # Generate or rotate client certificate using provided public key
     cert_mgr = CertManager(session)
-    client_cert_pem, not_before, not_after = await cert_mgr.issue_or_rotate_client_cert(
-        client=client,
-        public_key_str=body.public_key,
-        client_ip=ip_assignment.ip_address,
-        cidr_prefix=prefix,
-    )
+    try:
+        client_cert_pem, not_before, not_after = await cert_mgr.issue_or_rotate_client_cert(
+            client=client,
+            public_key_str=body.public_key,
+            client_ip=ip_assignment.ip_address,
+            cidr_prefix=prefix,
+        )
+    except RuntimeError as e:
+        # Convert cert generation errors (e.g., invalid public key) to 400 Bad Request
+        error_msg = str(e)
+        if "parsing in-pub" in error_msg or "did not contain a valid PEM" in error_msg:
+            raise HTTPException(status_code=400, detail="Invalid public_key: must be a valid PEM-encoded Nebula X25519 public key")
+        # Re-raise other RuntimeErrors as-is
+        raise
 
     # Build lighthouse maps: static_host_map {nebula_ip: ["public_ip:port"]} and hosts list of nebula IPs
     # Only include lighthouses from the same IP pool as the client
