@@ -12,6 +12,31 @@ We continue to hash new/updated passwords with bcrypt_sha256 to avoid bcrypt's
 allow verification against multiple common schemes supported by passlib.
 """
 
+# Workaround for passlib 1.7.4 + bcrypt 5.x compatibility
+# See: https://github.com/pyca/bcrypt/issues/684
+# bcrypt 5.0 enforces 72-byte limit and removed __about__
+try:
+    import bcrypt as _bcrypt_module
+    # Check if bcrypt 5.x (missing __about__)
+    if not hasattr(_bcrypt_module, '__about__'):
+        # Monkeypatch to provide the expected __about__ attribute
+        class _About:
+            __version__ = _bcrypt_module.__version__
+        _bcrypt_module.__about__ = _About()
+        
+        # Wrap bcrypt.hashpw to auto-truncate passwords >72 bytes for passlib compatibility
+        _original_hashpw = _bcrypt_module.hashpw
+        
+        def _wrapped_hashpw(password, salt):
+            """Wrap hashpw to truncate passwords >72 bytes for passlib's wrap-bug detection."""
+            if isinstance(password, bytes) and len(password) > 72:
+                password = password[:72]
+            return _original_hashpw(password, salt)
+        
+        _bcrypt_module.hashpw = _wrapped_hashpw
+except ImportError:
+    pass
+
 # Preferred scheme remains bcrypt_sha256. Enable several legacy schemes for verification only.
 # Passlib auto-detects the right hasher based on the stored hash format.
 pwd_context = CryptContext(

@@ -57,9 +57,11 @@ async def _ensure_models():
         # Ensure SQLite enforces foreign key constraints (only for SQLite)
         if engine.dialect.name == 'sqlite':
             await conn.run_sync(lambda connection: connection.execute(text("PRAGMA foreign_keys=ON")))
-        if "PYTEST_CURRENT_TEST" in os.environ:
-            # In test context, reset schema each session to ensure isolation
-            await conn.run_sync(Base.metadata.drop_all)
+        # NOTE: Dropping tables on every session breaks test fixtures that need persistent test data
+        # Disabled for now - tests should handle their own cleanup if needed
+        # if "PYTEST_CURRENT_TEST" in os.environ:
+        #     # In test context, reset schema each session to ensure isolation
+        #     await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
 
