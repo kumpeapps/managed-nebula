@@ -1,39 +1,82 @@
 """Integration tests for lighthouse static_host_map generation."""
 import pytest
 import shutil
-import subprocess
-import os
+import asyncio
 from fastapi.testclient import TestClient
 from app.main import app
 import yaml
+# Import the bootstrap function directly from manage.py
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from manage import bootstrap_permissions
+from app.db import AsyncSessionLocal
+from app.models.user import User
+from app.models.permissions import UserGroup, UserGroupMembership
+from app.core.auth import hash_password
+from sqlalchemy import select
 
 
-@pytest.fixture(scope="module", autouse=True)
-def setup_admin_user():
-    """Create admin user before running tests using manage.py."""
-    server_dir = os.path.join(os.path.dirname(__file__), "..")
-    manage_py = os.path.join(server_dir, "manage.py")
-    
-    # Create admin user using manage.py
-    result = subprocess.run(
-        [
-            "python3", manage_py, "create-admin",
-            "admin@test.com", "testpass123"
-        ],
-        cwd=server_dir,
-        capture_output=True,
-        text=True
-    )
-    
-    # It's OK if the user already exists
-    if result.returncode != 0 and "already exists" not in result.stdout.lower() and "already exists" not in result.stderr.lower():
-        print(f"Failed to create admin: stdout={result.stdout}, stderr={result.stderr}")
+# Valid Nebula public key for testing (generated with nebula-cert keygen)
+VALID_NEBULA_PUBLIC_KEY = """-----BEGIN NEBULA X25519 PUBLIC KEY-----
+TPwacPvxYLFZnfM8QdU1XJ93RY0NiB0apbwkBMvGSBY=
+-----END NEBULA X25519 PUBLIC KEY-----"""
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def client():
-    """Create test client."""
-    return TestClient(app)
+    """Create test client for each test function."""
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture(autouse=True)
+def setup_admin_for_test():
+    """Create admin user before each test."""
+    async def create_admin():
+        async with AsyncSessionLocal() as session:
+            # Bootstrap permissions
+            await bootstrap_permissions(session)
+            
+            # Ensure Administrators group exists
+            result = await session.execute(
+                select(UserGroup).where(UserGroup.name == "Administrators")
+            )
+            admins = result.scalar_one_or_none()
+            if not admins:
+                admins = UserGroup(
+                    name="Administrators",
+                    description="Administrators with full access",
+                    is_admin=True
+                )
+                session.add(admins)
+                await session.flush()
+            
+            # Create admin user
+            result = await session.execute(
+                select(User).where(User.email == "admin@test.com")
+            )
+            admin_user = result.scalar_one_or_none()
+            
+            if not admin_user:
+                admin_user = User(
+                    email="admin@test.com",
+                    hashed_password=hash_password("testpass123"),
+                    is_active=True
+                )
+                session.add(admin_user)
+                await session.flush()
+                
+                # Add to admin group
+                membership = UserGroupMembership(
+                    user_id=admin_user.id,
+                    user_group_id=admins.id
+                )
+                session.add(membership)
+            
+            await session.commit()
+    
+    asyncio.run(create_admin())
 
 
 def login_as_admin(client):
@@ -53,7 +96,7 @@ def test_single_lighthouse_empty_static_map(client):
     admin_token = login_as_admin(client)
     
     ca_response = client.post(
-        "/api/v1/ca",
+        "/api/v1/ca/create",
         json={"name": "test-ca", "duration_days": 540},
         cookies={"session": admin_token}
     )
@@ -77,20 +120,14 @@ def test_single_lighthouse_empty_static_map(client):
         cookies={"session": admin_token}
     )
     assert lh_response.status_code == 200
-    lh_id = lh_response.json()["id"]
+    lh_data = lh_response.json()
+    lh_id = lh_data["id"]
+    token = lh_data["token"]  # Token is returned in client creation response
     
-    # Generate token
-    token_response = client.post(
-        f"/api/v1/clients/{lh_id}/tokens",
-        cookies={"session": admin_token}
-    )
-    assert token_response.status_code == 200
-    token = token_response.json()["token"]
-    
-    # Fetch config as lighthouse
+    # Fetch config as lighthouse (need valid PEM-formatted public key)
     config_response = client.post(
         "/api/v1/client/config",
-        json={"token": token, "public_key": "test-public-key-lh1"}
+        json={"token": token, "public_key": VALID_NEBULA_PUBLIC_KEY}
     )
     assert config_response.status_code == 200
     config_data = config_response.json()
@@ -110,7 +147,7 @@ def test_multiple_lighthouses_self_exclusion(client):
     admin_token = login_as_admin(client)
     
     ca_response = client.post(
-        "/api/v1/ca",
+        "/api/v1/ca/create",
         json={"name": "test-ca", "duration_days": 540},
         cookies={"session": admin_token}
     )
@@ -138,25 +175,18 @@ def test_multiple_lighthouses_self_exclusion(client):
         assert lh_response.status_code == 200
         lh_data = lh_response.json()
         
-        # Generate token
-        token_response = client.post(
-            f"/api/v1/clients/{lh_data['id']}/tokens",
-            cookies={"session": admin_token}
-        )
-        assert token_response.status_code == 200
-        
         lighthouses.append({
             "id": lh_data["id"],
             "name": lh_data["name"],
-            "token": token_response.json()["token"],
-            "ip": lh_data["ip_assignments"][0]["ip_address"]
+            "token": lh_data["token"],  # Token is returned in client creation response
+            "ip": lh_data["ip_address"]  # Fixed: use ip_address not ip_assignments
         })
     
     # Fetch config for each lighthouse and verify self-exclusion
     for idx, lh in enumerate(lighthouses):
         config_response = client.post(
             "/api/v1/client/config",
-            json={"token": lh["token"], "public_key": f"test-public-key-lh{idx+1}"}
+            json={"token": lh["token"], "public_key": VALID_NEBULA_PUBLIC_KEY}
         )
         assert config_response.status_code == 200
         config_data = config_response.json()
@@ -184,7 +214,7 @@ def test_non_lighthouse_includes_all_lighthouses(client):
     admin_token = login_as_admin(client)
     
     ca_response = client.post(
-        "/api/v1/ca",
+        "/api/v1/ca/create",
         json={"name": "test-ca", "duration_days": 540},
         cookies={"session": admin_token}
     )
@@ -210,7 +240,7 @@ def test_non_lighthouse_includes_all_lighthouses(client):
             cookies={"session": admin_token}
         )
         assert lh_response.status_code == 200
-        lighthouse_ips.append(lh_response.json()["ip_assignments"][0]["ip_address"])
+        lighthouse_ips.append(lh_response.json()["ip_address"])  # Fixed: use ip_address not ip_assignments
     
     # Create regular client
     regular_response = client.post(
@@ -222,20 +252,13 @@ def test_non_lighthouse_includes_all_lighthouses(client):
         cookies={"session": admin_token}
     )
     assert regular_response.status_code == 200
-    regular_id = regular_response.json()["id"]
-    
-    # Generate token
-    token_response = client.post(
-        f"/api/v1/clients/{regular_id}/tokens",
-        cookies={"session": admin_token}
-    )
-    assert token_response.status_code == 200
-    token = token_response.json()["token"]
+    regular_data = regular_response.json()
+    token = regular_data["token"]  # Token is returned in client creation response
     
     # Fetch config as regular client
     config_response = client.post(
         "/api/v1/client/config",
-        json={"token": token, "public_key": "test-public-key-regular"}
+        json={"token": token, "public_key": VALID_NEBULA_PUBLIC_KEY}
     )
     assert config_response.status_code == 200
     config_data = config_response.json()
@@ -257,7 +280,7 @@ def test_cross_pool_lighthouse_isolation(client):
     admin_token = login_as_admin(client)
     
     ca_response = client.post(
-        "/api/v1/ca",
+        "/api/v1/ca/create",
         json={"name": "test-ca", "duration_days": 540},
         cookies={"session": admin_token}
     )
@@ -292,7 +315,7 @@ def test_cross_pool_lighthouse_isolation(client):
     )
     assert lh_a_response.status_code == 200
     lh_a_data = lh_a_response.json()
-    lh_a_ip = lh_a_data["ip_assignments"][0]["ip_address"]
+    lh_a_ip = lh_a_data["ip_address"]  # Fixed: use ip_address not ip_assignments
     
     # Create lighthouse in Pool B
     lh_b_response = client.post(
@@ -307,7 +330,7 @@ def test_cross_pool_lighthouse_isolation(client):
     )
     assert lh_b_response.status_code == 200
     lh_b_data = lh_b_response.json()
-    lh_b_ip = lh_b_data["ip_assignments"][0]["ip_address"]
+    lh_b_ip = lh_b_data["ip_address"]  # Fixed: use ip_address not ip_assignments
     
     # Create another lighthouse in Pool A
     lh_a2_response = client.post(
@@ -322,20 +345,13 @@ def test_cross_pool_lighthouse_isolation(client):
     )
     assert lh_a2_response.status_code == 200
     lh_a2_data = lh_a2_response.json()
-    lh_a2_ip = lh_a2_data["ip_assignments"][0]["ip_address"]
+    lh_a2_ip = lh_a2_data["ip_address"]  # Fixed: use ip_address not ip_assignments
     
-    # Generate token for lighthouse-a
-    token_response = client.post(
-        f"/api/v1/clients/{lh_a_data['id']}/tokens",
-        cookies={"session": admin_token}
-    )
-    assert token_response.status_code == 200
-    token = token_response.json()["token"]
-    
-    # Fetch config for lighthouse-a
+    # Fetch config for lighthouse-a (token already in lh_a_data)
+    token = lh_a_data["token"]
     config_response = client.post(
         "/api/v1/client/config",
-        json={"token": token, "public_key": "test-public-key-lh-a"}
+        json={"token": token, "public_key": VALID_NEBULA_PUBLIC_KEY}
     )
     assert config_response.status_code == 200
     config_data = config_response.json()
@@ -358,7 +374,7 @@ def test_download_client_config_endpoint_lighthouse_exclusion(client):
     admin_token = login_as_admin(client)
     
     ca_response = client.post(
-        "/api/v1/ca",
+        "/api/v1/ca/create",
         json={"name": "test-ca", "duration_days": 540},
         cookies={"session": admin_token}
     )
@@ -383,7 +399,8 @@ def test_download_client_config_endpoint_lighthouse_exclusion(client):
     )
     assert lh1_response.status_code == 200
     lh1_data = lh1_response.json()
-    lh1_ip = lh1_data["ip_assignments"][0]["ip_address"]
+    lh1_ip = lh1_data["ip_address"]  # Fixed: use ip_address not ip_assignments
+    token = lh1_data["token"]  # Token is returned in client creation response
     
     lh2_response = client.post(
         "/api/v1/clients",
@@ -396,20 +413,12 @@ def test_download_client_config_endpoint_lighthouse_exclusion(client):
     )
     assert lh2_response.status_code == 200
     lh2_data = lh2_response.json()
-    lh2_ip = lh2_data["ip_assignments"][0]["ip_address"]
-    
-    # Generate token for lh1 (needed for certificate issuance)
-    token_response = client.post(
-        f"/api/v1/clients/{lh1_data['id']}/tokens",
-        cookies={"session": admin_token}
-    )
-    assert token_response.status_code == 200
-    token = token_response.json()["token"]
+    lh2_ip = lh2_data["ip_address"]  # Fixed: use ip_address not ip_assignments
     
     # Fetch config via POST to trigger certificate generation
     client.post(
         "/api/v1/client/config",
-        json={"token": token, "public_key": "test-public-key-lh1"}
+        json={"token": token, "public_key": VALID_NEBULA_PUBLIC_KEY}
     )
     
     # Download config via GET endpoint (admin)
@@ -419,8 +428,9 @@ def test_download_client_config_endpoint_lighthouse_exclusion(client):
     )
     assert download_response.status_code == 200
     
-    # Parse config from response
-    config = yaml.safe_load(download_response.text)
+    # Parse config from JSON response (GET endpoint returns JSON with config_yaml field)
+    response_data = download_response.json()
+    config = yaml.safe_load(response_data["config_yaml"])
     
     # Verify static_host_map excludes self
     assert "static_host_map" in config
