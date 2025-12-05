@@ -3022,9 +3022,27 @@ async def create_ca(body: CACreate, session: AsyncSession = Depends(get_session)
     # Use CertManager to create CA
     cert_manager = CertManager(session)
     ca_name = body.name
+    cert_version = body.cert_version or "v1"
+    
+    # Validate cert_version
+    if cert_version not in ["v1", "v2"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid cert_version '{cert_version}'. Must be 'v1' or 'v2'."
+        )
+    
+    # Check if v2 requires Nebula 1.10.0+
+    if cert_version == "v2":
+        settings_row = (await session.execute(select(GlobalSettings))).scalars().first()
+        nebula_ver = getattr(settings_row, 'nebula_version', '1.9.7') if settings_row else '1.9.7'
+        if not _is_v2_compatible(nebula_ver):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot create v2 CA. Server Nebula version {nebula_ver} does not support v2 certificates. Requires Nebula 1.10.0+ or nightly build."
+            )
 
     try:
-        ca = await cert_manager.create_new_ca(ca_name)
+        ca = await cert_manager.create_new_ca(ca_name, cert_version=cert_version)
         await session.commit()
         await session.refresh(ca)
     except Exception as e:
