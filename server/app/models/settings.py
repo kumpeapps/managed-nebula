@@ -42,3 +42,5 @@ class GlobalSettings(Base):
     docker_compose_template: Mapped[str] = mapped_column(Text, default=DEFAULT_DOCKER_COMPOSE_TEMPLATE)
     # Certificate version: v1 (default), v2, or hybrid (v2 requires Nebula 1.10.0+)
     cert_version: Mapped[str] = mapped_column(String(20), default="v1")
+    # Nebula binary version (default: 1.9.7, supports 1.10.0+ for v2 certs)
+    nebula_version: Mapped[str] = mapped_column(String(50), default="1.9.7")
