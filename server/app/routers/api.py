@@ -61,6 +61,8 @@ from ..models.schemas import (
     DockerComposeTemplateUpdate,
     PlaceholderInfo,
     PlaceholdersResponse,
+    NebulaVersionInfoResponse,
+    NebulaVersionsResponse,
     ClientCreate,
     ClientPermissionGrant,
     ClientPermissionResponse,
@@ -528,6 +530,52 @@ async def get_placeholders(user: User = Depends(require_permission("settings", "
     return PlaceholdersResponse(placeholders=placeholders)
 
 
+# ============ Nebula Version Management ============
+
+@router.get("/nebula/versions", response_model=NebulaVersionsResponse)
+async def get_nebula_versions(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user)
+):
+    """
+    Get available Nebula versions from GitHub releases.
+    
+    Returns the current configured version and list of available versions
+    from the slackhq/nebula GitHub repository.
+    """
+    from ..services.nebula_version_manager import NebulaVersionService
+    
+    # Get current version from settings
+    row = (await session.execute(select(GlobalSettings))).scalars().first()
+    current_version = getattr(row, 'nebula_version', '1.9.7') if row else '1.9.7'
+    
+    # Fetch available versions from GitHub
+    version_service = NebulaVersionService(github_token=settings.github_token)
+    available_versions = await version_service.fetch_available_versions(include_prereleases=True)
+    
+    # Convert to response format
+    version_responses = [
+        NebulaVersionInfoResponse(
+            version=v.version,
+            release_date=v.release_date,
+            is_stable=v.is_stable,
+            supports_v2=v.supports_v2,
+            download_url_linux_amd64=v.download_url_linux_amd64,
+            download_url_linux_arm64=v.download_url_linux_arm64,
+            download_url_darwin_amd64=v.download_url_darwin_amd64,
+            download_url_darwin_arm64=v.download_url_darwin_arm64,
+            download_url_windows_amd64=v.download_url_windows_amd64,
+            checksum=v.checksum
+        )
+        for v in available_versions
+    ]
+    
+    return NebulaVersionsResponse(
+        current_version=current_version,
+        available_versions=version_responses
+    )
+
+
 @router.post("/client/config")
 async def get_client_config(body: ClientConfigRequest, session: AsyncSession = Depends(get_session)):
     # Validate token
@@ -590,6 +638,18 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
     if getattr(client, 'is_blocked', False):
         raise HTTPException(status_code=403, detail="Client is blocked")
 
+    # Get cert_version from global settings
+    cert_version = getattr(settings, 'cert_version', 'v1')
+    
+    # For v2 certs, gather all IPs for the client
+    all_ips = []
+    if cert_version in ['v2', 'hybrid']:
+        # Get all IP assignments for this client (for future multi-IP support)
+        all_ip_rows = (await session.execute(
+            select(IPAssignment).where(IPAssignment.client_id == client.id)
+        )).scalars().all()
+        all_ips = [row.ip_address for row in all_ip_rows]
+    
     # Generate or rotate client certificate using provided public key
     cert_mgr = CertManager(session)
     try:
@@ -598,6 +658,8 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
             public_key_str=body.public_key,
             client_ip=ip_assignment.ip_address,
             cidr_prefix=prefix,
+            cert_version=cert_version,
+            all_ips=all_ips if all_ips else None,
         )
     except RuntimeError as e:
         # Convert cert generation errors (e.g., invalid public key) to 400 Bad Request
