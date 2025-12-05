@@ -17,7 +17,13 @@ class CertManager:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def create_new_ca(self, name: str) -> CACertificate:
+    async def create_new_ca(self, name: str, cert_version: str = "v1") -> CACertificate:
+        """Create a new CA certificate.
+        
+        Args:
+            name: CA name
+            cert_version: Certificate version (v1 or v2). v2 requires Nebula 1.10.0+
+        """
         now = datetime.utcnow()
         # nebula-cert expects Go-style durations (e.g., hours). Convert days -> hours.
         duration_hours = settings.ca_default_validity_days * 24
@@ -32,6 +38,10 @@ class CertManager:
                 "-duration",
                 duration,
             ]
+            # Add -version flag for v2 certs (Nebula 1.10.0+)
+            if cert_version == "v2":
+                cmd.extend(["-version", "2"])
+            
             subprocess.check_call(cmd, cwd=td)
             # Files: ca.key, ca.crt
             with open(os.path.join(td, "ca.crt"), "rb") as f:
@@ -62,6 +72,8 @@ class CertManager:
             is_previous=False,
             can_sign=True,
             include_in_config=True,
+            cert_version=cert_version,
+            nebula_version="1.10.0",
         )
         self.session.add(ca)
         await self.session.commit()
@@ -84,15 +96,18 @@ class CertManager:
             await self.create_new_ca(f"Rotated CA {now.date()}")
 
     async def issue_or_rotate_client_cert(
-        self, client: Client, public_key_str: str, client_ip: str, cidr_prefix: int | None = None
+        self, client: Client, public_key_str: str, client_ip: str, cidr_prefix: int | None = None,
+        cert_version: str = "v1", all_ips: list[str] | None = None
     ) -> Tuple[str, datetime, datetime]:
         """Issue or reuse a Nebula host certificate for client using provided public key.
 
         Args:
             client: The client to issue cert for
             public_key_str: The client's public key
-            client_ip: The client's IP address (without CIDR)
+            client_ip: The client's IP address (without CIDR) - primary IP for v1
             cidr_prefix: Network prefix length (e.g., 16 for /16). If None, uses /32.
+            cert_version: Certificate version (v1 or v2). v2 requires Nebula 1.10.0+
+            all_ips: List of all IP addresses for v2 certs (optional, v2 only)
         """
         from sqlalchemy import desc
 
@@ -164,8 +179,6 @@ class CertManager:
                 "sign",
                 "-name",
                 client.name,
-                "-ip",
-                ip_with_cidr,
                 "-duration",
                 duration,
                 "-ca-crt",
@@ -176,7 +189,20 @@ class CertManager:
                 pub_path,
                 "-out-crt",
                 out_crt,
-            ] + groups_arg
+            ]
+            
+            # Add IP addresses
+            if cert_version == "v2" and all_ips:
+                # v2: Support multiple IPs with multiple -ip flags
+                for ip in all_ips:
+                    ip_formatted = f"{ip}/{cidr_prefix}" if cidr_prefix else f"{ip}/32"
+                    cmd.extend(["-ip", ip_formatted])
+                cmd.extend(["-version", "2"])
+            else:
+                # v1: Single IP only
+                cmd.extend(["-ip", ip_with_cidr])
+            
+            cmd.extend(groups_arg)
 
             try:
                 subprocess.check_output(cmd, cwd=td, stderr=subprocess.STDOUT)
@@ -209,6 +235,7 @@ class CertManager:
             fingerprint=fingerprint,
             issued_for_ip_cidr=ip_with_cidr,
             issued_for_groups_hash=groups_hash,
+            cert_version=cert_version,
         )
         self.session.add(cc)
         await self.session.commit()

@@ -1,6 +1,7 @@
 from sqlalchemy import String, Integer, Boolean, DateTime, LargeBinary, func
 from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
+from typing import Optional
 from ..db import Base
 
 
@@ -19,4 +20,8 @@ class CACertificate(Base):
     can_sign: Mapped[bool] = mapped_column(Boolean, default=True)
     # Whether to include this CA cert in generated client configs (CA bundle)
     include_in_config: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Certificate version: v1 or v2 (Nebula 1.10.0+ supports v2)
+    cert_version: Mapped[str] = mapped_column(String(10), default="v1", server_default="v1")
+    # Nebula version used to create the CA
+    nebula_version: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())

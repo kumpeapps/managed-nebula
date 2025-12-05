@@ -11,14 +11,14 @@ RUN set -eux; \
             ca-certificates curl iproute2 iputils-ping \
             build-essential gcc python3-dev libffi-dev libssl-dev pkg-config \
             rustc cargo; \
-        arch="$(dpkg --print-architecture)"; \
+        arch="$(dpkg --print-architecture)";
         case "$arch" in \
             amd64) neb_arch="amd64" ;; \
             arm64) neb_arch="arm64" ;; \
             armhf|armel|arm) neb_arch="arm" ;; \
             *) echo "Unsupported architecture: $arch"; exit 1 ;; \
         esac; \
-        NEBULA_VERSION="1.9.7"; \
+        NEBULA_VERSION="1.10.0"; \
         curl -fsSL -o /tmp/nebula.tar.gz \
             "https://github.com/slackhq/nebula/releases/download/v${NEBULA_VERSION}/nebula-linux-${neb_arch}.tar.gz"; \
         tar -C /usr/local/bin -xzvf /tmp/nebula.tar.gz nebula nebula-cert; \
