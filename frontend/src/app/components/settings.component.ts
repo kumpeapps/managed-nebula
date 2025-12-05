@@ -90,17 +90,17 @@ import { environment } from '../../environments/environment';
             
             <div class="setting-item">
               <label class="input-label">
-                <strong>Certificate Version</strong>
+                <strong>Client Certificate Format</strong>
                 <span class="description">
-                  Certificate format: v1 (compatible with all versions), v2 (requires Nebula 1.10.0+, supports multiple IPs), or hybrid (both v1 and v2)
+                  Controls what certificate format is issued when signing client certificates. Requires a v2 CA to use v2 or hybrid modes.
                 </span>
                 <select 
                   [(ngModel)]="settings.cert_version"
                   (change)="onCertVersionChange(); saveSettings()"
                   class="select-input">
-                  <option value="v1">v1 (Legacy, single IP)</option>
-                  <option value="v2">v2 (Multi-IP, requires 1.10.0+)</option>
-                  <option value="hybrid">Hybrid (Both v1 and v2)</option>
+                  <option value="v1">v1 only (Single IPv4 - compatible with all Nebula versions)</option>
+                  <option value="v2">v2 only (Multiple IPs - requires ALL clients on Nebula 1.10.0+)</option>
+                  <option value="hybrid">Hybrid (v1 + v2 bundle - clients use v1 or v2 based on their version)</option>
                 </select>
               </label>
             </div>
@@ -112,15 +112,15 @@ import { environment } from '../../environments/environment';
             </div>
             
             <div class="info-box" *ngIf="settings.v2_support_available && settings.cert_version === 'v2'">
-              <p><strong>ℹ️ Certificate v2 Enabled</strong></p>
-              <p>New certificates will use v2 format with support for multiple IP addresses per client.</p>
-              <p><strong>Note:</strong> All clients must be running Nebula 1.10.0+ to use v2 certificates. The server will validate client compatibility before allowing this setting.</p>
+              <p><strong>ℹ️ Pure v2 Certificates</strong></p>
+              <p>Clients will receive only v2 certificates with support for multiple IP addresses.</p>
+              <p><strong>Requirement:</strong> All clients must be running Nebula 1.10.0+. The server validates client compatibility before allowing this mode.</p>
             </div>
             
             <div class="info-box" *ngIf="settings.v2_support_available && settings.cert_version === 'hybrid'">
-              <p><strong>ℹ️ Hybrid Mode Enabled</strong></p>
-              <p>New certificates will include both v1 and v2 formats. Clients will receive both certificate files for gradual migration.</p>
-              <p><strong>Recommended:</strong> Use hybrid mode when upgrading from v1 to v2 to support mixed client versions during migration.</p>
+              <p><strong>ℹ️ Hybrid Mode (Recommended for Migration)</strong></p>
+              <p>Clients receive a certificate bundle containing both v1 and v2 formats in a single file. Clients running Nebula &lt; 1.10.0 will use the v1 certificate, while clients running 1.10.0+ can use either v1 or v2.</p>
+              <p><strong>Use case:</strong> Gradual migration from v1 to v2 with mixed client versions.</p>
             </div>
           </div>
           

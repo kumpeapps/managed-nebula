@@ -27,12 +27,15 @@ import { CACertificate } from '../models';
               <input class="form-control" type="number" name="validity" [(ngModel)]="createPayload.validity_months" min="1" />
             </div>
             <div class="form-group">
-              <label>Certificate Version</label>
+              <label>Certificate Authority Version</label>
               <select class="form-control" name="cert_version" [(ngModel)]="createPayload.cert_version">
-                <option value="v1">v1 (Legacy, compatible with all Nebula versions)</option>
-                <option value="v2">v2 (Requires Nebula 1.10.0+, supports multiple IPs)</option>
+                <option value="v1">v1 CA (Can only sign v1 certificates - for legacy servers)</option>
+                <option value="v2">v2 CA (Can sign BOTH v1 and v2 certificates - recommended)</option>
               </select>
-              <small class="form-text">v2 CAs can sign both v1 and v2 certificates. v1 CAs can only sign v1 certificates.</small>
+              <small class="form-text">
+                <strong>Recommended:</strong> Choose v2 CA. It can sign v1 certificates for clients running Nebula &lt; 1.10.0 
+                AND v2 certificates for clients running Nebula 1.10.0+. Only choose v1 CA if your server cannot run Nebula 1.10.0+.
+              </small>
             </div>
             <div class="form-actions">
               <button type="button" class="btn btn-secondary" (click)="showCreate = false">Cancel</button>
