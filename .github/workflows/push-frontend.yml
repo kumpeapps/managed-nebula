@@ -71,17 +71,25 @@ jobs:
       - name: Get Latest Release Version
         id: get_version
         run: |
-          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
-          echo "Current branch: ${BRANCH_NAME}"
-          
-          # Fetch all releases and find the most recent one for this branch
-          LATEST_RELEASE=$(curl -s https://api.github.com/repos/kumpeapps/managed-nebula/releases | \
-            jq -r --arg branch "$BRANCH_NAME" '[
-              .[] | select(.target_commitish == $branch or .target_commitish == "main")
-            ] | .[0].tag_name // "v1.0.0"')
+          # Handle both branches and tags
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            # For tags, use the tag as version
+            LATEST_RELEASE="${GITHUB_REF#refs/tags/}"
+            echo "Triggered by tag: ${LATEST_RELEASE}"
+          else
+            # For branches, find latest release
+            BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+            echo "Current branch: ${BRANCH_NAME}"
+            
+            LATEST_RELEASE=$(curl -s https://api.github.com/repos/kumpeapps/managed-nebula/releases | \
+              jq -r --arg branch "$BRANCH_NAME" '[
+                .[] | select(.target_commitish == $branch or .target_commitish == "main")
+              ] | .[0].tag_name // "v1.0.0"')
+            
+            echo "Latest release version for ${BRANCH_NAME}: ${LATEST_RELEASE}"
+          fi
           
           echo "latest_version=${LATEST_RELEASE}" >> $GITHUB_OUTPUT
-          echo "Latest release version for ${BRANCH_NAME}: ${LATEST_RELEASE}"
 
       - name: Build and Push Image (dev-latest)
         if: github.ref == 'refs/heads/dev'
