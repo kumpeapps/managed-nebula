@@ -97,6 +97,8 @@ class Client(Base):
     last_version_report_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     # OS type for platform-specific config generation
     os_type: Mapped[str] = mapped_column(String(20), default="docker", server_default="docker")
+    # IP version preference: ipv4_only (default), ipv6_only, dual_stack, multi_ipv4, multi_ipv6, multi_both
+    ip_version: Mapped[str] = mapped_column(String(20), default="ipv4_only", server_default="ipv4_only")
 
     groups = relationship("Group", secondary=client_groups, back_populates="clients", lazy="selectin")
     firewall_rulesets = relationship("FirewallRuleset", secondary=client_firewall_rulesets, back_populates="clients")
@@ -133,6 +135,8 @@ class ClientCertificate(Base):
     issued_for_groups_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Certificate version: v1 or v2
+    cert_version: Mapped[str] = mapped_column(String(10), default="v1", server_default="v1")
 
     client: Mapped[Client] = relationship("Client")
 
@@ -160,3 +164,7 @@ class IPAssignment(Base):
     ip_address: Mapped[str] = mapped_column(String(64), unique=True)
     pool_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("ip_pools.id"), nullable=True)
     ip_group_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("ip_groups.id"), nullable=True)
+    # IP version: ipv4 or ipv6 (for v2 cert support)
+    ip_version: Mapped[str] = mapped_column(String(10), default="ipv4", server_default="ipv4")
+    # Primary flag: only one primary IPv4 per client for v1 compatibility
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
