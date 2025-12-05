@@ -273,6 +273,8 @@ export interface VersionStatus {
   client_advisories: SecurityAdvisoryInfo[];
   nebula_advisories: SecurityAdvisoryInfo[];
   days_behind: number | null;
+  latest_client_version?: string | null;
+  latest_nebula_version?: string | null;
 }
 
 // Version status response from server

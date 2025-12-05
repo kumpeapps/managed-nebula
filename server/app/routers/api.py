@@ -331,6 +331,19 @@ async def get_version_status(
 
 
 # ============ Settings ============
+
+def _is_v2_compatible(nebula_version: str) -> bool:
+    """Check if Nebula version supports v2 certificates (1.10.0+)."""
+    if nebula_version.startswith('nightly'):
+        return True
+    try:
+        from services.version_parser import compare_versions
+        return compare_versions(nebula_version, '1.10.0') >= 0
+    except Exception:
+        # Fallback: assume not compatible if parsing fails
+        return False
+
+
 @router.get("/settings", response_model=SettingsResponse)
 async def get_settings(session: AsyncSession = Depends(get_session), user: User = Depends(get_current_user)):
     row = (await session.execute(select(GlobalSettings))).scalars().first()
@@ -340,12 +353,20 @@ async def get_settings(session: AsyncSession = Depends(get_session), user: User 
         session.add(row)
         await session.commit()
         await session.refresh(row)
+    
+    # Check if v2 support is available based on nebula_version
+    nebula_ver = getattr(row, 'nebula_version', '1.9.7')
+    v2_available = _is_v2_compatible(nebula_ver)
+    
     return SettingsResponse(
         punchy_enabled=row.punchy_enabled,
         client_docker_image=row.client_docker_image,
         server_url=row.server_url,
         docker_compose_template=row.docker_compose_template,
-        externally_managed_users=settings.externally_managed_users
+        externally_managed_users=settings.externally_managed_users,
+        cert_version=getattr(row, 'cert_version', 'v1'),
+        nebula_version=nebula_ver,
+        v2_support_available=v2_available
     )
 
 
@@ -383,14 +404,39 @@ async def update_settings(body: SettingsUpdate, session: AsyncSession = Depends(
                 status_code=400, detail=f"Invalid YAML: {str(e)}"
             ) from e
         row.docker_compose_template = body.docker_compose_template
+    
+    # Update nebula_version if provided
+    if body.nebula_version is not None:
+        row.nebula_version = body.nebula_version
+    
+    # Update cert_version if provided, with validation
+    if body.cert_version is not None:
+        # Validate that v2/hybrid requires compatible Nebula version
+        if body.cert_version in ['v2', 'hybrid']:
+            current_nebula_version = body.nebula_version if body.nebula_version is not None else getattr(row, 'nebula_version', '1.9.7')
+            if not _is_v2_compatible(current_nebula_version):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Certificate version '{body.cert_version}' requires Nebula 1.10.0+ or nightly build. Current version: {current_nebula_version}"
+                )
+        row.cert_version = body.cert_version
+    
     await session.commit()
     await session.refresh(row)
+    
+    # Compute v2 support availability
+    nebula_ver = getattr(row, 'nebula_version', '1.9.7')
+    v2_available = _is_v2_compatible(nebula_ver)
+    
     return SettingsResponse(
         punchy_enabled=row.punchy_enabled,
         client_docker_image=row.client_docker_image,
         server_url=row.server_url,
         docker_compose_template=row.docker_compose_template,
-        externally_managed_users=settings.externally_managed_users
+        externally_managed_users=settings.externally_managed_users,
+        cert_version=getattr(row, 'cert_version', 'v1'),
+        nebula_version=nebula_ver,
+        v2_support_available=v2_available
     )
 
 
@@ -2872,7 +2918,9 @@ async def list_cas(session: AsyncSession = Depends(get_session), user: User = De
             can_sign=ca.can_sign,
             include_in_config=ca.include_in_config,
             created_at=ca.created_at,
-            status=_classify_ca_status(ca)
+            status=_classify_ca_status(ca),
+            cert_version=getattr(ca, 'cert_version', 'v1'),  # Default to v1 for existing CAs
+            nebula_version=getattr(ca, 'nebula_version', None)  # May be None for existing CAs
         )
         for ca in cas
     ]

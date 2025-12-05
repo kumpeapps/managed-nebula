@@ -428,12 +428,17 @@ class SettingsResponse(BaseModel):
     server_url: str
     docker_compose_template: str
     externally_managed_users: bool
+    cert_version: str = "v1"  # v1, v2, or hybrid
+    nebula_version: str = "1.9.7"  # Nebula binary version
+    v2_support_available: bool = False  # Computed: True if nebula_version >= 1.10.0
 
 class SettingsUpdate(BaseModel):
     punchy_enabled: Optional[bool] = None
     client_docker_image: Optional[str] = None
     server_url: Optional[str] = None
     docker_compose_template: Optional[str] = None
+    cert_version: Optional[str] = None  # v1, v2, or hybrid
+    nebula_version: Optional[str] = None  # Nebula binary version
 
 
 class DockerComposeTemplateResponse(BaseModel):
