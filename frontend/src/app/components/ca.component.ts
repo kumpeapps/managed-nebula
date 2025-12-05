@@ -90,6 +90,7 @@ import { CACertificate } from '../models';
         <thead>
           <tr>
             <th>Name</th>
+            <th>Cert Version</th>
             <th>Status</th>
             <th>Can Sign</th>
             <th>Validity</th>
@@ -99,6 +100,12 @@ import { CACertificate } from '../models';
         <tbody>
           <tr *ngFor="let ca of cas">
             <td>{{ ca.name }}</td>
+            <td>
+              <span class="badge" [ngClass]="ca.cert_version === 'v2' ? 'badge-v2' : 'badge-v1'">
+                {{ ca.cert_version || 'v1' }}
+              </span>
+              <span *ngIf="ca.cert_version === 'v2'" class="cert-version-note" title="Can sign both v1 and v2 certificates">✓ Multi-version</span>
+            </td>
             <td>
               <span class="badge" [ngClass]="statusClass(ca.status)">{{ ca.status }}</span>
               <span *ngIf="ca.is_active && ca.can_sign" class="badge badge-signing">Signing</span>
@@ -129,6 +136,9 @@ import { CACertificate } from '../models';
     .badge-signing { background:#007bff; color:#fff; margin-left:0.5rem; }
     .badge-yes { background:#d4edda; color:#155724; }
     .badge-no { background:#f8d7da; color:#721c24; }
+    .badge-v1 { background:#e2e3e5; color:#383d41; }
+    .badge-v2 { background:#cfe2ff; color:#084298; }
+    .cert-version-note { font-size:.7rem; color:#666; margin-left:.5rem; }
     .actions-cell { display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; }
     .modal { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; }
     .modal-content { background:#fff; padding:1.5rem; width:600px; max-width:95%; border-radius:8px; }

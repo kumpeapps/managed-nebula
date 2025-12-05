@@ -144,6 +144,8 @@ export interface CACertificate {
   include_in_config: boolean;
   created_at: string;
   status: 'current' | 'previous' | 'expired' | 'inactive';
+  cert_version?: string; // v1 or v2
+  nebula_version?: string; // Nebula version used to create CA
 }
 
 export interface LoginRequest {
