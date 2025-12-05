@@ -3059,7 +3059,9 @@ async def create_ca(body: CACreate, session: AsyncSession = Depends(get_session)
         can_sign=ca.can_sign,
         include_in_config=ca.include_in_config,
         created_at=ca.created_at,
-        status=_classify_ca_status(ca)
+        status=_classify_ca_status(ca),
+        cert_version=getattr(ca, 'cert_version', 'v1'),
+        nebula_version=getattr(ca, 'nebula_version', None)
     )
 
 
@@ -3084,7 +3086,9 @@ async def import_ca(body: CAImport, session: AsyncSession = Depends(get_session)
         can_sign=ca.can_sign,
         include_in_config=ca.include_in_config,
         created_at=ca.created_at,
-        status=_classify_ca_status(ca)
+        status=_classify_ca_status(ca),
+        cert_version=getattr(ca, 'cert_version', 'v1'),
+        nebula_version=getattr(ca, 'nebula_version', None)
     )
 
 
@@ -3128,7 +3132,9 @@ async def set_signing_ca(ca_id: int, session: AsyncSession = Depends(get_session
         can_sign=ca.can_sign,
         include_in_config=ca.include_in_config,
         created_at=ca.created_at,
-        status=_classify_ca_status(ca)
+        status=_classify_ca_status(ca),
+        cert_version=getattr(ca, 'cert_version', 'v1'),
+        nebula_version=getattr(ca, 'nebula_version', None)
     )
 
 @router.delete("/ca/{ca_id}")
