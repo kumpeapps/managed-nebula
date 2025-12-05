@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { delay } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
-import { Client, Group, FirewallRuleset, IPPool, IPGroup, AvailableIP, CACertificate, User, ClientUpdateRequest, ClientCreateRequest, ClientCertificate, ClientConfigDownload, Settings, SettingsUpdate, DockerComposeTemplate, PlaceholdersResponse, Permission, VersionResponse, VersionStatusResponse } from '../models';
+import { Client, Group, FirewallRuleset, IPPool, IPGroup, AvailableIP, CACertificate, User, ClientUpdateRequest, ClientCreateRequest, ClientCertificate, ClientConfigDownload, Settings, SettingsUpdate, DockerComposeTemplate, PlaceholdersResponse, Permission, VersionResponse, VersionStatusResponse, NebulaVersionsResponse } from '../models';
 
 @Injectable({
   providedIn: 'root'
