@@ -66,6 +66,63 @@ import { environment } from '../../environments/environment';
           </div>
           
           <div class="setting-section">
+            <h3>Nebula Version & Certificate Management</h3>
+            <p class="help-text">Configure Nebula binary version and certificate format (v2 requires Nebula 1.10.0+)</p>
+            
+            <div class="setting-item">
+              <label class="input-label">
+                <strong>Nebula Version</strong>
+                <span class="description">
+                  Select the Nebula binary version for client deployments
+                </span>
+                <select 
+                  [(ngModel)]="settings.nebula_version"
+                  (change)="onNebulaVersionChange(); saveSettings()"
+                  class="select-input">
+                  <option *ngFor="let version of availableNebulaVersions" [value]="version.version">
+                    {{version.version}} 
+                    <ng-container *ngIf="!version.is_stable">(pre-release)</ng-container>
+                    <ng-container *ngIf="version.version === latestStableVersion">(latest stable)</ng-container>
+                  </option>
+                </select>
+              </label>
+            </div>
+            
+            <div class="setting-item">
+              <label class="input-label">
+                <strong>Certificate Version</strong>
+                <span class="description">
+                  Certificate format: v1 (compatible with all versions), v2 (requires Nebula 1.10.0+, supports multiple IPs), or hybrid (both v1 and v2)
+                </span>
+                <select 
+                  [(ngModel)]="settings.cert_version"
+                  (change)="onCertVersionChange(); saveSettings()"
+                  class="select-input">
+                  <option value="v1">v1 (Legacy, single IP)</option>
+                  <option value="v2">v2 (Multi-IP, requires 1.10.0+)</option>
+                  <option value="hybrid">Hybrid (Both v1 and v2)</option>
+                </select>
+              </label>
+            </div>
+            
+            <div class="warning-box" *ngIf="!settings.v2_support_available && (settings.cert_version === 'v2' || settings.cert_version === 'hybrid')">
+              <p><strong>⚠️ Version Incompatibility Warning</strong></p>
+              <p>Certificate version {{settings.cert_version}} requires Nebula 1.10.0 or higher. Current version: {{settings.nebula_version}}</p>
+              <p>Please upgrade to Nebula 1.10.0+ or select v1 certificate format.</p>
+            </div>
+            
+            <div class="info-box" *ngIf="settings.v2_support_available && settings.cert_version === 'v2'">
+              <p><strong>ℹ️ Certificate v2 Enabled</strong></p>
+              <p>New certificates will use v2 format with support for multiple IP addresses per client.</p>
+            </div>
+            
+            <div class="info-box" *ngIf="settings.v2_support_available && settings.cert_version === 'hybrid'">
+              <p><strong>ℹ️ Hybrid Mode Enabled</strong></p>
+              <p>New certificates will include both v1 and v2 formats. Clients will receive both certificate files for gradual migration.</p>
+            </div>
+          </div>
+          
+          <div class="setting-section">
             <h3>Client Docker Configuration</h3>
             <p class="help-text">Default Docker image and server URL used in generated docker-compose files for clients</p>
             
@@ -253,6 +310,23 @@ import { environment } from '../../environments/environment';
       margin-bottom: 0;
     }
     
+    .warning-box {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 4px;
+      padding: 1rem;
+      margin-top: 1rem;
+    }
+    
+    .warning-box p {
+      margin: 0 0 0.5rem 0;
+      color: #856404;
+    }
+    
+    .warning-box p:last-child {
+      margin-bottom: 0;
+    }
+    
     .input-label {
       display: flex;
       flex-direction: column;
@@ -274,6 +348,21 @@ import { environment } from '../../environments/environment';
     }
     
     .text-input:focus {
+      outline: none;
+      border-color: #4CAF50;
+    }
+    
+    .select-input {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 1rem;
+      background-color: white;
+      cursor: pointer;
+    }
+    
+    .select-input:focus {
       outline: none;
       border-color: #4CAF50;
     }
@@ -540,7 +629,10 @@ export class SettingsComponent implements OnInit {
     client_docker_image: 'ghcr.io/kumpeapps/managed-nebula-client:latest',
     server_url: 'http://localhost:8080',
     docker_compose_template: '',
-    externally_managed_users: false
+    externally_managed_users: false,
+    cert_version: 'v1',
+    nebula_version: '1.9.7',
+    v2_support_available: false
   };
   isAdmin = this.authService.isAdmin();
   placeholders: any[] = [];
@@ -549,6 +641,8 @@ export class SettingsComponent implements OnInit {
   frontendVersion: string = environment.version;
   serverVersion: string = '';
   nebulaVersion: string = '';
+  availableNebulaVersions: any[] = [];
+  latestStableVersion: string = '';
 
   constructor(
     private authService: AuthService,
@@ -564,6 +658,7 @@ export class SettingsComponent implements OnInit {
     this.loadSettings();
     this.loadPlaceholders();
     this.loadVersions();
+    this.loadNebulaVersions();
   }
 
   loadSettings(): void {
@@ -664,5 +759,62 @@ export class SettingsComponent implements OnInit {
         this.nebulaVersion = 'Error';
       }
     });
+  }
+
+  loadNebulaVersions(): void {
+    this.apiService.getNebulaVersions().subscribe({
+      next: (response) => {
+        this.availableNebulaVersions = response.versions;
+        this.latestStableVersion = response.latest_stable;
+        
+        // Initialize v2_support_available if not set
+        if (this.settings.nebula_version && this.settings.v2_support_available === undefined) {
+          this.checkV2Support();
+        }
+      },
+      error: (err: any) => {
+        console.error('Failed to load Nebula versions:', err);
+        this.notificationService.notify('Failed to load available Nebula versions', 'error');
+      }
+    });
+  }
+
+  onNebulaVersionChange(): void {
+    this.checkV2Support();
+    
+    // Warn if downgrading from v2/hybrid to incompatible version
+    if (!this.settings.v2_support_available && 
+        (this.settings.cert_version === 'v2' || this.settings.cert_version === 'hybrid')) {
+      this.notificationService.notify(
+        `Nebula ${this.settings.nebula_version} does not support certificate v2. Please select v1 certificate format.`,
+        'warning'
+      );
+    }
+  }
+
+  onCertVersionChange(): void {
+    // Warn if selecting v2/hybrid without compatible Nebula version
+    if (!this.settings.v2_support_available && 
+        (this.settings.cert_version === 'v2' || this.settings.cert_version === 'hybrid')) {
+      this.notificationService.notify(
+        'Certificate v2/hybrid requires Nebula 1.10.0 or higher. Please upgrade Nebula version first.',
+        'warning'
+      );
+    }
+  }
+
+  private checkV2Support(): void {
+    // Check if current Nebula version supports v2 certificates (1.10.0+)
+    const version = this.settings.nebula_version || '';
+    const match = version.match(/^(\d+)\.(\d+)\.(\d+)/);
+    
+    if (match) {
+      const major = parseInt(match[1], 10);
+      const minor = parseInt(match[2], 10);
+      
+      this.settings.v2_support_available = (major > 1) || (major === 1 && minor >= 10);
+    } else {
+      this.settings.v2_support_available = false;
+    }
   }
 }

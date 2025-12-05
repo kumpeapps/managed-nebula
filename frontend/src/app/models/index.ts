@@ -204,6 +204,9 @@ export interface Settings {
   server_url: string;
   docker_compose_template: string;
   externally_managed_users: boolean;
+  cert_version: string; // v1, v2, or hybrid
+  nebula_version: string; // e.g., "1.9.7", "1.10.0"
+  v2_support_available: boolean; // True if nebula_version >= 1.10.0
 }
 
 export interface SettingsUpdate {
@@ -211,6 +214,29 @@ export interface SettingsUpdate {
   client_docker_image?: string;
   server_url?: string;
   docker_compose_template?: string;
+  cert_version?: string;
+  nebula_version?: string;
+}
+
+// Nebula version management interfaces
+export interface NebulaVersionInfo {
+  version: string;
+  release_date: string;
+  is_stable: boolean;
+  supports_v2: boolean;
+  download_url_linux_amd64?: string;
+  download_url_linux_arm64?: string;
+  download_url_darwin_amd64?: string;
+  download_url_darwin_arm64?: string;
+  download_url_windows_amd64?: string;
+  checksum?: string;
+}
+
+export interface NebulaVersionsResponse {
+  current_version: string;
+  available_versions: NebulaVersionInfo[];
+  latest_stable: string;  // Latest stable version
+  versions: NebulaVersionInfo[];  // Alias for available_versions
 }
 
 export interface DockerComposeTemplate {
