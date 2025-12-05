@@ -555,7 +555,7 @@ class UserGroupResponse(BaseModel):
     is_admin: bool
     owner: Optional[UserRef]
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
     member_count: int = 0
     permission_count: int = 0
 
