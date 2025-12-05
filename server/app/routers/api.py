@@ -570,9 +570,17 @@ async def get_nebula_versions(
         for v in available_versions
     ]
     
+    # Find latest stable version
+    latest_stable = next(
+        (v.version for v in available_versions if v.is_stable),
+        current_version  # Fallback to current if no stable found
+    )
+    
     return NebulaVersionsResponse(
         current_version=current_version,
-        available_versions=version_responses
+        available_versions=version_responses,
+        latest_stable=latest_stable,
+        versions=version_responses  # Alias for frontend
     )
 
 
