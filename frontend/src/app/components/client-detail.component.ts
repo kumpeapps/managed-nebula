@@ -85,11 +85,21 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
                 <div class="version-status-grid">
                   <div class="version-status-item">
                     <span class="status-icon">{{ getVersionStatusIcon(client.version_status.client_version_status) }}</span>
-                    <span class="status-label">Client: {{ client.version_status.client_version_status }}</span>
+                    <div>
+                      <span class="status-label">Client: {{ client.version_status.client_version_status }}</span>
+                      <small class="text-muted" *ngIf="client.version_status.latest_client_version" style="display: block; margin-top: 0.25em;">
+                        Latest: {{ client.version_status.latest_client_version }}
+                      </small>
+                    </div>
                   </div>
                   <div class="version-status-item">
                     <span class="status-icon">{{ getVersionStatusIcon(client.version_status.nebula_version_status) }}</span>
-                    <span class="status-label">Nebula: {{ client.version_status.nebula_version_status }}</span>
+                    <div>
+                      <span class="status-label">Nebula: {{ client.version_status.nebula_version_status }}</span>
+                      <small class="text-muted" *ngIf="client.version_status.latest_nebula_version" style="display: block; margin-top: 0.25em;">
+                        Latest: {{ client.version_status.latest_nebula_version }}
+                      </small>
+                    </div>
                   </div>
                 </div>
                 
