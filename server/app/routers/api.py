@@ -339,10 +339,11 @@ def _is_v2_compatible(nebula_version: str) -> bool:
     if nebula_version.startswith('nightly'):
         return True
     try:
-        from services.version_parser import compare_versions
+        from ..services.version_parser import compare_versions
         return compare_versions(nebula_version, '1.10.0') >= 0
-    except Exception:
+    except Exception as e:
         # Fallback: assume not compatible if parsing fails
+        logger.warning(f"Failed to parse version {nebula_version}: {e}")
         return False
 
 
