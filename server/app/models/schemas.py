@@ -355,6 +355,28 @@ class CAResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ============ Nebula Version Schemas ============
+
+class NebulaVersionInfoResponse(BaseModel):
+    """Response model for Nebula version information."""
+    version: str
+    release_date: datetime
+    is_stable: bool
+    supports_v2: bool
+    download_url_linux_amd64: Optional[str] = None
+    download_url_linux_arm64: Optional[str] = None
+    download_url_darwin_amd64: Optional[str] = None
+    download_url_darwin_arm64: Optional[str] = None
+    download_url_windows_amd64: Optional[str] = None
+    checksum: Optional[str] = None
+
+
+class NebulaVersionsResponse(BaseModel):
+    """Response model for list of available Nebula versions."""
+    current_version: str  # Version currently configured in system settings
+    available_versions: List[NebulaVersionInfoResponse]
+
+
 # ============ User Schemas ============
 
 class UserCreate(BaseModel):
