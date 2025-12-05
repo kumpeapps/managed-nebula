@@ -11,7 +11,7 @@ RUN set -eux; \
             ca-certificates curl iproute2 iputils-ping \
             build-essential gcc python3-dev libffi-dev libssl-dev pkg-config \
             rustc cargo; \
-        arch="$(dpkg --print-architecture)";
+        arch="$(dpkg --print-architecture)"; \
         case "$arch" in \
             amd64) neb_arch="amd64" ;; \
             arm64) neb_arch="arm64" ;; \

@@ -17,8 +17,8 @@ RUN set -eux; \
             default-libmysqlclient-dev \
             nano \
             rustc cargo; \
-        echo "Installing Nebula v1.10.0 from upstream release (Debian package is outdated)";
-        arch="$(dpkg --print-architecture)";
+        echo "Installing Nebula v1.10.0 from upstream release (Debian package is outdated)"; \
+        arch="$(dpkg --print-architecture)"; \
         case "$arch" in \
             amd64) neb_arch="amd64" ;; \
             arm64) neb_arch="arm64" ;; \
