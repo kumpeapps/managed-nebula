@@ -114,11 +114,13 @@ import { environment } from '../../environments/environment';
             <div class="info-box" *ngIf="settings.v2_support_available && settings.cert_version === 'v2'">
               <p><strong>ℹ️ Certificate v2 Enabled</strong></p>
               <p>New certificates will use v2 format with support for multiple IP addresses per client.</p>
+              <p><strong>Note:</strong> All clients must be running Nebula 1.10.0+ to use v2 certificates. The server will validate client compatibility before allowing this setting.</p>
             </div>
             
             <div class="info-box" *ngIf="settings.v2_support_available && settings.cert_version === 'hybrid'">
               <p><strong>ℹ️ Hybrid Mode Enabled</strong></p>
               <p>New certificates will include both v1 and v2 formats. Clients will receive both certificate files for gradual migration.</p>
+              <p><strong>Recommended:</strong> Use hybrid mode when upgrading from v1 to v2 to support mixed client versions during migration.</p>
             </div>
           </div>
           
@@ -691,7 +693,9 @@ export class SettingsComponent implements OnInit {
       punchy_enabled: this.settings.punchy_enabled,
       client_docker_image: this.settings.client_docker_image,
       server_url: this.settings.server_url,
-      docker_compose_template: this.settings.docker_compose_template
+      docker_compose_template: this.settings.docker_compose_template,
+      cert_version: this.settings.cert_version,
+      nebula_version: this.settings.nebula_version
     }).subscribe({
       next: (updated: Settings) => {
         this.settings = updated;
@@ -766,11 +770,7 @@ export class SettingsComponent implements OnInit {
       next: (response) => {
         this.availableNebulaVersions = response.versions;
         this.latestStableVersion = response.latest_stable;
-        
-        // Initialize v2_support_available if not set
-        if (this.settings.nebula_version && this.settings.v2_support_available === undefined) {
-          this.checkV2Support();
-        }
+        // v2_support_available comes from the server in settings response
       },
       error: (err: any) => {
         console.error('Failed to load Nebula versions:', err);
@@ -780,41 +780,10 @@ export class SettingsComponent implements OnInit {
   }
 
   onNebulaVersionChange(): void {
-    this.checkV2Support();
-    
-    // Warn if downgrading from v2/hybrid to incompatible version
-    if (!this.settings.v2_support_available && 
-        (this.settings.cert_version === 'v2' || this.settings.cert_version === 'hybrid')) {
-      this.notificationService.notify(
-        `Nebula ${this.settings.nebula_version} does not support certificate v2. Please select v1 certificate format.`,
-        'warning'
-      );
-    }
+    // Save will update v2_support_available from server response
   }
 
   onCertVersionChange(): void {
-    // Warn if selecting v2/hybrid without compatible Nebula version
-    if (!this.settings.v2_support_available && 
-        (this.settings.cert_version === 'v2' || this.settings.cert_version === 'hybrid')) {
-      this.notificationService.notify(
-        'Certificate v2/hybrid requires Nebula 1.10.0 or higher. Please upgrade Nebula version first.',
-        'warning'
-      );
-    }
-  }
-
-  private checkV2Support(): void {
-    // Check if current Nebula version supports v2 certificates (1.10.0+)
-    const version = this.settings.nebula_version || '';
-    const match = version.match(/^(\d+)\.(\d+)\.(\d+)/);
-    
-    if (match) {
-      const major = parseInt(match[1], 10);
-      const minor = parseInt(match[2], 10);
-      
-      this.settings.v2_support_available = (major > 1) || (major === 1 && minor >= 10);
-    } else {
-      this.settings.v2_support_available = false;
-    }
+    // Save will validate and update v2_support_available from server response
   }
 }
