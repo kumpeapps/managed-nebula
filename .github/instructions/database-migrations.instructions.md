@@ -25,6 +25,105 @@ Alembic works with all supported databases:
 - PostgreSQL (recommended for production)
 - MySQL (alternative for production)
 
+## CRITICAL: Idempotent Migrations
+
+**ALL migrations MUST be idempotent** - they must be safe to run multiple times without errors.
+
+### Why Idempotent Migrations Matter
+- Prevents failures when migrations are accidentally run multiple times
+- Allows safe migration reruns during development and testing
+- Essential for CI/CD pipelines and automated deployments
+- Protects against data corruption from duplicate operations
+
+### Required Pattern for All Migrations
+
+**ALWAYS** use SQLAlchemy inspector to check if schema elements exist before adding or dropping them:
+
+```python
+def upgrade() -> None:
+    # Get database connection and inspector
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    
+    # Check if column exists before adding
+    columns = {col['name'] for col in inspector.get_columns('table_name')}
+    if 'new_column' not in columns:
+        op.add_column('table_name', sa.Column('new_column', sa.String(50)))
+    
+    # Check if table exists before creating
+    tables = inspector.get_table_names()
+    if 'new_table' not in tables:
+        op.create_table(
+            'new_table',
+            sa.Column('id', sa.Integer(), primary_key=True),
+            sa.Column('name', sa.String(100))
+        )
+    
+    # Check if index exists before creating
+    indexes = {idx['name'] for idx in inspector.get_indexes('table_name')}
+    if 'idx_name' not in indexes:
+        op.create_index('idx_name', 'table_name', ['column_name'])
+
+def downgrade() -> None:
+    # Get database connection and inspector
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    
+    # Check if index exists before dropping
+    indexes = {idx['name'] for idx in inspector.get_indexes('table_name')}
+    if 'idx_name' in indexes:
+        op.drop_index('idx_name', table_name='table_name')
+    
+    # Check if table exists before dropping
+    tables = inspector.get_table_names()
+    if 'new_table' in tables:
+        op.drop_table('new_table')
+    
+    # Check if column exists before dropping
+    columns = {col['name'] for col in inspector.get_columns('table_name')}
+    if 'new_column' in columns:
+        op.drop_column('table_name', 'new_column')
+```
+
+### Checking Different Schema Elements
+
+```python
+# Columns
+columns = {col['name'] for col in inspector.get_columns('table_name')}
+if 'column_name' not in columns:
+    # Add column
+if 'column_name' in columns:
+    # Drop column
+
+# Tables
+tables = inspector.get_table_names()
+if 'table_name' not in tables:
+    # Create table
+if 'table_name' in tables:
+    # Drop table
+
+# Indexes
+indexes = {idx['name'] for idx in inspector.get_indexes('table_name')}
+if 'index_name' not in indexes:
+    # Create index
+if 'index_name' in indexes:
+    # Drop index
+
+# Foreign Keys
+fks = {fk['name'] for fk in inspector.get_foreign_keys('table_name')}
+if 'fk_name' not in fks:
+    # Create FK
+if 'fk_name' in fks:
+    # Drop FK
+
+# Unique Constraints
+uqs = {uq['name'] for uq in inspector.get_unique_constraints('table_name')}
+if 'uq_name' not in uqs:
+    # Create unique constraint
+if 'uq_name' in uqs:
+    # Drop unique constraint
+```
+
 ## Common Commands
 
 ### Applying Migrations
