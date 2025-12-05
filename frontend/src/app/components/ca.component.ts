@@ -26,6 +26,14 @@ import { CACertificate } from '../models';
               <label>Validity (months)</label>
               <input class="form-control" type="number" name="validity" [(ngModel)]="createPayload.validity_months" min="1" />
             </div>
+            <div class="form-group">
+              <label>Certificate Version</label>
+              <select class="form-control" name="cert_version" [(ngModel)]="createPayload.cert_version">
+                <option value="v1">v1 (Legacy, compatible with all Nebula versions)</option>
+                <option value="v2">v2 (Requires Nebula 1.10.0+, supports multiple IPs)</option>
+              </select>
+              <small class="form-text">v2 CAs can sign both v1 and v2 certificates. v1 CAs can only sign v1 certificates.</small>
+            </div>
             <div class="form-actions">
               <button type="button" class="btn btn-secondary" (click)="showCreate = false">Cancel</button>
               <button type="submit" class="btn btn-primary" [disabled]="creating || createForm.invalid">{{ creating ? 'Creating...' : 'Create' }}</button>
@@ -186,7 +194,7 @@ export class CAComponent implements OnInit {
   showImport = false;
   creating = false;
   importing = false;
-  createPayload: { name: string; validity_months?: number } = { name: '', validity_months: 18 };
+  createPayload: { name: string; validity_months?: number; cert_version?: string } = { name: '', validity_months: 18, cert_version: 'v1' };
   importPayload: { name: string; pem_cert: string; pem_key?: string } = { name: '', pem_cert: '', pem_key: '' };
 
   constructor(private api: ApiService) {}
@@ -217,7 +225,7 @@ export class CAComponent implements OnInit {
         this.cas = [...this.cas, created];
         this.showCreate = false;
         this.creating = false;
-        this.createPayload = { name: '', validity_months: 18 };
+        this.createPayload = { name: '', validity_months: 18, cert_version: 'v1' };
       },
       error: (e: any) => {
         alert('Create failed: ' + (e.error?.detail || 'Unknown error'));
