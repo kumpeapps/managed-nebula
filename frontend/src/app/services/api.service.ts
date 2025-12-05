@@ -310,6 +310,11 @@ export class ApiService {
     return this.applyDelay(this.http.get<PlaceholdersResponse>(`${this.apiUrl}/settings/placeholders`, { withCredentials: true }));
   }
 
+  // Nebula version management endpoints
+  getNebulaVersions(): Observable<NebulaVersionsResponse> {
+    return this.applyDelay(this.http.get<NebulaVersionsResponse>(`${this.apiUrl}/nebula/versions`, { withCredentials: true }));
+  }
+
   // Permissions endpoints
   getPermissions(): Observable<Permission[]> {
     return this.applyDelay(this.http.get<Permission[]>(`${this.apiUrl}/permissions`, { withCredentials: true }));

@@ -375,6 +375,8 @@ class NebulaVersionsResponse(BaseModel):
     """Response model for list of available Nebula versions."""
     current_version: str  # Version currently configured in system settings
     available_versions: List[NebulaVersionInfoResponse]
+    latest_stable: str  # Latest stable version available
+    versions: List[NebulaVersionInfoResponse]  # Alias for available_versions (for frontend compatibility)
 
 
 # ============ User Schemas ============
