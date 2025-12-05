@@ -413,14 +413,34 @@ async def update_settings(body: SettingsUpdate, session: AsyncSession = Depends(
     
     # Update cert_version if provided, with validation
     if body.cert_version is not None:
-        # Validate that v2/hybrid requires compatible Nebula version
+        # Validate that v2/hybrid requires compatible Nebula version on server
         if body.cert_version in ['v2', 'hybrid']:
             current_nebula_version = body.nebula_version if body.nebula_version is not None else getattr(row, 'nebula_version', '1.9.7')
             if not _is_v2_compatible(current_nebula_version):
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Certificate version '{body.cert_version}' requires Nebula 1.10.0+ or nightly build. Current version: {current_nebula_version}"
+                    detail=f"Certificate version '{body.cert_version}' requires Nebula 1.10.0+ or nightly build on server. Current server version: {current_nebula_version}"
                 )
+        
+        # Additional check: if switching to pure v2 (not hybrid), verify all clients are compatible
+        if body.cert_version == 'v2':
+            # Query all clients with their nebula_version
+            from ..models.db import Client
+            incompatible_clients = []
+            result = await session.execute(select(Client))
+            clients = result.scalars().all()
+            
+            for client in clients:
+                client_nebula_ver = getattr(client, 'nebula_version', None)
+                if client_nebula_ver and not _is_v2_compatible(client_nebula_ver):
+                    incompatible_clients.append(f"{client.name} (v{client_nebula_ver})")
+            
+            if incompatible_clients:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot switch to pure v2 certificates. The following clients are not compatible with v2 (require Nebula 1.10.0+): {', '.join(incompatible_clients)}. Use 'hybrid' mode to support mixed client versions."
+                )
+        
         row.cert_version = body.cert_version
     
     await session.commit()
