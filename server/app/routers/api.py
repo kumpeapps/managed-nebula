@@ -8,7 +8,7 @@ import logging
 
 from ..db import get_session
 from ..models import ClientToken, Client, IPAssignment, GlobalSettings, CACertificate, IPPool, Permission
-from ..models.client import ClientCertificate
+from ..models.client import ClientCertificate, IPGroup
 from ..models.system_settings import SystemSettings, GitHubSecretScanningLog
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,8 @@ from ..models.schemas import (
     IPGroupUpdate,
     IPGroupResponse,
     AvailableIPResponse,
+    IPAssignmentResponse,
+    AlternateIPAdd,
     CACreate,
     CAImport,
     CAResponse,
@@ -61,6 +63,9 @@ from ..models.schemas import (
     DockerComposeTemplateUpdate,
     PlaceholderInfo,
     PlaceholdersResponse,
+    NebulaVersionInfoResponse,
+    NebulaVersionsResponse,
+    VersionCacheResponse,
     ClientCreate,
     ClientPermissionGrant,
     ClientPermissionResponse,
@@ -129,11 +134,35 @@ async def build_client_response(client: Client, session: AsyncSession, user: Use
             token_obj = token_result.scalar_one_or_none()
             token_value = token_obj.token if token_obj else None
 
-    # Get IP assignment
+    # Get all IP assignments (supports multiple IPs for v2 certs)
     ip_result = await session.execute(
-        select(IPAssignment).where(IPAssignment.client_id == client.id)
+        select(IPAssignment).where(IPAssignment.client_id == client.id).order_by(IPAssignment.is_primary.desc())
     )
-    ip_assignment = ip_result.scalar_one_or_none()
+    ip_assignments = ip_result.scalars().all()
+    
+    # Build IP assignment responses
+    assigned_ips_list = [
+        IPAssignmentResponse(
+            id=ip.id,
+            ip_address=ip.ip_address,
+            ip_version=ip.ip_version,
+            is_primary=ip.is_primary,
+            pool_id=ip.pool_id,
+            ip_group_id=ip.ip_group_id
+        )
+        for ip in ip_assignments
+    ]
+    
+    # Extract primary IPv4 for backwards compatibility
+    primary_ipv4 = None
+    primary_ip_obj = next((ip for ip in ip_assignments if ip.is_primary and ip.ip_version == "ipv4"), None)
+    if primary_ip_obj:
+        primary_ipv4 = primary_ip_obj.ip_address
+    elif ip_assignments:
+        # Fallback to first IPv4 if no primary marked
+        first_ipv4 = next((ip for ip in ip_assignments if ip.ip_version == "ipv4"), None)
+        if first_ipv4:
+            primary_ipv4 = first_ipv4.ip_address
 
     # Get owner info
     owner_ref = None
@@ -145,39 +174,31 @@ async def build_client_response(client: Client, session: AsyncSession, user: Use
         if owner:
             owner_ref = UserRef(id=owner.id, email=owner.email)
 
-    # Compute version status if versions are available
+    # Compute version status if versions are available (using cache)
     version_status = None
     if client.client_version or client.nebula_version:
-        from ..services.advisory_checker import check_client_version_status
-        
-        # Get GitHub token from system settings if available
-        github_token = None
-        try:
-            github_token_setting = await session.execute(
-                select(SystemSettings).where(SystemSettings.key == "github_api_token")
-            )
-            token_row = github_token_setting.scalar_one_or_none()
-            if token_row:
-                github_token = token_row.value
-        except Exception:
-            pass
+        from ..services.advisory_checker import check_client_version_status_cached
         
         try:
-            status_dict = await check_client_version_status(
+            status_dict = await check_client_version_status_cached(
+                session,
                 client.client_version,
-                client.nebula_version,
-                github_token
+                client.nebula_version
             )
-            version_status = VersionStatus(**status_dict)
+            if status_dict:
+                version_status = VersionStatus(**status_dict)
         except Exception as e:
             logger.warning(f"Failed to compute version status for client {client.id}: {e}")
 
     return ClientResponse(
         id=client.id,
         name=client.name,
-        ip_address=ip_assignment.ip_address if ip_assignment else None,
-        pool_id=ip_assignment.pool_id if ip_assignment else None,
-        ip_group_id=ip_assignment.ip_group_id if ip_assignment else None,
+        ip_address=primary_ipv4,  # Backwards compatibility - use primary IPv4
+        pool_id=ip_assignments[0].pool_id if ip_assignments else None,
+        ip_group_id=ip_assignments[0].ip_group_id if ip_assignments else None,
+        ip_version=client.ip_version,
+        assigned_ips=assigned_ips_list,
+        primary_ipv4=primary_ipv4,
         is_lighthouse=client.is_lighthouse,
         public_ip=client.public_ip,
         is_blocked=client.is_blocked,
@@ -331,6 +352,20 @@ async def get_version_status(
 
 
 # ============ Settings ============
+
+def _is_v2_compatible(nebula_version: str) -> bool:
+    """Check if Nebula version supports v2 certificates (1.10.0+)."""
+    if nebula_version.startswith('nightly'):
+        return True
+    try:
+        from ..services.version_parser import compare_versions
+        return compare_versions(nebula_version, '1.10.0') >= 0
+    except Exception as e:
+        # Fallback: assume not compatible if parsing fails
+        logger.warning(f"Failed to parse version {nebula_version}: {e}")
+        return False
+
+
 @router.get("/settings", response_model=SettingsResponse)
 async def get_settings(session: AsyncSession = Depends(get_session), user: User = Depends(get_current_user)):
     row = (await session.execute(select(GlobalSettings))).scalars().first()
@@ -340,12 +375,20 @@ async def get_settings(session: AsyncSession = Depends(get_session), user: User 
         session.add(row)
         await session.commit()
         await session.refresh(row)
+    
+    # Check if v2 support is available based on nebula_version
+    nebula_ver = getattr(row, 'nebula_version', '1.9.7')
+    v2_available = _is_v2_compatible(nebula_ver)
+    
     return SettingsResponse(
         punchy_enabled=row.punchy_enabled,
         client_docker_image=row.client_docker_image,
         server_url=row.server_url,
         docker_compose_template=row.docker_compose_template,
-        externally_managed_users=settings.externally_managed_users
+        externally_managed_users=settings.externally_managed_users,
+        cert_version=getattr(row, 'cert_version', 'v1'),
+        nebula_version=nebula_ver,
+        v2_support_available=v2_available
     )
 
 
@@ -383,14 +426,59 @@ async def update_settings(body: SettingsUpdate, session: AsyncSession = Depends(
                 status_code=400, detail=f"Invalid YAML: {str(e)}"
             ) from e
         row.docker_compose_template = body.docker_compose_template
+    
+    # Update nebula_version if provided
+    if body.nebula_version is not None:
+        row.nebula_version = body.nebula_version
+    
+    # Update cert_version if provided, with validation
+    if body.cert_version is not None:
+        # Validate that v2/hybrid requires compatible Nebula version on server
+        if body.cert_version in ['v2', 'hybrid']:
+            current_nebula_version = body.nebula_version if body.nebula_version is not None else getattr(row, 'nebula_version', '1.9.7')
+            if not _is_v2_compatible(current_nebula_version):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Certificate version '{body.cert_version}' requires Nebula 1.10.0+ or nightly build on server. Current server version: {current_nebula_version}"
+                )
+        
+        # Additional check: if switching to pure v2 (not hybrid), verify all clients are compatible
+        if body.cert_version == 'v2':
+            # Query all clients with their nebula_version
+            from ..models.db import Client
+            incompatible_clients = []
+            result = await session.execute(select(Client))
+            clients = result.scalars().all()
+            
+            for client in clients:
+                client_nebula_ver = getattr(client, 'nebula_version', None)
+                if client_nebula_ver and not _is_v2_compatible(client_nebula_ver):
+                    incompatible_clients.append(f"{client.name} (v{client_nebula_ver})")
+            
+            if incompatible_clients:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot switch to pure v2 certificates. The following clients are not compatible with v2 (require Nebula 1.10.0+): {', '.join(incompatible_clients)}. Use 'hybrid' mode to support mixed client versions."
+                )
+        
+        row.cert_version = body.cert_version
+    
     await session.commit()
     await session.refresh(row)
+    
+    # Compute v2 support availability
+    nebula_ver = getattr(row, 'nebula_version', '1.9.7')
+    v2_available = _is_v2_compatible(nebula_ver)
+    
     return SettingsResponse(
         punchy_enabled=row.punchy_enabled,
         client_docker_image=row.client_docker_image,
         server_url=row.server_url,
         docker_compose_template=row.docker_compose_template,
-        externally_managed_users=settings.externally_managed_users
+        externally_managed_users=settings.externally_managed_users,
+        cert_version=getattr(row, 'cert_version', 'v1'),
+        nebula_version=nebula_ver,
+        v2_support_available=v2_available
     )
 
 
@@ -482,6 +570,137 @@ async def get_placeholders(user: User = Depends(require_permission("settings", "
     return PlaceholdersResponse(placeholders=placeholders)
 
 
+# ============ Version Cache Management ============
+
+@router.get("/settings/version-cache", response_model=VersionCacheResponse)
+async def get_version_cache_status(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user)
+):
+    """
+    Get version cache status (last check time, cached versions).
+    """
+    from datetime import datetime
+    
+    # Get last checked timestamp
+    cache_check_result = await session.execute(
+        select(SystemSettings).where(SystemSettings.key == "version_cache_last_checked")
+    )
+    cache_check_row = cache_check_result.scalar_one_or_none()
+    
+    last_checked = None
+    cache_age_hours = None
+    if cache_check_row:
+        try:
+            last_checked = datetime.fromisoformat(cache_check_row.value)
+            cache_age_hours = (datetime.utcnow() - last_checked).total_seconds() / 3600
+        except Exception:
+            pass
+    
+    # Get cached versions
+    latest_client_result = await session.execute(
+        select(SystemSettings).where(SystemSettings.key == "latest_client_version")
+    )
+    latest_client_row = latest_client_result.scalar_one_or_none()
+    
+    latest_nebula_result = await session.execute(
+        select(SystemSettings).where(SystemSettings.key == "latest_nebula_version")
+    )
+    latest_nebula_row = latest_nebula_result.scalar_one_or_none()
+    
+    return VersionCacheResponse(
+        last_checked=last_checked,
+        latest_client_version=latest_client_row.value if latest_client_row else None,
+        latest_nebula_version=latest_nebula_row.value if latest_nebula_row else None,
+        cache_age_hours=cache_age_hours
+    )
+
+
+@router.post("/settings/version-cache/refresh")
+async def refresh_version_cache_endpoint(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_permission("settings", "update"))
+):
+    """
+    Manually refresh version cache by querying GitHub API.
+    Requires settings update permission.
+    """
+    from ..services.advisory_checker import refresh_version_cache
+    
+    # Get GitHub token from system settings
+    github_token = None
+    try:
+        github_token_setting = await session.execute(
+            select(SystemSettings).where(SystemSettings.key == "github_api_token")
+        )
+        token_row = github_token_setting.scalar_one_or_none()
+        if token_row:
+            github_token = token_row.value
+    except Exception:
+        pass
+    
+    result = await refresh_version_cache(session, github_token)
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=503, detail=result.get("error", "Failed to refresh cache"))
+    
+    return result
+
+
+# ============ Nebula Version Management ============
+
+@router.get("/nebula/versions", response_model=NebulaVersionsResponse)
+async def get_nebula_versions(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user)
+):
+    """
+    Get available Nebula versions from GitHub releases.
+    
+    Returns the current configured version and list of available versions
+    from the slackhq/nebula GitHub repository.
+    """
+    from ..services.nebula_version_manager import NebulaVersionService
+    
+    # Get current version from settings
+    row = (await session.execute(select(GlobalSettings))).scalars().first()
+    current_version = getattr(row, 'nebula_version', '1.9.7') if row else '1.9.7'
+    
+    # Fetch available versions from GitHub
+    version_service = NebulaVersionService(github_token=settings.github_token)
+    available_versions = await version_service.fetch_available_versions(include_prereleases=True)
+    
+    # Convert to response format
+    version_responses = [
+        NebulaVersionInfoResponse(
+            version=v.version,
+            release_date=v.release_date,
+            is_stable=v.is_stable,
+            supports_v2=v.supports_v2,
+            download_url_linux_amd64=v.download_url_linux_amd64,
+            download_url_linux_arm64=v.download_url_linux_arm64,
+            download_url_darwin_amd64=v.download_url_darwin_amd64,
+            download_url_darwin_arm64=v.download_url_darwin_arm64,
+            download_url_windows_amd64=v.download_url_windows_amd64,
+            checksum=v.checksum
+        )
+        for v in available_versions
+    ]
+    
+    # Find latest stable version
+    latest_stable = next(
+        (v.version for v in available_versions if v.is_stable),
+        current_version  # Fallback to current if no stable found
+    )
+    
+    return NebulaVersionsResponse(
+        current_version=current_version,
+        available_versions=version_responses,
+        latest_stable=latest_stable,
+        versions=version_responses  # Alias for frontend
+    )
+
+
 @router.post("/client/config")
 async def get_client_config(body: ClientConfigRequest, session: AsyncSession = Depends(get_session)):
     # Validate token
@@ -503,9 +722,13 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
         .where(Client.id == token.client_id)
     )
     client = cq.scalar_one_or_none()
-    # Resolve IP assignment
-    q2 = await session.execute(select(IPAssignment).where(IPAssignment.client_id == client.id))
-    ip_assignment = q2.scalar_one_or_none()
+    # Resolve primary IP assignment (or first if no primary marked)
+    q2 = await session.execute(
+        select(IPAssignment)
+        .where(IPAssignment.client_id == client.id)
+        .order_by(IPAssignment.is_primary.desc(), IPAssignment.id)
+    )
+    ip_assignment = q2.scalars().first()
     if not ip_assignment:
         raise HTTPException(
             status_code=409, detail="Client has no IP assignment")
@@ -544,6 +767,57 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
     if getattr(client, 'is_blocked', False):
         raise HTTPException(status_code=403, detail="Client is blocked")
 
+    # Determine cert version: use v2/hybrid features if client requires multiple IPs or is compatible
+    cert_version = getattr(settings, 'cert_version', 'v1')
+    client_ip_version = getattr(client, 'ip_version', 'ipv4_only')
+    client_nebula_version = getattr(client, 'nebula_version', None)
+    
+    # Client IP versions that require v2 features (multiple IPs or dual stack)
+    requires_v2_features = client_ip_version in ['multi_ipv4', 'multi_ipv6', 'multi_both', 'dual_stack', 'ipv6_only']
+    
+    # Check if client's Nebula version supports v2 certs (1.10.0+)
+    supports_v2 = False
+    if client_nebula_version:
+        try:
+            # Parse version string (e.g., "1.10.0", "v1.10.0")
+            version_str = client_nebula_version.lstrip('v')
+            parts = version_str.split('.')
+            if len(parts) >= 2:
+                major = int(parts[0])
+                minor = int(parts[1])
+                # Nebula 1.10.0+ supports v2 certs
+                supports_v2 = (major > 1) or (major == 1 and minor >= 10)
+        except (ValueError, AttributeError):
+            # If we can't parse version, assume it doesn't support v2
+            supports_v2 = False
+    
+    # If client needs v2 features but global is v1, upgrade to v2
+    if requires_v2_features and cert_version == 'v1':
+        cert_version = 'v2'
+    # If global is hybrid and client supports v2, use hybrid (for backwards compatibility + v2 features)
+    elif cert_version == 'hybrid' and supports_v2:
+        # Keep hybrid - this allows v2 features with backwards compatibility
+        pass
+    elif cert_version == 'hybrid' and not supports_v2:
+        # Client doesn't support v2, so hybrid CA will issue v1-compatible cert
+        # But we can't use multiple IPs
+        if requires_v2_features:
+            # This is a problem - client needs v2 features but doesn't support them
+            # Upgrade anyway and hope for the best (or client needs to upgrade)
+            pass
+    # Otherwise use global setting (v1, v2, or hybrid)
+    
+    # For v2 or hybrid certs, gather all IPs for the client
+    all_ips = []
+    if cert_version in ['v2', 'hybrid']:
+        # Get all IP assignments for this client (ordered by primary first)
+        all_ip_rows = (await session.execute(
+            select(IPAssignment)
+            .where(IPAssignment.client_id == client.id)
+            .order_by(IPAssignment.is_primary.desc(), IPAssignment.id)
+        )).scalars().all()
+        all_ips = [row.ip_address for row in all_ip_rows]
+    
     # Generate or rotate client certificate using provided public key
     cert_mgr = CertManager(session)
     try:
@@ -552,6 +826,8 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
             public_key_str=body.public_key,
             client_ip=ip_assignment.ip_address,
             cidr_prefix=prefix,
+            cert_version=cert_version,
+            all_ips=all_ips if all_ips else None,
         )
     except RuntimeError as e:
         # Convert cert generation errors (e.g., invalid public key) to 400 Bad Request
@@ -569,7 +845,11 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
     static_map: dict[str, list[str]] = {}
     lh_hosts: list[str] = []
     for lh in lighthouses:
-        lh_ip_row = (await session.execute(select(IPAssignment).where(IPAssignment.client_id == lh.id))).scalars().first()
+        lh_ip_row = (await session.execute(
+            select(IPAssignment)
+            .where(IPAssignment.client_id == lh.id)
+            .order_by(IPAssignment.is_primary.desc(), IPAssignment.id)
+        )).scalars().first()
         if not lh_ip_row:
             continue
         if not lh.public_ip:
@@ -952,6 +1232,13 @@ async def update_client(
     if body.is_blocked is not None:
         client.is_blocked = body.is_blocked
 
+    if body.os_type is not None and body.os_type != client.os_type:
+        client.os_type = body.os_type
+
+    if body.ip_version is not None and body.ip_version != client.ip_version:
+        client.ip_version = body.ip_version
+        config_changed = True
+
     # Update group memberships
     if body.group_ids is not None:
         # Fetch requested groups
@@ -1132,6 +1419,149 @@ async def delete_client(
             status_code=500,
             detail=f"Failed to delete client: {str(e)}"
         )
+
+
+# ============ Client Alternate IPs ============
+
+@router.post("/clients/{client_id}/alternate-ips", response_model=IPAssignmentResponse, status_code=201)
+async def add_alternate_ip(
+    client_id: int,
+    body: AlternateIPAdd,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_permission("clients", "update"))
+):
+    """Add an alternate IP address to a client (for multi-IP configurations)."""
+    from ipaddress import ip_address as validate_ip
+    
+    # Verify client exists
+    client_result = await session.execute(select(Client).where(Client.id == client_id))
+    client = client_result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    # Validate IP address format
+    try:
+        ip_obj = validate_ip(body.ip_address)
+        detected_version = "ipv6" if ip_obj.version == 6 else "ipv4"
+        if body.ip_version != detected_version:
+            raise HTTPException(
+                status_code=400,
+                detail=f"IP version mismatch: provided '{body.ip_version}' but detected '{detected_version}'"
+            )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid IP address format")
+    
+    # Check if IP is already assigned
+    existing_result = await session.execute(
+        select(IPAssignment).where(IPAssignment.ip_address == body.ip_address)
+    )
+    if existing_result.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="IP address already assigned")
+    
+    # Validate pool and group if provided
+    if body.pool_id:
+        pool_result = await session.execute(select(IPPool).where(IPPool.id == body.pool_id))
+        pool = pool_result.scalar_one_or_none()
+        if not pool:
+            raise HTTPException(status_code=404, detail="IP Pool not found")
+        
+        # Verify IP is within pool CIDR
+        from ipaddress import ip_network
+        pool_network = ip_network(pool.cidr)
+        if ip_obj not in pool_network:
+            raise HTTPException(
+                status_code=400,
+                detail=f"IP {body.ip_address} is not within pool CIDR {pool.cidr}"
+            )
+    
+    if body.ip_group_id:
+        group_result = await session.execute(select(IPGroup).where(IPGroup.id == body.ip_group_id))
+        group = group_result.scalar_one_or_none()
+        if not group:
+            raise HTTPException(status_code=404, detail="IP Group not found")
+        
+        # Verify IP is within group range
+        from ipaddress import ip_address as parse_ip
+        start_ip = parse_ip(group.start_ip)
+        end_ip = parse_ip(group.end_ip)
+        if not (start_ip <= ip_obj <= end_ip):
+            raise HTTPException(
+                status_code=400,
+                detail=f"IP {body.ip_address} is not within group range {group.start_ip} - {group.end_ip}"
+            )
+    
+    # Create the alternate IP assignment (not primary)
+    ip_assignment = IPAssignment(
+        client_id=client_id,
+        ip_address=body.ip_address,
+        ip_version=body.ip_version,
+        is_primary=False,
+        pool_id=body.pool_id,
+        ip_group_id=body.ip_group_id
+    )
+    session.add(ip_assignment)
+    
+    # Mark config as changed to trigger certificate regeneration
+    client.config_last_changed_at = datetime.utcnow()
+    
+    await session.commit()
+    await session.refresh(ip_assignment)
+    
+    logger.info(f"Added alternate IP {body.ip_address} to client {client_id} by user {user.email}")
+    
+    return IPAssignmentResponse(
+        id=ip_assignment.id,
+        ip_address=ip_assignment.ip_address,
+        ip_version=ip_assignment.ip_version,
+        is_primary=ip_assignment.is_primary,
+        pool_id=ip_assignment.pool_id,
+        ip_group_id=ip_assignment.ip_group_id
+    )
+
+
+@router.delete("/clients/{client_id}/alternate-ips/{ip_assignment_id}", status_code=200)
+async def delete_alternate_ip(
+    client_id: int,
+    ip_assignment_id: int,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_permission("clients", "update"))
+):
+    """Delete an alternate IP address from a client."""
+    # Verify client exists
+    client_result = await session.execute(select(Client).where(Client.id == client_id))
+    client = client_result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    # Get the IP assignment
+    ip_result = await session.execute(
+        select(IPAssignment).where(
+            IPAssignment.id == ip_assignment_id,
+            IPAssignment.client_id == client_id
+        )
+    )
+    ip_assignment = ip_result.scalar_one_or_none()
+    if not ip_assignment:
+        raise HTTPException(status_code=404, detail="IP assignment not found")
+    
+    # Prevent deletion of primary IP
+    if ip_assignment.is_primary:
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot delete primary IP. Change the IP configuration to reassign the primary IP first."
+        )
+    
+    ip_address = ip_assignment.ip_address
+    await session.delete(ip_assignment)
+    
+    # Mark config as changed to trigger certificate regeneration
+    client.config_last_changed_at = datetime.utcnow()
+    
+    await session.commit()
+    
+    logger.info(f"Deleted alternate IP {ip_address} from client {client_id} by user {user.email}")
+    
+    return {"status": "deleted", "id": ip_assignment_id, "ip_address": ip_address}
 
 
 # ============ Client Ownership & Permissions ============
@@ -1405,6 +1835,48 @@ async def reissue_client_certificate(
         pool = pool_result.scalar_one_or_none()
         if pool:
             cidr = pool.cidr
+    
+    import ipaddress
+    try:
+        prefix = ipaddress.ip_network(cidr, strict=False).prefixlen
+    except Exception:
+        prefix = 24
+
+    # Determine cert version: use v2/hybrid features if client requires multiple IPs or is compatible
+    from ..core.config import settings
+    cert_version = getattr(settings, 'cert_version', 'v1')
+    client_ip_version = getattr(client, 'ip_version', 'ipv4_only')
+    client_nebula_version = getattr(client, 'nebula_version', None)
+    
+    requires_v2_features = client_ip_version in ['multi_ipv4', 'multi_ipv6', 'multi_both', 'dual_stack', 'ipv6_only']
+    
+    # Check if client supports v2 (Nebula 1.10.0+)
+    supports_v2 = False
+    if client_nebula_version:
+        try:
+            version_str = client_nebula_version.lstrip('v')
+            parts = version_str.split('.')
+            if len(parts) >= 2:
+                major = int(parts[0])
+                minor = int(parts[1])
+                supports_v2 = (major > 1) or (major == 1 and minor >= 10)
+        except (ValueError, AttributeError):
+            supports_v2 = False
+    
+    if requires_v2_features and cert_version == 'v1':
+        cert_version = 'v2'
+    # Keep hybrid for compatible clients when global is hybrid
+    # Otherwise use global setting (v1, v2, or hybrid)
+    
+    # For v2 or hybrid certs, gather all IPs
+    all_ips = []
+    if cert_version in ['v2', 'hybrid']:
+        all_ip_rows = (await session.execute(
+            select(IPAssignment)
+            .where(IPAssignment.client_id == client.id)
+            .order_by(IPAssignment.is_primary.desc(), IPAssignment.id)
+        )).scalars().all()
+        all_ips = [row.ip_address for row in all_ip_rows]
 
     # Issue new certificate
     cert_manager = CertManager(session)
@@ -1427,14 +1899,14 @@ async def reissue_client_certificate(
         with open(pub_path, "r") as f:
             public_key_pem = f.read()
 
-        # Issue certificate
-        cert_pem = cert_manager.issue_or_rotate_client_cert(
+        # Issue certificate using correct signature
+        cert_pem, not_before, not_after = await cert_manager.issue_or_rotate_client_cert(
             client=client,
-            ip_assignment=ip_assignment,
-            cidr=cidr,
-            public_key_pem=public_key_pem,
-            active_ca=active_ca,
-            session=session
+            public_key_str=public_key_pem,
+            client_ip=ip_assignment.ip_address,
+            cidr_prefix=prefix,
+            cert_version=cert_version,
+            all_ips=all_ips if all_ips else None
         )
 
     await session.commit()
@@ -1584,7 +2056,11 @@ async def download_client_config(
     static_map: dict[str, list[str]] = {}
     lh_hosts: list[str] = []
     for lh in lighthouses:
-        ip_row = (await session.execute(select(IPAssignment).where(IPAssignment.client_id == lh.id))).scalars().first()
+        ip_row = (await session.execute(
+            select(IPAssignment)
+            .where(IPAssignment.client_id == lh.id)
+            .order_by(IPAssignment.is_primary.desc(), IPAssignment.id)
+        )).scalars().first()
         if not ip_row:
             continue
         if not lh.public_ip:
@@ -2872,7 +3348,9 @@ async def list_cas(session: AsyncSession = Depends(get_session), user: User = De
             can_sign=ca.can_sign,
             include_in_config=ca.include_in_config,
             created_at=ca.created_at,
-            status=_classify_ca_status(ca)
+            status=_classify_ca_status(ca),
+            cert_version=getattr(ca, 'cert_version', 'v1'),  # Default to v1 for existing CAs
+            nebula_version=getattr(ca, 'nebula_version', None)  # May be None for existing CAs
         )
         for ca in cas
     ]
@@ -2883,9 +3361,27 @@ async def create_ca(body: CACreate, session: AsyncSession = Depends(get_session)
     # Use CertManager to create CA
     cert_manager = CertManager(session)
     ca_name = body.name
+    cert_version = body.cert_version or "v1"
+    
+    # Validate cert_version
+    if cert_version not in ["v1", "v2"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid cert_version '{cert_version}'. Must be 'v1' or 'v2'."
+        )
+    
+    # Check if v2 requires Nebula 1.10.0+
+    if cert_version == "v2":
+        settings_row = (await session.execute(select(GlobalSettings))).scalars().first()
+        nebula_ver = getattr(settings_row, 'nebula_version', '1.9.7') if settings_row else '1.9.7'
+        if not _is_v2_compatible(nebula_ver):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot create v2 CA. Server Nebula version {nebula_ver} does not support v2 certificates. Requires Nebula 1.10.0+ or nightly build."
+            )
 
     try:
-        ca = await cert_manager.create_new_ca(ca_name)
+        ca = await cert_manager.create_new_ca(ca_name, cert_version=cert_version)
         await session.commit()
         await session.refresh(ca)
     except Exception as e:
@@ -2902,7 +3398,9 @@ async def create_ca(body: CACreate, session: AsyncSession = Depends(get_session)
         can_sign=ca.can_sign,
         include_in_config=ca.include_in_config,
         created_at=ca.created_at,
-        status=_classify_ca_status(ca)
+        status=_classify_ca_status(ca),
+        cert_version=getattr(ca, 'cert_version', 'v1'),
+        nebula_version=getattr(ca, 'nebula_version', None)
     )
 
 
@@ -2927,7 +3425,9 @@ async def import_ca(body: CAImport, session: AsyncSession = Depends(get_session)
         can_sign=ca.can_sign,
         include_in_config=ca.include_in_config,
         created_at=ca.created_at,
-        status=_classify_ca_status(ca)
+        status=_classify_ca_status(ca),
+        cert_version=getattr(ca, 'cert_version', 'v1'),
+        nebula_version=getattr(ca, 'nebula_version', None)
     )
 
 
@@ -2971,7 +3471,9 @@ async def set_signing_ca(ca_id: int, session: AsyncSession = Depends(get_session
         can_sign=ca.can_sign,
         include_in_config=ca.include_in_config,
         created_at=ca.created_at,
-        status=_classify_ca_status(ca)
+        status=_classify_ca_status(ca),
+        cert_version=getattr(ca, 'cert_version', 'v1'),
+        nebula_version=getattr(ca, 'nebula_version', None)
     )
 
 @router.delete("/ca/{ca_id}")

@@ -23,6 +23,9 @@ class Settings(BaseModel):
 
     # If true, users are managed externally and local add/edit/delete should be disabled
     externally_managed_users: bool = os.getenv("EXTERNALLY_MANAGED_USERS", "false").lower() in ("true", "1", "yes")
+    
+    # GitHub API token for accessing GitHub API (optional, but recommended for higher rate limits)
+    github_token: str = os.getenv("GITHUB_TOKEN", "")
 
 
 settings = Settings()

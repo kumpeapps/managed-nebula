@@ -110,6 +110,31 @@ Resolves #12
 - **Database-agnostic** via SQLAlchemy async: supports SQLite (default), PostgreSQL, MySQL
   - Configure via `DB_URL` env var (e.g., `sqlite+aiosqlite:///./app.db`, `postgresql+asyncpg://...`)
 - **Alembic** for schema migrations in `server/alembic/versions/`
+- **CRITICAL: All migrations MUST be idempotent**
+  - Always check if columns/tables/indexes exist before adding them
+  - Always check if columns/tables/indexes exist before dropping them
+  - Use SQLAlchemy inspector to check schema state
+  - Example pattern:
+    ```python
+    def upgrade() -> None:
+        conn = op.get_bind()
+        inspector = sa.inspect(conn)
+        
+        # Check if column exists before adding
+        columns = {col['name'] for col in inspector.get_columns('table_name')}
+        if 'new_column' not in columns:
+            op.add_column('table_name', sa.Column('new_column', sa.String(50)))
+    
+    def downgrade() -> None:
+        conn = op.get_bind()
+        inspector = sa.inspect(conn)
+        
+        # Check if column exists before dropping
+        columns = {col['name'] for col in inspector.get_columns('table_name')}
+        if 'new_column' in columns:
+            op.drop_column('table_name', 'new_column')
+    ```
+  - This ensures migrations can be run multiple times safely without errors
 - **Runtime column additions** happen in `main.py::migrate_columns()` using SQLAlchemy introspection - idempotent DDL for adding columns without full migrations
 - Run migrations: `docker exec -it nebula-server bash -lc "alembic upgrade head"` (inside container)
 

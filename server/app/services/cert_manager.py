@@ -17,7 +17,16 @@ class CertManager:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def create_new_ca(self, name: str) -> CACertificate:
+    async def create_new_ca(self, name: str, cert_version: str = "v1") -> CACertificate:
+        """Create a new CA certificate.
+        
+        Args:
+            name: CA name
+            cert_version: Certificate version - v1, v2, or hybrid
+                - v1: Traditional single-signature CA (compatible with all Nebula versions)
+                - v2: V2-only CA (requires Nebula 1.10.0+, uses -version 2 flag)
+                - hybrid: Dual-signature CA (backward compatible, no -version flag)
+        """
         now = datetime.utcnow()
         # nebula-cert expects Go-style durations (e.g., hours). Convert days -> hours.
         duration_hours = settings.ca_default_validity_days * 24
@@ -32,6 +41,11 @@ class CertManager:
                 "-duration",
                 duration,
             ]
+            # Add -version flag for pure v2 CAs only
+            # Hybrid CAs are created WITHOUT -version flag (creates dual signatures)
+            if cert_version == "v2":
+                cmd.extend(["-version", "2"])
+            
             subprocess.check_call(cmd, cwd=td)
             # Files: ca.key, ca.crt
             with open(os.path.join(td, "ca.crt"), "rb") as f:
@@ -62,6 +76,8 @@ class CertManager:
             is_previous=False,
             can_sign=True,
             include_in_config=True,
+            cert_version=cert_version,
+            nebula_version="1.10.0",
         )
         self.session.add(ca)
         await self.session.commit()
@@ -84,20 +100,29 @@ class CertManager:
             await self.create_new_ca(f"Rotated CA {now.date()}")
 
     async def issue_or_rotate_client_cert(
-        self, client: Client, public_key_str: str, client_ip: str, cidr_prefix: int | None = None
+        self, client: Client, public_key_str: str, client_ip: str, cidr_prefix: int | None = None,
+        cert_version: str = "v1", all_ips: list[str] | None = None
     ) -> Tuple[str, datetime, datetime]:
         """Issue or reuse a Nebula host certificate for client using provided public key.
 
         Args:
             client: The client to issue cert for
             public_key_str: The client's public key
-            client_ip: The client's IP address (without CIDR)
+            client_ip: The client's IP address (without CIDR) - primary IP for v1
             cidr_prefix: Network prefix length (e.g., 16 for /16). If None, uses /32.
+            cert_version: Certificate version (v1 or v2). v2 requires Nebula 1.10.0+
+            all_ips: List of all IP addresses for v2 certs (optional, v2 only)
         """
         from sqlalchemy import desc
 
         # Compute current issuance context
         ip_with_cidr = f"{client_ip}/{cidr_prefix}" if cidr_prefix else f"{client_ip}/32"
+        
+        # For v2/hybrid certs with multiple IPs, create a sorted comma-separated list for comparison
+        all_ips_str = None
+        if cert_version in ["v2", "hybrid"] and all_ips:
+            all_ips_str = ",".join(sorted(all_ips))
+        
         # Hash groups for change detection
         import hashlib
         group_names = []
@@ -117,17 +142,41 @@ class CertManager:
             )
         ).scalars().first()
         now = datetime.utcnow()
+        
         # Reuse existing cert if:
         # - It exists and is not revoked
         # - Not close to expiry (>= 7 days remaining)
-        # - Issuance context unchanged (IP/CIDR and groups hash)
+        # - Certificate version matches what we need
+        # - Issuance context unchanged (IP/CIDR, all IPs for v2, and groups hash)
         if existing and not existing.revoked and (existing.not_after - now).days >= 7:
+            # Check cert version compatibility
+            existing_cert_version = getattr(existing, 'cert_version', 'v1')
+            
+            # For v2/hybrid certs, check if all_ips match
+            ips_match = True
+            if cert_version in ["v2", "hybrid"] and all_ips:
+                # Must have matching cert version for v2
+                if existing_cert_version not in ['v2', 'hybrid']:
+                    # Existing cert is v1, but we need v2 - must regenerate
+                    ips_match = False
+                else:
+                    # Compare all IPs for v2 certificates
+                    existing_all_ips = getattr(existing, 'issued_for_all_ips', None)
+                    ips_match = (existing_all_ips == all_ips_str)
+            else:
+                # For v1 certs, only check primary IP and version
+                if existing_cert_version in ['v2', 'hybrid'] and cert_version == 'v1':
+                    # Existing is v2 but we want v1 - must regenerate
+                    ips_match = False
+                else:
+                    ips_match = (existing.issued_for_ip_cidr == ip_with_cidr)
+            
             if (
-                existing.issued_for_ip_cidr == ip_with_cidr
+                ips_match
                 and (existing.issued_for_groups_hash or "") == (groups_hash or "")
             ):
                 return existing.pem_cert, existing.not_before, existing.not_after
-
+        
         active_cas = (
             await self.session.execute(
                 select(CACertificate).where(CACertificate.is_active == True, CACertificate.can_sign == True)
@@ -164,8 +213,6 @@ class CertManager:
                 "sign",
                 "-name",
                 client.name,
-                "-ip",
-                ip_with_cidr,
                 "-duration",
                 duration,
                 "-ca-crt",
@@ -176,7 +223,23 @@ class CertManager:
                 pub_path,
                 "-out-crt",
                 out_crt,
-            ] + groups_arg
+            ]
+            
+            # Add IP addresses
+            if cert_version in ["v2", "hybrid"] and all_ips:
+                # v2/hybrid: Multiple IPs using -networks with comma-separated list
+                networks_list = [f"{ip}/{cidr_prefix}" if cidr_prefix else f"{ip}/32" for ip in all_ips]
+                networks_str = ",".join(networks_list)
+                cmd.extend(["-networks", networks_str])
+                # Only add -version 2 for pure v2 certs
+                # Hybrid certs get hybrid nature from the CA, not from -version flag
+                if cert_version == "v2":
+                    cmd.extend(["-version", "2"])
+            else:
+                # v1: Single IP only with -ip flag
+                cmd.extend(["-ip", ip_with_cidr])
+            
+            cmd.extend(groups_arg)
 
             try:
                 subprocess.check_output(cmd, cwd=td, stderr=subprocess.STDOUT)
@@ -195,7 +258,11 @@ class CertManager:
                 ], cwd=td)
                 import json as _json
                 info = _json.loads(out.decode())
-                fingerprint = info.get("fingerprint") or info.get("Fingerprint")
+                # For v1+v2 bundles, info is a list. Use v2 fingerprint (last element)
+                if isinstance(info, list):
+                    fingerprint = info[-1].get("fingerprint") if info else None
+                else:
+                    fingerprint = info.get("fingerprint") or info.get("Fingerprint")
             except Exception:
                 # nebula-cert print may fail; fingerprint is optional
                 fingerprint = None
@@ -209,6 +276,8 @@ class CertManager:
             fingerprint=fingerprint,
             issued_for_ip_cidr=ip_with_cidr,
             issued_for_groups_hash=groups_hash,
+            issued_for_all_ips=all_ips_str,  # Store all IPs for v2 cert change detection
+            cert_version=cert_version,
         )
         self.session.add(cc)
         await self.session.commit()

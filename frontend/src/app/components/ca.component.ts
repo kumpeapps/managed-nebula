@@ -26,6 +26,17 @@ import { CACertificate } from '../models';
               <label>Validity (months)</label>
               <input class="form-control" type="number" name="validity" [(ngModel)]="createPayload.validity_months" min="1" />
             </div>
+            <div class="form-group">
+              <label>Certificate Authority Version</label>
+              <select class="form-control" name="cert_version" [(ngModel)]="createPayload.cert_version">
+                <option value="v1">v1 CA (Can only sign v1 certificates - for legacy servers)</option>
+                <option value="v2">v2 CA (Can sign BOTH v1 and v2 certificates - recommended)</option>
+              </select>
+              <small class="form-text">
+                <strong>Recommended:</strong> Choose v2 CA. It can sign v1 certificates for clients running Nebula &lt; 1.10.0 
+                AND v2 certificates for clients running Nebula 1.10.0+. Only choose v1 CA if your server cannot run Nebula 1.10.0+.
+              </small>
+            </div>
             <div class="form-actions">
               <button type="button" class="btn btn-secondary" (click)="showCreate = false">Cancel</button>
               <button type="submit" class="btn btn-primary" [disabled]="creating || createForm.invalid">{{ creating ? 'Creating...' : 'Create' }}</button>
@@ -79,6 +90,7 @@ import { CACertificate } from '../models';
         <thead>
           <tr>
             <th>Name</th>
+            <th>Cert Version</th>
             <th>Status</th>
             <th>Can Sign</th>
             <th>Validity</th>
@@ -88,6 +100,12 @@ import { CACertificate } from '../models';
         <tbody>
           <tr *ngFor="let ca of cas">
             <td>{{ ca.name }}</td>
+            <td>
+              <span class="badge" [ngClass]="ca.cert_version === 'v2' ? 'badge-v2' : 'badge-v1'">
+                {{ ca.cert_version || 'v1' }}
+              </span>
+              <span *ngIf="ca.cert_version === 'v2'" class="cert-version-note" title="Can sign both v1 and v2 certificates">✓ Multi-version</span>
+            </td>
             <td>
               <span class="badge" [ngClass]="statusClass(ca.status)">{{ ca.status }}</span>
               <span *ngIf="ca.is_active && ca.can_sign" class="badge badge-signing">Signing</span>
@@ -118,6 +136,9 @@ import { CACertificate } from '../models';
     .badge-signing { background:#007bff; color:#fff; margin-left:0.5rem; }
     .badge-yes { background:#d4edda; color:#155724; }
     .badge-no { background:#f8d7da; color:#721c24; }
+    .badge-v1 { background:#e2e3e5; color:#383d41; }
+    .badge-v2 { background:#cfe2ff; color:#084298; }
+    .cert-version-note { font-size:.7rem; color:#666; margin-left:.5rem; }
     .actions-cell { display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; }
     .modal { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; }
     .modal-content { background:#fff; padding:1.5rem; width:600px; max-width:95%; border-radius:8px; }
@@ -186,7 +207,7 @@ export class CAComponent implements OnInit {
   showImport = false;
   creating = false;
   importing = false;
-  createPayload: { name: string; validity_months?: number } = { name: '', validity_months: 18 };
+  createPayload: { name: string; validity_months?: number; cert_version?: string } = { name: '', validity_months: 18, cert_version: 'v1' };
   importPayload: { name: string; pem_cert: string; pem_key?: string } = { name: '', pem_cert: '', pem_key: '' };
 
   constructor(private api: ApiService) {}
@@ -217,7 +238,7 @@ export class CAComponent implements OnInit {
         this.cas = [...this.cas, created];
         this.showCreate = false;
         this.creating = false;
-        this.createPayload = { name: '', validity_months: 18 };
+        this.createPayload = { name: '', validity_months: 18, cert_version: 'v1' };
       },
       error: (e: any) => {
         alert('Create failed: ' + (e.error?.detail || 'Unknown error'));

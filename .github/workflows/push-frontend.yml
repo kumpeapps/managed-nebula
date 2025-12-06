@@ -71,17 +71,25 @@ jobs:
       - name: Get Latest Release Version
         id: get_version
         run: |
-          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
-          echo "Current branch: ${BRANCH_NAME}"
-          
-          # Fetch all releases and find the most recent one for this branch
-          LATEST_RELEASE=$(curl -s https://api.github.com/repos/kumpeapps/managed-nebula/releases | \
-            jq -r --arg branch "$BRANCH_NAME" '[
-              .[] | select(.target_commitish == $branch or .target_commitish == "main")
-            ] | .[0].tag_name // "v1.0.0"')
+          # Handle both branches and tags
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            # For tags, use the tag as version
+            LATEST_RELEASE="${GITHUB_REF#refs/tags/}"
+            echo "Triggered by tag: ${LATEST_RELEASE}"
+          else
+            # For branches, find latest release
+            BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+            echo "Current branch: ${BRANCH_NAME}"
+            
+            LATEST_RELEASE=$(curl -s https://api.github.com/repos/kumpeapps/managed-nebula/releases | \
+              jq -r --arg branch "$BRANCH_NAME" '[
+                .[] | select(.target_commitish == $branch or .target_commitish == "main")
+              ] | .[0].tag_name // "v1.0.0"')
+            
+            echo "Latest release version for ${BRANCH_NAME}: ${LATEST_RELEASE}"
+          fi
           
           echo "latest_version=${LATEST_RELEASE}" >> $GITHUB_OUTPUT
-          echo "Latest release version for ${BRANCH_NAME}: ${LATEST_RELEASE}"
 
       - name: Build and Push Image (dev-latest)
         if: github.ref == 'refs/heads/dev'
@@ -107,31 +115,43 @@ jobs:
             --provenance=false \
             --platform linux/amd64,linux/arm64 ./frontend
 
-      - name: Build and Push Image (tag - pre-release, version only)
-        if: startsWith(github.ref, 'refs/tags/') && github.event_name == 'release' && github.event.release.prerelease == true
+      - name: Build and Push Image (tag)
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
-          echo "::notice::Pre-release detected - skipping :latest tag"
-          echo "Building and pushing version tag only: ${GITHUB_REF#refs/tags/}"
-          docker buildx build --push \
-            --build-arg VERSION=${GITHUB_REF#refs/tags/} \
-            --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:${GITHUB_REF#refs/tags/} \
-            --cache-from type=gha,scope=frontend-main \
-            --cache-to type=gha,mode=max,scope=frontend-tag \
-            --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
-            --provenance=false \
-            --platform linux/amd64,linux/arm64 ./frontend
-
-      - name: Build and Push Image (tag - stable release or manual tag)
-        if: startsWith(github.ref, 'refs/tags/') && (github.event_name != 'release' || github.event.release.prerelease != true)
-        run: |
-          echo "::notice::Stable release or manual tag push - applying both version and :latest tags"
-          echo "Building and pushing tags: ${GITHUB_REF#refs/tags/} and latest"
-          docker buildx build --push \
-            --build-arg VERSION=${GITHUB_REF#refs/tags/} \
-            --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:${GITHUB_REF#refs/tags/} \
-            --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
-            --cache-from type=gha,scope=frontend-main \
-            --cache-to type=gha,mode=max,scope=frontend-tag \
-            --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
-            --provenance=false \
-            --platform linux/amd64,linux/arm64 ./frontend
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          
+          # Check if this is a pre-release tag (contains alpha, beta, or rc)
+          if [[ "$TAG_NAME" =~ (alpha|beta|rc) ]]; then
+            echo "::notice::Pre-release tag detected ($TAG_NAME) - pushing version tag only"
+            PUSH_LATEST=false
+          elif [[ "${{ github.event_name }}" == "release" ]] && [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
+            echo "::notice::Pre-release detected via GitHub release - pushing version tag only"
+            PUSH_LATEST=false
+          else
+            echo "::notice::Stable release tag detected ($TAG_NAME) - pushing version and :latest tags"
+            PUSH_LATEST=true
+          fi
+          
+          # Build tags based on release type
+          if [ "$PUSH_LATEST" = true ]; then
+            echo "Building and pushing tags: $TAG_NAME and latest"
+            docker buildx build --push \
+              --build-arg VERSION="$TAG_NAME" \
+              --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:"$TAG_NAME" \
+              --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
+              --cache-from type=gha,scope=frontend-main \
+              --cache-to type=gha,mode=max,scope=frontend-tag \
+              --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
+              --provenance=false \
+              --platform linux/amd64,linux/arm64 ./frontend
+          else
+            echo "Building and pushing version tag only: $TAG_NAME"
+            docker buildx build --push \
+              --build-arg VERSION="$TAG_NAME" \
+              --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:"$TAG_NAME" \
+              --cache-from type=gha,scope=frontend-main \
+              --cache-to type=gha,mode=max,scope=frontend-tag \
+              --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
+              --provenance=false \
+              --platform linux/amd64,linux/arm64 ./frontend
+          fi

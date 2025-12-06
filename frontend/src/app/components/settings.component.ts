@@ -38,6 +38,41 @@ import { environment } from '../../environments/environment';
             </div>
           </div>
 
+          <!-- Version Cache Status Section -->
+          <div class="setting-section">
+            <h3>🔄 Version Update Cache</h3>
+            <p class="help-text">Cached version information from GitHub to avoid rate limits. Updates automatically daily.</p>
+            
+            <div class="cache-status-grid">
+              <div class="cache-info-card">
+                <span class="cache-label">Last Checked</span>
+                <span class="cache-value" [class.cache-stale]="isCacheStale()">
+                  {{getCacheAgeDisplay()}}
+                </span>
+              </div>
+              <div class="cache-info-card" *ngIf="versionCacheStatus?.latest_client_version">
+                <span class="cache-label">Latest Client Version</span>
+                <span class="cache-value">{{versionCacheStatus.latest_client_version}}</span>
+              </div>
+              <div class="cache-info-card" *ngIf="versionCacheStatus?.latest_nebula_version">
+                <span class="cache-label">Latest Nebula Version</span>
+                <span class="cache-value">{{versionCacheStatus.latest_nebula_version}}</span>
+              </div>
+            </div>
+            
+            <div class="warning-box" *ngIf="isCacheStale()">
+              <p><strong>⚠️ Cache is stale (>24 hours)</strong></p>
+              <p>Version status checks are currently disabled. Click "Check for Updates" to refresh the cache.</p>
+            </div>
+            
+            <button 
+              class="refresh-cache-btn" 
+              (click)="refreshVersionCache()"
+              [disabled]="isRefreshingCache">
+              {{isRefreshingCache ? '⏳ Checking...' : '🔄 Check for Updates'}}
+            </button>
+          </div>
+
           <div class="setting-section">
             <h3>Nebula Configuration</h3>
             <p class="help-text">Global settings that affect all Nebula client configurations</p>
@@ -62,6 +97,65 @@ import { environment } from '../../environments/environment';
             <div class="info-box" *ngIf="settings.punchy_enabled">
               <p><strong>ℹ️ Punchy Enabled</strong></p>
               <p>New client configs will include punchy settings with punch, punch_back, and respond set to true.</p>
+            </div>
+          </div>
+          
+          <div class="setting-section">
+            <h3>Nebula Version & Certificate Management</h3>
+            <p class="help-text">Configure Nebula binary version and certificate format (v2 requires Nebula 1.10.0+)</p>
+            
+            <div class="setting-item">
+              <label class="input-label">
+                <strong>Nebula Version</strong>
+                <span class="description">
+                  Select the Nebula binary version for client deployments
+                </span>
+                <select 
+                  [(ngModel)]="settings.nebula_version"
+                  (change)="onNebulaVersionChange(); saveSettings()"
+                  class="select-input">
+                  <option *ngFor="let version of availableNebulaVersions" [value]="version.version">
+                    {{version.version}} 
+                    <ng-container *ngIf="!version.is_stable">(pre-release)</ng-container>
+                    <ng-container *ngIf="version.version === latestStableVersion">(latest stable)</ng-container>
+                  </option>
+                </select>
+              </label>
+            </div>
+            
+            <div class="setting-item">
+              <label class="input-label">
+                <strong>Client Certificate Format</strong>
+                <span class="description">
+                  Controls what certificate format is issued when signing client certificates. Requires a v2 CA to use v2 or hybrid modes.
+                </span>
+                <select 
+                  [(ngModel)]="settings.cert_version"
+                  (change)="onCertVersionChange(); saveSettings()"
+                  class="select-input">
+                  <option value="v1">v1 only (Single IPv4 - compatible with all Nebula versions)</option>
+                  <option value="v2">v2 only (Multiple IPs - requires ALL clients on Nebula 1.10.0+)</option>
+                  <option value="hybrid">Hybrid (v1 + v2 bundle - clients use v1 or v2 based on their version)</option>
+                </select>
+              </label>
+            </div>
+            
+            <div class="warning-box" *ngIf="!settings.v2_support_available && (settings.cert_version === 'v2' || settings.cert_version === 'hybrid')">
+              <p><strong>⚠️ Version Incompatibility Warning</strong></p>
+              <p>Certificate version {{settings.cert_version}} requires Nebula 1.10.0 or higher. Current version: {{settings.nebula_version}}</p>
+              <p>Please upgrade to Nebula 1.10.0+ or select v1 certificate format.</p>
+            </div>
+            
+            <div class="info-box" *ngIf="settings.v2_support_available && settings.cert_version === 'v2'">
+              <p><strong>ℹ️ Pure v2 Certificates</strong></p>
+              <p>Clients will receive only v2 certificates with support for multiple IP addresses.</p>
+              <p><strong>Requirement:</strong> All clients must be running Nebula 1.10.0+. The server validates client compatibility before allowing this mode.</p>
+            </div>
+            
+            <div class="info-box" *ngIf="settings.v2_support_available && settings.cert_version === 'hybrid'">
+              <p><strong>ℹ️ Hybrid Mode (Recommended for Migration)</strong></p>
+              <p>Clients receive a certificate bundle containing both v1 and v2 formats in a single file. Clients running Nebula &lt; 1.10.0 will use the v1 certificate, while clients running 1.10.0+ can use either v1 or v2.</p>
+              <p><strong>Use case:</strong> Gradual migration from v1 to v2 with mixed client versions.</p>
             </div>
           </div>
           
@@ -253,6 +347,23 @@ import { environment } from '../../environments/environment';
       margin-bottom: 0;
     }
     
+    .warning-box {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 4px;
+      padding: 1rem;
+      margin-top: 1rem;
+    }
+    
+    .warning-box p {
+      margin: 0 0 0.5rem 0;
+      color: #856404;
+    }
+    
+    .warning-box p:last-child {
+      margin-bottom: 0;
+    }
+    
     .input-label {
       display: flex;
       flex-direction: column;
@@ -274,6 +385,21 @@ import { environment } from '../../environments/environment';
     }
     
     .text-input:focus {
+      outline: none;
+      border-color: #4CAF50;
+    }
+    
+    .select-input {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 1rem;
+      background-color: white;
+      cursor: pointer;
+    }
+    
+    .select-input:focus {
       outline: none;
       border-color: #4CAF50;
     }
@@ -531,6 +657,65 @@ import { environment } from '../../environments/environment';
         grid-template-columns: 1fr;
       }
     }
+    
+    .cache-status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    
+    .cache-info-card {
+      background: #f8f9fa;
+      border-radius: 6px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      border: 1px solid #e0e0e0;
+    }
+    
+    .cache-label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #666;
+    }
+    
+    .cache-value {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #333;
+    }
+    
+    .cache-value.cache-stale {
+      color: #f44336;
+    }
+    
+    .refresh-cache-btn {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .refresh-cache-btn:hover:not(:disabled) {
+      background: #45a049;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    
+    .refresh-cache-btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
   `],
     standalone: false
 })
@@ -540,7 +725,10 @@ export class SettingsComponent implements OnInit {
     client_docker_image: 'ghcr.io/kumpeapps/managed-nebula-client:latest',
     server_url: 'http://localhost:8080',
     docker_compose_template: '',
-    externally_managed_users: false
+    externally_managed_users: false,
+    cert_version: 'v1',
+    nebula_version: '1.9.7',
+    v2_support_available: false
   };
   isAdmin = this.authService.isAdmin();
   placeholders: any[] = [];
@@ -549,6 +737,10 @@ export class SettingsComponent implements OnInit {
   frontendVersion: string = environment.version;
   serverVersion: string = '';
   nebulaVersion: string = '';
+  availableNebulaVersions: any[] = [];
+  latestStableVersion: string = '';
+  versionCacheStatus: any = null;
+  isRefreshingCache: boolean = false;
 
   constructor(
     private authService: AuthService,
@@ -564,6 +756,55 @@ export class SettingsComponent implements OnInit {
     this.loadSettings();
     this.loadPlaceholders();
     this.loadVersions();
+    this.loadNebulaVersions();
+    this.loadVersionCacheStatus();
+  }
+  
+  loadVersionCacheStatus(): void {
+    this.apiService.getVersionCacheStatus().subscribe({
+      next: (status: any) => {
+        this.versionCacheStatus = status;
+      },
+      error: (err: any) => {
+        console.error('Failed to load version cache status:', err);
+      }
+    });
+  }
+  
+  refreshVersionCache(): void {
+    if (this.isRefreshingCache) return;
+    
+    this.isRefreshingCache = true;
+    this.apiService.refreshVersionCache().subscribe({
+      next: (result: any) => {
+        this.notificationService.notify('Version cache refreshed successfully', 'success');
+        this.loadVersionCacheStatus();
+        this.isRefreshingCache = false;
+      },
+      error: (err: any) => {
+        console.error('Failed to refresh version cache:', err);
+        this.notificationService.notify('Failed to refresh version cache: ' + (err.error?.detail || 'Unknown error'));
+        this.isRefreshingCache = false;
+      }
+    });
+  }
+  
+  getCacheAgeDisplay(): string {
+    if (!this.versionCacheStatus || !this.versionCacheStatus.cache_age_hours) {
+      return 'Never checked';
+    }
+    const hours = this.versionCacheStatus.cache_age_hours;
+    if (hours < 1) {
+      return `${Math.floor(hours * 60)} minutes ago`;
+    } else if (hours < 24) {
+      return `${Math.floor(hours)} hours ago`;
+    } else {
+      return `${Math.floor(hours / 24)} days ago`;
+    }
+  }
+  
+  isCacheStale(): boolean {
+    return this.versionCacheStatus && this.versionCacheStatus.cache_age_hours > 24;
   }
 
   loadSettings(): void {
@@ -596,7 +837,9 @@ export class SettingsComponent implements OnInit {
       punchy_enabled: this.settings.punchy_enabled,
       client_docker_image: this.settings.client_docker_image,
       server_url: this.settings.server_url,
-      docker_compose_template: this.settings.docker_compose_template
+      docker_compose_template: this.settings.docker_compose_template,
+      cert_version: this.settings.cert_version,
+      nebula_version: this.settings.nebula_version
     }).subscribe({
       next: (updated: Settings) => {
         this.settings = updated;
@@ -664,5 +907,27 @@ export class SettingsComponent implements OnInit {
         this.nebulaVersion = 'Error';
       }
     });
+  }
+
+  loadNebulaVersions(): void {
+    this.apiService.getNebulaVersions().subscribe({
+      next: (response) => {
+        this.availableNebulaVersions = response.versions;
+        this.latestStableVersion = response.latest_stable;
+        // v2_support_available comes from the server in settings response
+      },
+      error: (err: any) => {
+        console.error('Failed to load Nebula versions:', err);
+        this.notificationService.notify('Failed to load available Nebula versions', 'error');
+      }
+    });
+  }
+
+  onNebulaVersionChange(): void {
+    // Save will update v2_support_available from server response
+  }
+
+  onCertVersionChange(): void {
+    // Save will validate and update v2_support_available from server response
   }
 }

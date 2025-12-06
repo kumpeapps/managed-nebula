@@ -20,12 +20,25 @@ export interface FirewallRulesetRef {
   name: string;
 }
 
+export interface IPAssignment {
+  id: number;
+  ip_address: string;
+  ip_version: 'ipv4' | 'ipv6';
+  is_primary: boolean;
+  pool_id: number | null;
+  ip_group_id: number | null;
+}
+
 export interface Client {
   id: number;
   name: string; // backend field 'name'
   ip_address: string | null;
   pool_id?: number | null;
   ip_group_id?: number | null;
+  ip_version?: string; // ipv4_only, ipv6_only, dual_stack, multi_ipv4, multi_ipv6, multi_both
+  os_type?: string; // docker, windows, macos
+  assigned_ips?: IPAssignment[]; // All assigned IPs (for v2 cert support)
+  primary_ipv4?: string | null; // Primary IPv4 extracted from assigned_ips
   is_lighthouse: boolean;
   public_ip: string | null;
   is_blocked: boolean;
@@ -144,6 +157,8 @@ export interface CACertificate {
   include_in_config: boolean;
   created_at: string;
   status: 'current' | 'previous' | 'expired' | 'inactive';
+  cert_version?: string; // v1 or v2
+  nebula_version?: string; // Nebula version used to create CA
 }
 
 export interface LoginRequest {
@@ -190,6 +205,8 @@ export interface ClientUpdateRequest {
   is_lighthouse?: boolean;
   public_ip?: string;
   is_blocked?: boolean;
+  ip_version?: string; // ipv4_only, ipv6_only, dual_stack, multi_ipv4, multi_ipv6, multi_both
+  os_type?: string; // docker, windows, macos
   group_ids?: number[];
   firewall_ruleset_ids?: number[];
   ip_address?: string;
@@ -204,6 +221,9 @@ export interface Settings {
   server_url: string;
   docker_compose_template: string;
   externally_managed_users: boolean;
+  cert_version: string; // v1, v2, or hybrid
+  nebula_version: string; // e.g., "1.9.7", "1.10.0"
+  v2_support_available: boolean; // True if nebula_version >= 1.10.0
 }
 
 export interface SettingsUpdate {
@@ -211,6 +231,29 @@ export interface SettingsUpdate {
   client_docker_image?: string;
   server_url?: string;
   docker_compose_template?: string;
+  cert_version?: string;
+  nebula_version?: string;
+}
+
+// Nebula version management interfaces
+export interface NebulaVersionInfo {
+  version: string;
+  release_date: string;
+  is_stable: boolean;
+  supports_v2: boolean;
+  download_url_linux_amd64?: string;
+  download_url_linux_arm64?: string;
+  download_url_darwin_amd64?: string;
+  download_url_darwin_arm64?: string;
+  download_url_windows_amd64?: string;
+  checksum?: string;
+}
+
+export interface NebulaVersionsResponse {
+  current_version: string;
+  available_versions: NebulaVersionInfo[];
+  latest_stable: string;  // Latest stable version
+  versions: NebulaVersionInfo[];  // Alias for available_versions
 }
 
 export interface DockerComposeTemplate {
@@ -246,6 +289,8 @@ export interface ClientCreateRequest {
   pool_id?: number | null;
   ip_group_id?: number | null;
   ip_address?: string | null;
+  os_type?: string; // docker, windows, macos
+  ip_version?: string; // ipv4_only, ipv6_only, dual_stack, multi_ipv4, multi_ipv6, multi_both
 }
 
 // Version response from server
@@ -273,6 +318,8 @@ export interface VersionStatus {
   client_advisories: SecurityAdvisoryInfo[];
   nebula_advisories: SecurityAdvisoryInfo[];
   days_behind: number | null;
+  latest_client_version?: string | null;
+  latest_nebula_version?: string | null;
 }
 
 // Version status response from server

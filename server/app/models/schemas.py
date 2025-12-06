@@ -57,7 +57,7 @@ class ClientResponse(BaseModel):
     """Response model for Client."""
     id: int
     name: str
-    ip_address: Optional[str]
+    ip_address: Optional[str]  # Primary IP for backwards compatibility
     pool_id: Optional[int] = None  # Current IP pool assignment
     ip_group_id: Optional[int] = None  # Current IP group assignment
     is_lighthouse: bool
@@ -70,11 +70,14 @@ class ClientResponse(BaseModel):
     nebula_version: Optional[str] = None
     last_version_report_at: Optional[datetime] = None
     os_type: str = "docker"  # docker, windows, macos
+    ip_version: str = "ipv4_only"  # ipv4_only, ipv6_only, dual_stack, multi_ipv4, multi_ipv6, multi_both
     owner: Optional[UserRef]  # Owner of the client
     groups: List[GroupRef]
     firewall_rulesets: List[FirewallRulesetRef] = []
     token: Optional[str]  # Only included for admins or owner
     version_status: Optional[VersionStatus] = None  # Optional computed field
+    assigned_ips: List[IPAssignmentResponse] = []  # All assigned IPs (for v2 cert support)
+    primary_ipv4: Optional[str] = None  # Extracted from assigned_ips where is_primary=true
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -91,6 +94,7 @@ class ClientCreate(BaseModel):
     ip_group_id: Optional[int] = None
     ip_address: Optional[str] = None  # Optional: specify exact IP instead of auto-allocation
     os_type: str = "docker"  # docker, windows, macos
+    ip_version: str = "ipv4_only"  # ipv4_only, ipv6_only, dual_stack, multi_ipv4, multi_ipv6, multi_both
 
 
 class ClientUpdate(BaseModel):
@@ -100,6 +104,7 @@ class ClientUpdate(BaseModel):
     public_ip: Optional[str] = None
     is_blocked: Optional[bool] = None
     os_type: Optional[str] = None  # docker, windows, macos
+    ip_version: Optional[str] = None  # ipv4_only, ipv6_only, dual_stack, multi_ipv4, multi_ipv6, multi_both
     group_ids: Optional[List[int]] = None
     firewall_ruleset_ids: Optional[List[int]] = None  # Changed from firewall_rule_ids
     ip_address: Optional[str] = None  # Change IP address
@@ -303,12 +308,33 @@ class AvailableIPResponse(BaseModel):
     is_available: bool = True
 
 
+class IPAssignmentResponse(BaseModel):
+    """Response model for IP assignments (supports multiple IPs per client for v2 certs)."""
+    id: int
+    ip_address: str
+    ip_version: str  # ipv4 or ipv6
+    is_primary: bool  # True if this is the primary IPv4 address
+    pool_id: Optional[int] = None
+    ip_group_id: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AlternateIPAdd(BaseModel):
+    """Request model for adding an alternate IP to a client."""
+    ip_address: str
+    ip_version: str = "ipv4"  # ipv4 or ipv6
+    pool_id: Optional[int] = None
+    ip_group_id: Optional[int] = None
+
+
 # ============ CA Certificate Schemas ============
 
 class CACreate(BaseModel):
     """Create model for CA Certificate."""
     name: str
     validity_months: int = 18  # Default 18 months per copilot-instructions
+    cert_version: str = "v1"  # v1 or v2 (v2 requires Nebula 1.10.0+)
 
 
 class CAImport(BaseModel):
@@ -316,6 +342,7 @@ class CAImport(BaseModel):
     name: str
     pem_cert: str
     pem_key: Optional[str] = None
+    cert_version: str = "v1"  # v1 or v2
 
 
 class CAResponse(BaseModel):
@@ -330,8 +357,42 @@ class CAResponse(BaseModel):
     include_in_config: bool
     created_at: datetime
     status: str  # "current", "previous", "expired", "inactive"
+    cert_version: str  # v1 or v2
+    nebula_version: Optional[str] = None  # Version of Nebula used to create CA
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ============ Nebula Version Schemas ============
+
+class NebulaVersionInfoResponse(BaseModel):
+    """Response model for Nebula version information."""
+    version: str
+    release_date: datetime
+    is_stable: bool
+    supports_v2: bool
+    download_url_linux_amd64: Optional[str] = None
+    download_url_linux_arm64: Optional[str] = None
+    download_url_darwin_amd64: Optional[str] = None
+    download_url_darwin_arm64: Optional[str] = None
+    download_url_windows_amd64: Optional[str] = None
+    checksum: Optional[str] = None
+
+
+class NebulaVersionsResponse(BaseModel):
+    """Response model for list of available Nebula versions."""
+    current_version: str  # Version currently configured in system settings
+    available_versions: List[NebulaVersionInfoResponse]
+    latest_stable: str  # Latest stable version available
+    versions: List[NebulaVersionInfoResponse]  # Alias for available_versions (for frontend compatibility)
+
+
+class VersionCacheResponse(BaseModel):
+    """Response model for version cache status."""
+    last_checked: Optional[datetime] = None
+    latest_client_version: Optional[str] = None
+    latest_nebula_version: Optional[str] = None
+    cache_age_hours: Optional[float] = None
 
 
 # ============ User Schemas ============
@@ -407,12 +468,17 @@ class SettingsResponse(BaseModel):
     server_url: str
     docker_compose_template: str
     externally_managed_users: bool
+    cert_version: str = "v1"  # v1, v2, or hybrid
+    nebula_version: str = "1.9.7"  # Nebula binary version
+    v2_support_available: bool = False  # Computed: True if nebula_version >= 1.10.0
 
 class SettingsUpdate(BaseModel):
     punchy_enabled: Optional[bool] = None
     client_docker_image: Optional[str] = None
     server_url: Optional[str] = None
     docker_compose_template: Optional[str] = None
+    cert_version: Optional[str] = None  # v1, v2, or hybrid
+    nebula_version: Optional[str] = None  # Nebula binary version
 
 
 class DockerComposeTemplateResponse(BaseModel):
@@ -505,7 +571,7 @@ class UserGroupResponse(BaseModel):
     is_admin: bool
     owner: Optional[UserRef]
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
     member_count: int = 0
     permission_count: int = 0
 

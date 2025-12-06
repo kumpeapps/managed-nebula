@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { delay } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
-import { Client, Group, FirewallRuleset, IPPool, IPGroup, AvailableIP, CACertificate, User, ClientUpdateRequest, ClientCreateRequest, ClientCertificate, ClientConfigDownload, Settings, SettingsUpdate, DockerComposeTemplate, PlaceholdersResponse, Permission, VersionResponse, VersionStatusResponse } from '../models';
+import { Client, Group, FirewallRuleset, IPPool, IPGroup, AvailableIP, CACertificate, User, ClientUpdateRequest, ClientCreateRequest, ClientCertificate, ClientConfigDownload, Settings, SettingsUpdate, DockerComposeTemplate, PlaceholdersResponse, Permission, VersionResponse, VersionStatusResponse, NebulaVersionsResponse } from '../models';
 
 @Injectable({
   providedIn: 'root'
@@ -42,6 +42,15 @@ export class ApiService {
 
   deleteClient(id: number): Observable<void> {
     return this.applyDelay(this.http.delete<void>(`${this.apiUrl}/clients/${id}`, { withCredentials: true }));
+  }
+
+  // Alternate IP management
+  addAlternateIP(clientId: number, payload: { ip_address: string, ip_version: string, pool_id: number | null, ip_group_id: number | null }): Observable<any> {
+    return this.applyDelay(this.http.post<any>(`${this.apiUrl}/clients/${clientId}/alternate-ips`, payload, { withCredentials: true }));
+  }
+
+  deleteAlternateIP(clientId: number, ipAssignmentId: number): Observable<any> {
+    return this.applyDelay(this.http.delete<any>(`${this.apiUrl}/clients/${clientId}/alternate-ips/${ipAssignmentId}`, { withCredentials: true }));
   }
 
   // Client ownership endpoint
@@ -308,6 +317,19 @@ export class ApiService {
 
   getPlaceholders(): Observable<PlaceholdersResponse> {
     return this.applyDelay(this.http.get<PlaceholdersResponse>(`${this.apiUrl}/settings/placeholders`, { withCredentials: true }));
+  }
+
+  // Nebula version management endpoints
+  getNebulaVersions(): Observable<NebulaVersionsResponse> {
+    return this.applyDelay(this.http.get<NebulaVersionsResponse>(`${this.apiUrl}/nebula/versions`, { withCredentials: true }));
+  }
+
+  getVersionCacheStatus(): Observable<any> {
+    return this.applyDelay(this.http.get<any>(`${this.apiUrl}/settings/version-cache`, { withCredentials: true }));
+  }
+
+  refreshVersionCache(): Observable<any> {
+    return this.applyDelay(this.http.post<any>(`${this.apiUrl}/settings/version-cache/refresh`, {}, { withCredentials: true }));
   }
 
   // Permissions endpoints
