@@ -38,6 +38,41 @@ import { environment } from '../../environments/environment';
             </div>
           </div>
 
+          <!-- Version Cache Status Section -->
+          <div class="setting-section">
+            <h3>🔄 Version Update Cache</h3>
+            <p class="help-text">Cached version information from GitHub to avoid rate limits. Updates automatically daily.</p>
+            
+            <div class="cache-status-grid">
+              <div class="cache-info-card">
+                <span class="cache-label">Last Checked</span>
+                <span class="cache-value" [class.cache-stale]="isCacheStale()">
+                  {{getCacheAgeDisplay()}}
+                </span>
+              </div>
+              <div class="cache-info-card" *ngIf="versionCacheStatus?.latest_client_version">
+                <span class="cache-label">Latest Client Version</span>
+                <span class="cache-value">{{versionCacheStatus.latest_client_version}}</span>
+              </div>
+              <div class="cache-info-card" *ngIf="versionCacheStatus?.latest_nebula_version">
+                <span class="cache-label">Latest Nebula Version</span>
+                <span class="cache-value">{{versionCacheStatus.latest_nebula_version}}</span>
+              </div>
+            </div>
+            
+            <div class="warning-box" *ngIf="isCacheStale()">
+              <p><strong>⚠️ Cache is stale (>24 hours)</strong></p>
+              <p>Version status checks are currently disabled. Click "Check for Updates" to refresh the cache.</p>
+            </div>
+            
+            <button 
+              class="refresh-cache-btn" 
+              (click)="refreshVersionCache()"
+              [disabled]="isRefreshingCache">
+              {{isRefreshingCache ? '⏳ Checking...' : '🔄 Check for Updates'}}
+            </button>
+          </div>
+
           <div class="setting-section">
             <h3>Nebula Configuration</h3>
             <p class="help-text">Global settings that affect all Nebula client configurations</p>
@@ -622,6 +657,65 @@ import { environment } from '../../environments/environment';
         grid-template-columns: 1fr;
       }
     }
+    
+    .cache-status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    
+    .cache-info-card {
+      background: #f8f9fa;
+      border-radius: 6px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      border: 1px solid #e0e0e0;
+    }
+    
+    .cache-label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #666;
+    }
+    
+    .cache-value {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #333;
+    }
+    
+    .cache-value.cache-stale {
+      color: #f44336;
+    }
+    
+    .refresh-cache-btn {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    .refresh-cache-btn:hover:not(:disabled) {
+      background: #45a049;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    
+    .refresh-cache-btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
   `],
     standalone: false
 })
@@ -645,6 +739,8 @@ export class SettingsComponent implements OnInit {
   nebulaVersion: string = '';
   availableNebulaVersions: any[] = [];
   latestStableVersion: string = '';
+  versionCacheStatus: any = null;
+  isRefreshingCache: boolean = false;
 
   constructor(
     private authService: AuthService,
@@ -661,6 +757,54 @@ export class SettingsComponent implements OnInit {
     this.loadPlaceholders();
     this.loadVersions();
     this.loadNebulaVersions();
+    this.loadVersionCacheStatus();
+  }
+  
+  loadVersionCacheStatus(): void {
+    this.apiService.getVersionCacheStatus().subscribe({
+      next: (status: any) => {
+        this.versionCacheStatus = status;
+      },
+      error: (err: any) => {
+        console.error('Failed to load version cache status:', err);
+      }
+    });
+  }
+  
+  refreshVersionCache(): void {
+    if (this.isRefreshingCache) return;
+    
+    this.isRefreshingCache = true;
+    this.apiService.refreshVersionCache().subscribe({
+      next: (result: any) => {
+        this.notificationService.notify('Version cache refreshed successfully', 'success');
+        this.loadVersionCacheStatus();
+        this.isRefreshingCache = false;
+      },
+      error: (err: any) => {
+        console.error('Failed to refresh version cache:', err);
+        this.notificationService.notify('Failed to refresh version cache: ' + (err.error?.detail || 'Unknown error'));
+        this.isRefreshingCache = false;
+      }
+    });
+  }
+  
+  getCacheAgeDisplay(): string {
+    if (!this.versionCacheStatus || !this.versionCacheStatus.cache_age_hours) {
+      return 'Never checked';
+    }
+    const hours = this.versionCacheStatus.cache_age_hours;
+    if (hours < 1) {
+      return `${Math.floor(hours * 60)} minutes ago`;
+    } else if (hours < 24) {
+      return `${Math.floor(hours)} hours ago`;
+    } else {
+      return `${Math.floor(hours / 24)} days ago`;
+    }
+  }
+  
+  isCacheStale(): boolean {
+    return this.versionCacheStatus && this.versionCacheStatus.cache_age_hours > 24;
   }
 
   loadSettings(): void {

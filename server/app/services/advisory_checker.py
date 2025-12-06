@@ -347,3 +347,183 @@ def _advisory_to_dict(advisory: SecurityAdvisory) -> Dict[str, Any]:
         "url": advisory.url,
         "cve_id": advisory.cve_id
     }
+
+
+async def check_client_version_status_cached(
+    session,
+    client_version: Optional[str],
+    nebula_version: Optional[str]
+) -> Optional[Dict[str, Any]]:
+    """
+    Check version status using cached data from SystemSettings.
+    Only performs fresh GitHub API calls if cache is stale (>24 hours).
+    
+    Args:
+        session: Database session
+        client_version: managed-nebula client version
+        nebula_version: Nebula binary version
+        
+    Returns:
+        Dictionary with version status or None if no cached data available
+    """
+    from datetime import datetime, timedelta
+    from sqlalchemy import select
+    from ..models import SystemSettings
+    
+    # Check cache age
+    cache_check_result = await session.execute(
+        select(SystemSettings).where(SystemSettings.key == "version_cache_last_checked")
+    )
+    cache_check_row = cache_check_result.scalar_one_or_none()
+    
+    # If no cache exists, initialize it automatically
+    if not cache_check_row:
+        logger.info("Version cache not found, initializing automatically")
+        # Get GitHub token from system settings
+        github_token = None
+        try:
+            github_token_setting = await session.execute(
+                select(SystemSettings).where(SystemSettings.key == "github_api_token")
+            )
+            token_row = github_token_setting.scalar_one_or_none()
+            if token_row:
+                github_token = token_row.value
+        except Exception:
+            pass
+        
+        # Initialize cache
+        await refresh_version_cache(session, github_token)
+        
+        # Re-query cache after initialization
+        cache_check_result = await session.execute(
+            select(SystemSettings).where(SystemSettings.key == "version_cache_last_checked")
+        )
+        cache_check_row = cache_check_result.scalar_one_or_none()
+    
+    # Check if cache is stale (>24 hours)
+    if cache_check_row:
+        try:
+            last_checked = datetime.fromisoformat(cache_check_row.value)
+            cache_age = datetime.utcnow() - last_checked
+            if cache_age > timedelta(hours=24):
+                logger.info(f"Version cache is stale ({cache_age.total_seconds()/3600:.1f} hours old), auto-refreshing")
+                # Get GitHub token from system settings
+                github_token = None
+                try:
+                    github_token_setting = await session.execute(
+                        select(SystemSettings).where(SystemSettings.key == "github_api_token")
+                    )
+                    token_row = github_token_setting.scalar_one_or_none()
+                    if token_row:
+                        github_token = token_row.value
+                except Exception:
+                    pass
+                
+                # Auto-refresh cache
+                await refresh_version_cache(session, github_token)
+        except Exception as e:
+            logger.warning(f"Failed to parse cache timestamp: {e}")
+            return None
+    
+    # Get cached versions
+    latest_client_result = await session.execute(
+        select(SystemSettings).where(SystemSettings.key == "latest_client_version")
+    )
+    latest_client_row = latest_client_result.scalar_one_or_none()
+    latest_client_version = latest_client_row.value if latest_client_row else None
+    
+    latest_nebula_result = await session.execute(
+        select(SystemSettings).where(SystemSettings.key == "latest_nebula_version")
+    )
+    latest_nebula_row = latest_nebula_result.scalar_one_or_none()
+    latest_nebula_version = latest_nebula_row.value if latest_nebula_row else None
+    
+    # Determine status without calling GitHub API
+    client_status = _determine_status(client_version, latest_client_version, [])
+    nebula_status = _determine_status(nebula_version, latest_nebula_version, [])
+    
+    return {
+        "client_version_status": client_status,
+        "nebula_version_status": nebula_status,
+        "client_advisories": [],
+        "nebula_advisories": [],
+        "latest_client_version": latest_client_version,
+        "latest_nebula_version": latest_nebula_version,
+        "current_client_version": client_version,
+        "current_nebula_version": nebula_version,
+        "days_behind": None
+    }
+
+
+async def refresh_version_cache(session, github_token: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Refresh version cache by calling GitHub API.
+    Should be called manually from settings page or by scheduled task.
+    
+    Args:
+        session: Database session
+        github_token: Optional GitHub API token
+        
+    Returns:
+        Dictionary with cache refresh status
+    """
+    from datetime import datetime
+    from sqlalchemy import select
+    from ..models import SystemSettings
+    
+    try:
+        github_client = get_github_client(token=github_token)
+        
+        # Get latest releases
+        latest_client_release = await github_client.get_latest_release(*MANAGED_NEBULA_REPO)
+        latest_nebula_release = await github_client.get_latest_release(*NEBULA_REPO)
+        
+        # Update cache
+        now = datetime.utcnow()
+        
+        # Update or create cache timestamp
+        timestamp_result = await session.execute(
+            select(SystemSettings).where(SystemSettings.key == "version_cache_last_checked")
+        )
+        timestamp_row = timestamp_result.scalar_one_or_none()
+        if timestamp_row:
+            timestamp_row.value = now.isoformat()
+        else:
+            session.add(SystemSettings(key="version_cache_last_checked", value=now.isoformat()))
+        
+        # Update or create latest client version
+        if latest_client_release:
+            client_result = await session.execute(
+                select(SystemSettings).where(SystemSettings.key == "latest_client_version")
+            )
+            client_row = client_result.scalar_one_or_none()
+            if client_row:
+                client_row.value = latest_client_release.version
+            else:
+                session.add(SystemSettings(key="latest_client_version", value=latest_client_release.version))
+        
+        # Update or create latest nebula version
+        if latest_nebula_release:
+            nebula_result = await session.execute(
+                select(SystemSettings).where(SystemSettings.key == "latest_nebula_version")
+            )
+            nebula_row = nebula_result.scalar_one_or_none()
+            if nebula_row:
+                nebula_row.value = latest_nebula_release.version
+            else:
+                session.add(SystemSettings(key="latest_nebula_version", value=latest_nebula_release.version))
+        
+        await session.commit()
+        
+        return {
+            "success": True,
+            "last_checked": now.isoformat(),
+            "latest_client_version": latest_client_release.version if latest_client_release else None,
+            "latest_nebula_version": latest_nebula_release.version if latest_nebula_release else None
+        }
+    except Exception as e:
+        logger.error(f"Failed to refresh version cache: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
