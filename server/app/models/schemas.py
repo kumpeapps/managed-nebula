@@ -320,6 +320,14 @@ class IPAssignmentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AlternateIPAdd(BaseModel):
+    """Request model for adding an alternate IP to a client."""
+    ip_address: str
+    ip_version: str = "ipv4"  # ipv4 or ipv6
+    pool_id: Optional[int] = None
+    ip_group_id: Optional[int] = None
+
+
 # ============ CA Certificate Schemas ============
 
 class CACreate(BaseModel):
@@ -377,6 +385,14 @@ class NebulaVersionsResponse(BaseModel):
     available_versions: List[NebulaVersionInfoResponse]
     latest_stable: str  # Latest stable version available
     versions: List[NebulaVersionInfoResponse]  # Alias for available_versions (for frontend compatibility)
+
+
+class VersionCacheResponse(BaseModel):
+    """Response model for version cache status."""
+    last_checked: Optional[datetime] = None
+    latest_client_version: Optional[str] = None
+    latest_nebula_version: Optional[str] = None
+    cache_age_hours: Optional[float] = None
 
 
 # ============ User Schemas ============

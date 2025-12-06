@@ -44,6 +44,15 @@ export class ApiService {
     return this.applyDelay(this.http.delete<void>(`${this.apiUrl}/clients/${id}`, { withCredentials: true }));
   }
 
+  // Alternate IP management
+  addAlternateIP(clientId: number, payload: { ip_address: string, ip_version: string, pool_id: number | null, ip_group_id: number | null }): Observable<any> {
+    return this.applyDelay(this.http.post<any>(`${this.apiUrl}/clients/${clientId}/alternate-ips`, payload, { withCredentials: true }));
+  }
+
+  deleteAlternateIP(clientId: number, ipAssignmentId: number): Observable<any> {
+    return this.applyDelay(this.http.delete<any>(`${this.apiUrl}/clients/${clientId}/alternate-ips/${ipAssignmentId}`, { withCredentials: true }));
+  }
+
   // Client ownership endpoint
   updateClientOwner(clientId: number, ownerId: number): Observable<Client> {
     return this.applyDelay(this.http.put<Client>(`${this.apiUrl}/clients/${clientId}/owner`, { owner_user_id: ownerId }, { withCredentials: true }));
@@ -313,6 +322,14 @@ export class ApiService {
   // Nebula version management endpoints
   getNebulaVersions(): Observable<NebulaVersionsResponse> {
     return this.applyDelay(this.http.get<NebulaVersionsResponse>(`${this.apiUrl}/nebula/versions`, { withCredentials: true }));
+  }
+
+  getVersionCacheStatus(): Observable<any> {
+    return this.applyDelay(this.http.get<any>(`${this.apiUrl}/settings/version-cache`, { withCredentials: true }));
+  }
+
+  refreshVersionCache(): Observable<any> {
+    return this.applyDelay(this.http.post<any>(`${this.apiUrl}/settings/version-cache/refresh`, {}, { withCredentials: true }));
   }
 
   // Permissions endpoints
