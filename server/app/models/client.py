@@ -102,6 +102,7 @@ class Client(Base):
 
     groups = relationship("Group", secondary=client_groups, back_populates="clients", lazy="selectin")
     firewall_rulesets = relationship("FirewallRuleset", secondary=client_firewall_rulesets, back_populates="clients")
+    ip_assignments = relationship("IPAssignment", back_populates="client", lazy="selectin", cascade="all, delete-orphan")
     # Note: owner relationship added via selectinload in queries to avoid circular imports
 
 
@@ -133,6 +134,8 @@ class ClientCertificate(Base):
     fingerprint: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     issued_for_ip_cidr: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     issued_for_groups_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # For v2 certs: comma-separated list of all IPs (for change detection)
+    issued_for_all_ips: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     # Certificate version: v1 or v2
@@ -168,3 +171,5 @@ class IPAssignment(Base):
     ip_version: Mapped[str] = mapped_column(String(10), default="ipv4", server_default="ipv4")
     # Primary flag: only one primary IPv4 per client for v1 compatibility
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    
+    client: Mapped[Client] = relationship("Client", back_populates="ip_assignments")

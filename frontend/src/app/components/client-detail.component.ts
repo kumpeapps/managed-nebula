@@ -49,6 +49,13 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
               Firewall Rulesets
             </button>
             <button 
+              *ngIf="supportsMultipleIPs()"
+              class="tab" 
+              [class.active]="activeTab === 'alternate-ips'"
+              (click)="activeTab = 'alternate-ips'">
+              Alternate IPs ({{ getAlternateIPCount() }})
+            </button>
+            <button 
               class="tab" 
               [class.active]="activeTab === 'certificates'"
               (click)="activeTab = 'certificates'; loadCertificates()">
@@ -120,6 +127,23 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
               </div>
 
               <h3>IP Configuration</h3>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Certificate Version / IP Configuration</label>
+                  <select class="form-control" [(ngModel)]="client.ip_version" (change)="saveDetails()">
+                    <option value="ipv4_only">IPv4 Only (v1 cert - single IPv4)</option>
+                    <option value="ipv6_only">IPv6 Only (v2 cert required - single IPv6)</option>
+                    <option value="dual_stack">Dual Stack (v2 cert required - single IPv4 + single IPv6)</option>
+                    <option value="multi_ipv4">Multiple IPv4 Addresses (v2 cert required)</option>
+                    <option value="multi_ipv6">Multiple IPv6 Addresses (v2 cert required)</option>
+                    <option value="multi_both">Multiple IPv4 + IPv6 Addresses (v2 cert required)</option>
+                  </select>
+                  <small class="text-muted">
+                    Only IPv4 Only supports v1 certs. All other options require v2 certificates (Nebula 1.10.0+ on server and client).
+                  </small>
+                </div>
+              </div>
+
               <div class="form-row">
                 <div class="form-group">
                   <label>IP Pool</label>
@@ -342,6 +366,100 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
               </div>
               
               <button (click)="saveRulesets()" class="btn btn-primary">Save Rulesets</button>
+            </div>
+          </div>
+
+          <!-- Alternate IPs Tab -->
+          <div class="tab-content" *ngIf="activeTab === 'alternate-ips'">
+            <div class="form-section">
+              <h3>Alternate IP Addresses</h3>
+              <p class="help-text">
+                This client is configured for {{ getIPVersionLabel() }}. You can assign additional IP addresses here.
+                The primary IP is managed in the Details tab.
+              </p>
+
+              <!-- Alternate IPs List -->
+              <div class="alternate-ips-list" *ngIf="getAlternateIPs().length > 0">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>IP Address</th>
+                      <th>Version</th>
+                      <th>Pool</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let ip of getAlternateIPs()">
+                      <td><code>{{ ip.ip_address }}</code></td>
+                      <td>{{ ip.ip_version === 'ipv4' ? 'IPv4' : 'IPv6' }}</td>
+                      <td>{{ getPoolName(ip.pool_id) }}</td>
+                      <td>
+                        <button class="btn btn-sm btn-danger" (click)="deleteAlternateIP(ip.id)" [disabled]="isLoading">
+                          🗑 Delete
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p *ngIf="getAlternateIPs().length === 0" class="text-muted">No alternate IPs assigned</p>
+
+              <!-- Add Alternate IP Form -->
+              <div class="add-alternate-ip-form">
+                <h4>Add Alternate IP</h4>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>IP Pool</label>
+                    <select class="form-control" [(ngModel)]="alternateIPPoolId" (change)="onAlternateIPPoolChange()">
+                      <option [ngValue]="null">-- Select Pool --</option>
+                      <option *ngFor="let pool of allIPPools" [ngValue]="pool.id">{{ pool.cidr }} - {{ pool.description || 'No description' }}</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>IP Group (Optional)</label>
+                    <select class="form-control" [(ngModel)]="alternateIPGroupId" (change)="onAlternateIPGroupChange()" [disabled]="!alternateIPPoolId">
+                      <option [ngValue]="null">All IPs in pool</option>
+                      <option *ngFor="let group of allIPGroups" [ngValue]="group.id">{{ group.name }} ({{ group.start_ip }} - {{ group.end_ip }})</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-row" *ngIf="alternateIPPoolId">
+                  <div class="form-group">
+                    <label>IP Version</label>
+                    <select class="form-control" [(ngModel)]="newAlternateIP.ip_version">
+                      <option value="ipv4">IPv4</option>
+                      <option value="ipv6">IPv6</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>IP Address</label>
+                    <label style="display:block; margin-bottom:0.5rem;">
+                      <input type="checkbox" [(ngModel)]="useManualAlternateIP"> Enter manually
+                    </label>
+                    <ng-container *ngIf="useManualAlternateIP; else autoAlternateIpSelect">
+                      <input type="text" class="form-control" [(ngModel)]="newAlternateIP.ip_address" 
+                             placeholder="e.g., 10.0.0.10 or fd00::10">
+                    </ng-container>
+                    <ng-template #autoAlternateIpSelect>
+                      <select class="form-control" [(ngModel)]="newAlternateIP.ip_address">
+                        <option value="">-- Select IP --</option>
+                        <option *ngFor="let ip of availableAlternateIPs" [ngValue]="ip.ip_address">{{ ip.ip_address }}</option>
+                      </select>
+                    </ng-template>
+                    <small class="text-muted">Select from available IPs or enter manually. We list up to 100 available IPs.</small>
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <button class="btn btn-primary" (click)="addAlternateIP()" [disabled]="!newAlternateIP.ip_address || !alternateIPPoolId || isLoading">
+                      ➕ Add Alternate IP
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -899,7 +1017,7 @@ import { Client, Group, FirewallRuleset, ClientCertificate, ClientConfigDownload
 export class ClientDetailComponent implements OnInit {
   clientId: number = 0;
   client: Client | null = null;
-  activeTab: 'details' | 'groups' | 'firewall' | 'certificates' = 'details';
+  activeTab: 'details' | 'groups' | 'firewall' | 'alternate-ips' | 'certificates' = 'details';
   isLoading: boolean = false;
   showToken: boolean = false;
   
@@ -919,6 +1037,18 @@ export class ClientDetailComponent implements OnInit {
   selectedIPGroupId: number | null = null;
   newIPAddress: string = '';
   useManualIP: boolean = false;
+  
+  // Alternate IPs
+  availableAlternateIPs: any[] = [];
+  alternateIPPoolId: number | null = null;
+  alternateIPGroupId: number | null = null;
+  useManualAlternateIP: boolean = false;
+  newAlternateIP = {
+    ip_address: '',
+    ip_version: 'ipv4',
+    pool_id: null as number | null,
+    ip_group_id: null as number | null
+  };
   
   isAdmin = this.authService.isAdmin();
 
@@ -1016,7 +1146,9 @@ export class ClientDetailComponent implements OnInit {
       name: this.client.name,
       is_lighthouse: this.client.is_lighthouse,
       public_ip: this.client.public_ip || undefined,
-      is_blocked: this.client.is_blocked
+      is_blocked: this.client.is_blocked,
+      ip_version: this.client.ip_version,
+      os_type: this.client.os_type
     }).subscribe({
       next: (updated: Client) => {
         this.client = updated;
@@ -1347,5 +1479,130 @@ export class ClientDetailComponent implements OnInit {
       ...(versionStatus.client_advisories || []),
       ...(versionStatus.nebula_advisories || [])
     ];
+  }
+
+  // Alternate IP Management
+  supportsMultipleIPs(): boolean {
+    if (!this.client || !this.client.ip_version) return false;
+    return ['multi_ipv4', 'multi_ipv6', 'multi_both', 'dual_stack'].includes(this.client.ip_version);
+  }
+
+  getAlternateIPs(): any[] {
+    if (!this.client || !this.client.assigned_ips) return [];
+    return this.client.assigned_ips.filter((ip: any) => !ip.is_primary);
+  }
+
+  getAlternateIPCount(): number {
+    return this.getAlternateIPs().length;
+  }
+
+  getIPVersionLabel(): string {
+    if (!this.client) return '';
+    const labels: Record<string, string> = {
+      'ipv4_only': 'IPv4 Only',
+      'ipv6_only': 'IPv6 Only',
+      'dual_stack': 'Dual Stack (IPv4 + IPv6)',
+      'multi_ipv4': 'Multiple IPv4 Addresses',
+      'multi_ipv6': 'Multiple IPv6 Addresses',
+      'multi_both': 'Multiple IPv4 + IPv6 Addresses'
+    };
+    return labels[this.client.ip_version || 'ipv4_only'] || this.client.ip_version || 'Unknown';
+  }
+
+  getPoolName(poolId: number | null | undefined): string {
+    if (!poolId) return '—';
+    const pool = this.allIPPools.find(p => p.id === poolId);
+    return pool ? pool.cidr : '—';
+  }
+
+  onAlternateIPPoolChange(): void {
+    this.alternateIPGroupId = null;
+    this.newAlternateIP.pool_id = this.alternateIPPoolId;
+    this.newAlternateIP.ip_group_id = null;
+    this.newAlternateIP.ip_address = '';
+    this.loadAlternateIPGroups();
+    this.loadAvailableAlternateIPs();
+  }
+
+  onAlternateIPGroupChange(): void {
+    this.newAlternateIP.ip_group_id = this.alternateIPGroupId;
+    this.newAlternateIP.ip_address = '';
+    this.loadAvailableAlternateIPs();
+  }
+
+  loadAlternateIPGroups(): void {
+    if (!this.alternateIPPoolId) {
+      this.allIPGroups = [];
+      return;
+    }
+    this.apiService.getIPGroups(this.alternateIPPoolId).subscribe({
+      next: (groups: any[]) => {
+        this.allIPGroups = groups;
+      },
+      error: (err: any) => this.notificationService.notify('Failed to load IP groups')
+    });
+  }
+
+  loadAvailableAlternateIPs(): void {
+    if (!this.alternateIPPoolId) {
+      this.availableAlternateIPs = [];
+      return;
+    }
+    this.apiService.getAvailableIPs(this.alternateIPPoolId, this.alternateIPGroupId ?? undefined).subscribe({
+      next: (ips: any[]) => {
+        this.availableAlternateIPs = ips;
+      },
+      error: (err: any) => this.notificationService.notify('Failed to load available IPs')
+    });
+  }
+
+  addAlternateIP(): void {
+    if (!this.newAlternateIP.ip_address) {
+      this.notificationService.notify('Please enter an IP address', 'error');
+      return;
+    }
+
+    this.isLoading = true;
+    this.apiService.addAlternateIP(this.clientId, this.newAlternateIP).subscribe({
+      next: () => {
+        this.notificationService.notify('Alternate IP added successfully', 'success');
+        // Reset form
+        this.alternateIPPoolId = null;
+        this.alternateIPGroupId = null;
+        this.availableAlternateIPs = [];
+        this.useManualAlternateIP = false;
+        this.newAlternateIP = {
+          ip_address: '',
+          ip_version: 'ipv4',
+          pool_id: null,
+          ip_group_id: null
+        };
+        this.loadClient(); // Reload to get updated assigned_ips
+        this.isLoading = false;
+      },
+      error: (err: any) => {
+        this.notificationService.notify('Failed to add alternate IP: ' + (err.error?.detail || 'Unknown error'), 'error');
+        this.isLoading = false;
+      }
+    });
+  }
+
+  deleteAlternateIP(ipAssignmentId: number): void {
+    if (!confirm('Are you sure you want to delete this alternate IP?')) {
+      return;
+    }
+
+    this.isLoading = true;
+    this.apiService.deleteAlternateIP(this.clientId, ipAssignmentId).subscribe({
+      next: () => {
+        this.notificationService.notify('Alternate IP deleted successfully', 'success');
+        this.loadClient(); // Reload to get updated assigned_ips
+        this.isLoading = false;
+      },
+      error: (err: any) => {
+        this.notificationService.notify('Failed to delete alternate IP: ' + (err.error?.detail || 'Unknown error'), 'error');
+        this.isLoading = false;
+      }
+    });
   }
 }

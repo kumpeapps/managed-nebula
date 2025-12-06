@@ -64,7 +64,18 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
                     <span *ngIf="client.owner" class="text-muted">{{ client.owner.email }}</span>
                     <span *ngIf="!client.owner" class="text-muted">—</span>
                   </td>
-                  <td>{{ client.ip_address || 'Not assigned' }}</td>
+                  <td>
+                    <div *ngIf="client.assigned_ips && client.assigned_ips.length > 0" style="display: flex; flex-direction: column; gap: 0.25em;">
+                      <div *ngFor="let ip of client.assigned_ips" style="display: flex; align-items: center; gap: 0.3em;">
+                        <span style="font-family: monospace;">{{ ip.ip_address }}</span>
+                        <span *ngIf="ip.is_primary" class="badge badge-primary" style="font-size: 0.7em;">Primary</span>
+                        <span class="badge" [ngClass]="ip.ip_version === 'ipv4' ? 'badge-info' : 'badge-secondary'" style="font-size: 0.7em;">
+                          {{ ip.ip_version.toUpperCase() }}
+                        </span>
+                      </div>
+                    </div>
+                    <span *ngIf="!client.assigned_ips || client.assigned_ips.length === 0">Not assigned</span>
+                  </td>
                   <td>
                     <div class="status-badges">
                       <span *ngIf="client.is_lighthouse" class="badge badge-info">Lighthouse</span>
@@ -143,6 +154,21 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
             </div>
 
             <hr>
+            <div class="form-group">
+              <label>Certificate Version / IP Configuration</label>
+              <select class="form-control" [(ngModel)]="newClient.ip_version" name="ip_version">
+                <option value="ipv4_only">IPv4 Only (v1 cert - single IPv4)</option>
+                <option value="ipv6_only">IPv6 Only (v2 cert required - single IPv6)</option>
+                <option value="dual_stack">Dual Stack (v2 cert required - single IPv4 + single IPv6)</option>
+                <option value="multi_ipv4">Multiple IPv4 Addresses (v2 cert required)</option>
+                <option value="multi_ipv6">Multiple IPv6 Addresses (v2 cert required)</option>
+                <option value="multi_both">Multiple IPv4 + IPv6 Addresses (v2 cert required)</option>
+              </select>
+              <small class="text-muted">
+                Only IPv4 Only supports v1 certs. All other options require v2 certificates (Nebula 1.10.0+ on server and client).
+              </small>
+            </div>
+
             <div class="form-group">
               <label>IP Pool</label>
               <select class="form-control" [(ngModel)]="newClient.pool_id" name="pool_id" (change)="onPoolChange()">
@@ -605,6 +631,8 @@ export class ClientsComponent implements OnInit {
     pool_id: null,
     ip_group_id: null,
     ip_address: null,
+    os_type: 'docker',
+    ip_version: 'ipv4_only',
   };
   
   ipPools: IPPool[] = [];
@@ -644,6 +672,8 @@ export class ClientsComponent implements OnInit {
       pool_id: null,
       ip_group_id: null,
       ip_address: null,
+      os_type: 'docker',
+      ip_version: 'ipv4_only',
     };
     this.selectedGroups.clear();
     this.selectedRulesets.clear();

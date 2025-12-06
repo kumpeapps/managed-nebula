@@ -36,7 +36,7 @@ services:
     ports:
       - "8080:8080"   # Direct access for API debugging (also proxied via frontend)
     volumes:
-      - server_data:/app/data
+      - ./server/data:/app/data
       # Live code reload for development:
       - ./server/app:/app/app
       - ./server/manage.py:/app/manage.py
