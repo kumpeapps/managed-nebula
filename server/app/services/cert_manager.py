@@ -1,3 +1,32 @@
+"""
+Nebula Certificate Manager
+
+Handles CA and client certificate lifecycle using nebula-cert CLI.
+
+Certificate Version Support:
+- v1: Traditional Nebula certificates (single IPv4 only, all Nebula versions)
+- v2: Modern Nebula certificates (IPv4/IPv6, multiple IPs, requires Nebula 1.10.0+)
+- hybrid: Dual v1+v2 certificates (backward compatible, single IPv4 only)
+
+Hybrid Certificate Mode:
+When hybrid mode is enabled (via GlobalSettings.cert_version = 'hybrid'), client certificates
+are issued as BOTH v1 and v2 certificates with the same public key, concatenated in a single
+PEM file. This provides backward compatibility with older Nebula clients while supporting
+newer v2 clients.
+
+Hybrid Constraints:
+- Only single IPv4 address supported (no multiple IPs, no IPv6)
+- Requires a v2 CA (v2 CAs can sign both v1 and v2 certificates)
+- Both certificate versions use the same public key
+- Nebula clients automatically select the appropriate certificate version during handshake
+
+Example hybrid certificate flow:
+1. Client sends public key to server
+2. Server signs public key TWICE (once with -version 1, once with -version 2)
+3. Both PEM certificates are concatenated: v1_pem + v2_pem
+4. Client receives combined PEM containing both versions
+5. During handshake, Nebula automatically uses the matching version
+"""
 from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Tuple
@@ -25,7 +54,12 @@ class CertManager:
             cert_version: Certificate version - v1, v2, or hybrid
                 - v1: Traditional single-signature CA (compatible with all Nebula versions)
                 - v2: V2-only CA (requires Nebula 1.10.0+, uses -version 2 flag)
-                - hybrid: Dual-signature CA (backward compatible, no -version flag)
+                - hybrid: Dual-signature CA (backward compatible, but client certs are limited to single IPv4)
+                
+        Note: Hybrid CAs can sign both v1 and v2 client certificates. However, for maximum compatibility,
+        hybrid client certificates (containing both v1 and v2 signatures) are restricted to single IPv4 
+        addresses only. This ensures the networks match between v1 and v2 certificate versions, as required
+        by Nebula's dual-cert implementation.
         """
         now = datetime.utcnow()
         # nebula-cert expects Go-style durations (e.g., hours). Convert days -> hours.
@@ -42,7 +76,8 @@ class CertManager:
                 duration,
             ]
             # Add -version flag for pure v2 CAs only
-            # Hybrid CAs are created WITHOUT -version flag (creates dual signatures)
+            # Hybrid mode: CA without -version flag can sign both v1 and v2 certs
+            # We then manually issue both versions for client certs
             if cert_version == "v2":
                 cmd.extend(["-version", "2"])
             
@@ -110,17 +145,34 @@ class CertManager:
             public_key_str: The client's public key
             client_ip: The client's IP address (without CIDR) - primary IP for v1
             cidr_prefix: Network prefix length (e.g., 16 for /16). If None, uses /32.
-            cert_version: Certificate version (v1 or v2). v2 requires Nebula 1.10.0+
-            all_ips: List of all IP addresses for v2 certs (optional, v2 only)
+            cert_version: Certificate version (v1, v2, or hybrid)
+                - v1: Traditional single IPv4 certificate
+                - v2: V2-only certificate (supports multiple IPs, IPv6)
+                - hybrid: Dual v1+v2 certificate (single IPv4 only, for backwards compatibility)
+            all_ips: List of all IP addresses for v2 certs (optional, v2 only, not supported for hybrid)
         """
         from sqlalchemy import desc
+
+        # Validate constraints for hybrid certificates
+        if cert_version == "hybrid":
+            if all_ips and len(all_ips) > 1:
+                raise ValueError("Hybrid certificates do not support multiple IPs - only single IPv4 address allowed")
+            # Validate that the IP is IPv4
+            import ipaddress
+            try:
+                ip_obj = ipaddress.ip_address(client_ip)
+                if ip_obj.version != 4:
+                    raise ValueError("Hybrid certificates only support IPv4 addresses")
+            except ValueError as e:
+                raise ValueError(f"Invalid IP address for hybrid certificate: {e}")
 
         # Compute current issuance context
         ip_with_cidr = f"{client_ip}/{cidr_prefix}" if cidr_prefix else f"{client_ip}/32"
         
-        # For v2/hybrid certs with multiple IPs, create a sorted comma-separated list for comparison
+        # For v2 certs with multiple IPs, create a sorted comma-separated list for comparison
+        # Note: hybrid certs use single IP only
         all_ips_str = None
-        if cert_version in ["v2", "hybrid"] and all_ips:
+        if cert_version == "v2" and all_ips:
             all_ips_str = ",".join(sorted(all_ips))
         
         # Hash groups for change detection
@@ -152,21 +204,28 @@ class CertManager:
             # Check cert version compatibility
             existing_cert_version = getattr(existing, 'cert_version', 'v1')
             
-            # For v2/hybrid certs, check if all_ips match
+            # For v2 certs with multiple IPs, check if all_ips match
+            # For hybrid certs, check single IP only
             ips_match = True
-            if cert_version in ["v2", "hybrid"] and all_ips:
+            if cert_version == "v2" and all_ips:
                 # Must have matching cert version for v2
-                if existing_cert_version not in ['v2', 'hybrid']:
-                    # Existing cert is v1, but we need v2 - must regenerate
+                if existing_cert_version != 'v2':
+                    # Existing cert is not v2 - must regenerate
                     ips_match = False
                 else:
                     # Compare all IPs for v2 certificates
                     existing_all_ips = getattr(existing, 'issued_for_all_ips', None)
                     ips_match = (existing_all_ips == all_ips_str)
+            elif cert_version == "hybrid":
+                # Hybrid certs must match version and single IP
+                if existing_cert_version != 'hybrid':
+                    ips_match = False
+                else:
+                    ips_match = (existing.issued_for_ip_cidr == ip_with_cidr)
             else:
                 # For v1 certs, only check primary IP and version
-                if existing_cert_version in ['v2', 'hybrid'] and cert_version == 'v1':
-                    # Existing is v2 but we want v1 - must regenerate
+                if existing_cert_version != 'v1':
+                    # Existing is not v1 - must regenerate
                     ips_match = False
                 else:
                     ips_match = (existing.issued_for_ip_cidr == ip_with_cidr)
@@ -185,6 +244,14 @@ class CertManager:
         if not active_cas:
             raise RuntimeError("No active CA")
         ca = sorted(active_cas, key=lambda c: c.not_after, reverse=True)[0]
+        
+        # Validate that hybrid mode requires a v2 CA (v2 CAs can sign both v1 and v2)
+        if cert_version == "hybrid" and ca.cert_version != "v2":
+            raise ValueError(
+                f"Hybrid certificate mode requires a v2 CA (v2 CAs can sign both v1 and v2 certificates). "
+                f"Current CA '{ca.name}' is version '{ca.cert_version}'. "
+                f"Please create a new v2 CA before using hybrid mode."
+            )
 
         # Use nebula-cert sign with -in-pub
         with tempfile.TemporaryDirectory() as td:
@@ -208,64 +275,141 @@ class CertManager:
             if group_names:
                 groups_arg = ["-groups", ",".join(group_names)]
 
-            cmd = [
-                "nebula-cert",
-                "sign",
-                "-name",
-                client.name,
-                "-duration",
-                duration,
-                "-ca-crt",
-                ca_crt,
-                "-ca-key",
-                ca_key,
-                "-in-pub",
-                pub_path,
-                "-out-crt",
-                out_crt,
-            ]
-            
-            # Add IP addresses
-            if cert_version in ["v2", "hybrid"] and all_ips:
-                # v2/hybrid: Multiple IPs using -networks with comma-separated list
-                networks_list = [f"{ip}/{cidr_prefix}" if cidr_prefix else f"{ip}/32" for ip in all_ips]
-                networks_str = ",".join(networks_list)
-                cmd.extend(["-networks", networks_str])
-                # Only add -version 2 for pure v2 certs
-                # Hybrid certs get hybrid nature from the CA, not from -version flag
-                if cert_version == "v2":
-                    cmd.extend(["-version", "2"])
+            # For hybrid certificates, we need to issue both v1 and v2 certs with the same public key
+            # and concatenate the PEM outputs
+            if cert_version == "hybrid":
+                # Issue v1 certificate
+                out_crt_v1 = os.path.join(td, "host_v1.crt")
+                cmd_v1 = [
+                    "nebula-cert",
+                    "sign",
+                    "-name",
+                    client.name,
+                    "-duration",
+                    duration,
+                    "-ca-crt",
+                    ca_crt,
+                    "-ca-key",
+                    ca_key,
+                    "-in-pub",
+                    pub_path,
+                    "-out-crt",
+                    out_crt_v1,
+                    "-ip",
+                    ip_with_cidr,
+                ] + groups_arg
+                
+                try:
+                    subprocess.check_output(cmd_v1, cwd=td, stderr=subprocess.STDOUT)
+                except subprocess.CalledProcessError as e:
+                    error_msg = e.output.decode(errors="replace")
+                    print(f"[nebula-cert sign v1 error] {error_msg}")
+                    raise RuntimeError(f"nebula-cert sign v1 failed: {error_msg}")
+                
+                # Issue v2 certificate with same public key and IP
+                out_crt_v2 = os.path.join(td, "host_v2.crt")
+                cmd_v2 = [
+                    "nebula-cert",
+                    "sign",
+                    "-name",
+                    client.name,
+                    "-duration",
+                    duration,
+                    "-ca-crt",
+                    ca_crt,
+                    "-ca-key",
+                    ca_key,
+                    "-in-pub",
+                    pub_path,
+                    "-out-crt",
+                    out_crt_v2,
+                    "-networks",
+                    ip_with_cidr,
+                    "-version",
+                    "2",
+                ] + groups_arg
+                
+                try:
+                    subprocess.check_output(cmd_v2, cwd=td, stderr=subprocess.STDOUT)
+                except subprocess.CalledProcessError as e:
+                    error_msg = e.output.decode(errors="replace")
+                    print(f"[nebula-cert sign v2 error] {error_msg}")
+                    raise RuntimeError(f"nebula-cert sign v2 failed: {error_msg}")
             else:
-                # v1: Single IP only with -ip flag
-                cmd.extend(["-ip", ip_with_cidr])
-            
-            cmd.extend(groups_arg)
-
-            try:
-                subprocess.check_output(cmd, cwd=td, stderr=subprocess.STDOUT)
-            except subprocess.CalledProcessError as e:
-                error_msg = e.output.decode(errors="replace")
-                print(f"[nebula-cert sign error] {error_msg}")
-                raise RuntimeError(f"nebula-cert sign failed: {error_msg}")
-
-            with open(out_crt, "r") as f:
-                pem_cert = f.read()
-
-            # Extract fingerprint via nebula-cert print -json
-            try:
-                out = subprocess.check_output([
-                    "nebula-cert", "print", "-json", "-path", out_crt
-                ], cwd=td)
-                import json as _json
-                info = _json.loads(out.decode())
-                # For v1+v2 bundles, info is a list. Use v2 fingerprint (last element)
-                if isinstance(info, list):
-                    fingerprint = info[-1].get("fingerprint") if info else None
+                # Standard v1 or v2 certificate issuance
+                cmd = [
+                    "nebula-cert",
+                    "sign",
+                    "-name",
+                    client.name,
+                    "-duration",
+                    duration,
+                    "-ca-crt",
+                    ca_crt,
+                    "-ca-key",
+                    ca_key,
+                    "-in-pub",
+                    pub_path,
+                    "-out-crt",
+                    out_crt,
+                ]
+                
+                # Add IP addresses
+                if cert_version == "v2" and all_ips:
+                    # v2: Multiple IPs using -networks with comma-separated list
+                    networks_list = [f"{ip}/{cidr_prefix}" if cidr_prefix else f"{ip}/32" for ip in all_ips]
+                    networks_str = ",".join(networks_list)
+                    cmd.extend(["-networks", networks_str])
+                    cmd.extend(["-version", "2"])
                 else:
+                    # v1: Single IP only with -ip flag
+                    cmd.extend(["-ip", ip_with_cidr])
+                
+                cmd.extend(groups_arg)
+
+                try:
+                    subprocess.check_output(cmd, cwd=td, stderr=subprocess.STDOUT)
+                except subprocess.CalledProcessError as e:
+                    error_msg = e.output.decode(errors="replace")
+                    print(f"[nebula-cert sign error] {error_msg}")
+                    raise RuntimeError(f"nebula-cert sign failed: {error_msg}")
+
+            # Read certificate(s) and concatenate for hybrid
+            if cert_version == "hybrid":
+                # Concatenate v1 and v2 PEMs
+                with open(out_crt_v1, "r") as f:
+                    pem_cert_v1 = f.read()
+                with open(out_crt_v2, "r") as f:
+                    pem_cert_v2 = f.read()
+                # Combine both certificates in the same PEM file
+                pem_cert = pem_cert_v1 + pem_cert_v2
+                
+                # Extract fingerprint from v2 cert (use v2 as primary for hybrid)
+                try:
+                    out = subprocess.check_output([
+                        "nebula-cert", "print", "-json", "-path", out_crt_v2
+                    ], cwd=td)
+                    import json as _json
+                    info = _json.loads(out.decode())
                     fingerprint = info.get("fingerprint") or info.get("Fingerprint")
-            except Exception:
-                # nebula-cert print may fail; fingerprint is optional
-                fingerprint = None
+                except Exception:
+                    fingerprint = None
+            else:
+                # Standard single certificate
+                with open(out_crt, "r") as f:
+                    pem_cert = f.read()
+
+                # Extract fingerprint via nebula-cert print -json
+                try:
+                    out = subprocess.check_output([
+                        "nebula-cert", "print", "-json", "-path", out_crt
+                    ], cwd=td)
+                    import json as _json
+                    info = _json.loads(out.decode())
+                    fingerprint = info.get("fingerprint") or info.get("Fingerprint")
+                except Exception:
+                    # nebula-cert print may fail; fingerprint is optional
+                    fingerprint = None
 
         not_after = now + timedelta(days=settings.client_cert_validity_days)
         cc = ClientCertificate(
