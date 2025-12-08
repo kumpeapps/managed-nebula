@@ -9,7 +9,7 @@ APScheduler==3.11.1
 bcrypt==5.0.0
 certifi==2025.11.12
 cffi==2.0.0
-cfgv==3.4.0
+cfgv==3.5.0
 click==8.3.1
 cryptography==46.0.3
 distlib==0.4.0
