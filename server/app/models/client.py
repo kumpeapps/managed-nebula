@@ -140,6 +140,8 @@ class ClientCertificate(Base):
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     # Certificate version: v1 or v2
     cert_version: Mapped[str] = mapped_column(String(10), default="v1", server_default="v1")
+    # Track which CA issued this certificate for re-issuance when CA changes
+    issued_by_ca_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("ca_certificates.id", ondelete="SET NULL"), nullable=True)
 
     client: Mapped[Client] = relationship("Client")
 

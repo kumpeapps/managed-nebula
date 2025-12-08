@@ -186,6 +186,16 @@ class CertManager:
             group_names = []
         groups_hash = hashlib.sha256(",".join(group_names).encode()).hexdigest() if group_names else ""
 
+        # Get the current active CA before checking existing cert
+        active_cas = (
+            await self.session.execute(
+                select(CACertificate).where(CACertificate.is_active == True, CACertificate.can_sign == True)
+            )
+        ).scalars().all()
+        if not active_cas:
+            raise RuntimeError("No active CA")
+        ca = sorted(active_cas, key=lambda c: c.not_after, reverse=True)[0]
+        
         existing = (
             await self.session.execute(
                 select(ClientCertificate)
@@ -200,50 +210,48 @@ class CertManager:
         # - Not close to expiry (>= 7 days remaining)
         # - Certificate version matches what we need
         # - Issuance context unchanged (IP/CIDR, all IPs for v2, and groups hash)
+        # - Signed by the same CA (issued_by_ca_id matches current CA)
         if existing and not existing.revoked and (existing.not_after - now).days >= 7:
-            # Check cert version compatibility
-            existing_cert_version = getattr(existing, 'cert_version', 'v1')
-            
-            # For v2 certs with multiple IPs, check if all_ips match
-            # For hybrid certs, check single IP only
-            ips_match = True
-            if cert_version == "v2" and all_ips:
-                # Must have matching cert version for v2
-                if existing_cert_version != 'v2':
-                    # Existing cert is not v2 - must regenerate
-                    ips_match = False
-                else:
-                    # Compare all IPs for v2 certificates
-                    existing_all_ips = getattr(existing, 'issued_for_all_ips', None)
-                    ips_match = (existing_all_ips == all_ips_str)
-            elif cert_version == "hybrid":
-                # Hybrid certs must match version and single IP
-                if existing_cert_version != 'hybrid':
-                    ips_match = False
-                else:
-                    ips_match = (existing.issued_for_ip_cidr == ip_with_cidr)
+            # Check if CA has changed - must reissue if different CA
+            existing_ca_id = getattr(existing, 'issued_by_ca_id', None)
+            if existing_ca_id is not None and existing_ca_id != ca.id:
+                # CA has changed - must issue new certificate
+                pass  # Fall through to issue new cert
             else:
-                # For v1 certs, only check primary IP and version
-                if existing_cert_version != 'v1':
-                    # Existing is not v1 - must regenerate
-                    ips_match = False
+                # Check cert version compatibility
+                existing_cert_version = getattr(existing, 'cert_version', 'v1')
+                
+                # For v2 certs with multiple IPs, check if all_ips match
+                # For hybrid certs, check single IP only
+                ips_match = True
+                if cert_version == "v2" and all_ips:
+                    # Must have matching cert version for v2
+                    if existing_cert_version != 'v2':
+                        # Existing cert is not v2 - must regenerate
+                        ips_match = False
+                    else:
+                        # Compare all IPs for v2 certificates
+                        existing_all_ips = getattr(existing, 'issued_for_all_ips', None)
+                        ips_match = (existing_all_ips == all_ips_str)
+                elif cert_version == "hybrid":
+                    # Hybrid certs must match version and single IP
+                    if existing_cert_version != 'hybrid':
+                        ips_match = False
+                    else:
+                        ips_match = (existing.issued_for_ip_cidr == ip_with_cidr)
                 else:
-                    ips_match = (existing.issued_for_ip_cidr == ip_with_cidr)
-            
-            if (
-                ips_match
-                and (existing.issued_for_groups_hash or "") == (groups_hash or "")
-            ):
-                return existing.pem_cert, existing.not_before, existing.not_after
-        
-        active_cas = (
-            await self.session.execute(
-                select(CACertificate).where(CACertificate.is_active == True, CACertificate.can_sign == True)
-            )
-        ).scalars().all()
-        if not active_cas:
-            raise RuntimeError("No active CA")
-        ca = sorted(active_cas, key=lambda c: c.not_after, reverse=True)[0]
+                    # For v1 certs, only check primary IP and version
+                    if existing_cert_version != 'v1':
+                        # Existing is not v1 - must regenerate
+                        ips_match = False
+                    else:
+                        ips_match = (existing.issued_for_ip_cidr == ip_with_cidr)
+                
+                if (
+                    ips_match
+                    and (existing.issued_for_groups_hash or "") == (groups_hash or "")
+                ):
+                    return existing.pem_cert, existing.not_before, existing.not_after
         
         # Validate that hybrid mode requires a v2 CA (v2 CAs can sign both v1 and v2)
         if cert_version == "hybrid" and ca.cert_version != "v2":
@@ -422,6 +430,7 @@ class CertManager:
             issued_for_groups_hash=groups_hash,
             issued_for_all_ips=all_ips_str,  # Store all IPs for v2 cert change detection
             cert_version=cert_version,
+            issued_by_ca_id=ca.id,  # Track which CA issued this cert for re-issuance detection
         )
         self.session.add(cc)
         await self.session.commit()
