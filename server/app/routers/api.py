@@ -794,22 +794,25 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
     # If client needs v2 features but global is v1, upgrade to v2
     if requires_v2_features and cert_version == 'v1':
         cert_version = 'v2'
-    # If global is hybrid and client supports v2, use hybrid (for backwards compatibility + v2 features)
-    elif cert_version == 'hybrid' and supports_v2:
-        # Keep hybrid - this allows v2 features with backwards compatibility
-        pass
-    elif cert_version == 'hybrid' and not supports_v2:
-        # Client doesn't support v2, so hybrid CA will issue v1-compatible cert
-        # But we can't use multiple IPs
+    # Hybrid certificates have constraints: single IPv4 only
+    elif cert_version == 'hybrid':
+        # Hybrid certs cannot support multiple IPs or v2 features
         if requires_v2_features:
-            # This is a problem - client needs v2 features but doesn't support them
-            # Upgrade anyway and hope for the best (or client needs to upgrade)
-            pass
+            # Client needs multiple IPs or IPv6, but hybrid only supports single IPv4
+            # Upgrade to v2 if client supports it, otherwise error
+            if supports_v2:
+                cert_version = 'v2'
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Hybrid certificates only support single IPv4 addresses. Client requires multiple IPs or IPv6 but doesn't support v2 certificates. Please upgrade client to Nebula 1.10.0+ or change IP version to ipv4_only."
+                )
     # Otherwise use global setting (v1, v2, or hybrid)
     
-    # For v2 or hybrid certs, gather all IPs for the client
+    # For v2 certs with multiple IPs, gather all IPs for the client
+    # Note: hybrid certs use single IP only (enforced in CertManager)
     all_ips = []
-    if cert_version in ['v2', 'hybrid']:
+    if cert_version == 'v2':
         # Get all IP assignments for this client (ordered by primary first)
         all_ip_rows = (await session.execute(
             select(IPAssignment)
