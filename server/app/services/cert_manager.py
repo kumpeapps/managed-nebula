@@ -194,7 +194,17 @@ class CertManager:
         ).scalars().all()
         if not active_cas:
             raise RuntimeError("No active CA")
-        ca = sorted(active_cas, key=lambda c: c.not_after, reverse=True)[0]
+        
+        # CRITICAL: Always prefer v2 CAs for signing all certificates
+        # V2 CAs are backwards compatible and can sign both v1 and v2 format certificates
+        # This ensures all clients get certificates from the same CA family
+        # Note: v2 CERTIFICATES (not CAs) require Nebula 1.10.0+, but v2 CAs work with all versions
+        v2_cas = [ca for ca in active_cas if ca.cert_version == "v2"]
+        if v2_cas:
+            ca = sorted(v2_cas, key=lambda c: c.not_after, reverse=True)[0]
+        else:
+            # Fall back to v1 CA if no v2 CA exists
+            ca = sorted(active_cas, key=lambda c: c.not_after, reverse=True)[0]
         
         existing = (
             await self.session.execute(
@@ -214,8 +224,12 @@ class CertManager:
         if existing and not existing.revoked and (existing.not_after - now).days >= 7:
             # Check if CA has changed - must reissue if different CA
             existing_ca_id = getattr(existing, 'issued_by_ca_id', None)
-            if existing_ca_id is not None and existing_ca_id != ca.id:
-                # CA has changed - must issue new certificate
+            # If issued_by_ca_id is None (old cert before this field existed) or doesn't match current CA
+            if existing_ca_id is None or existing_ca_id != ca.id:
+                # CA has changed (or unknown) - must issue new certificate
+                # Update client's config_last_changed_at to signal config refresh needed
+                client.config_last_changed_at = datetime.utcnow()
+                await self.session.commit()
                 pass  # Fall through to issue new cert
             else:
                 # Check cert version compatibility
@@ -308,6 +322,7 @@ class CertManager:
             # and concatenate the PEM outputs
             if cert_version == "hybrid":
                 # Issue v1 certificate
+                # CRITICAL: Must specify -version 1 explicitly (nebula-cert defaults to v2)
                 out_crt_v1 = os.path.join(td, "host_v1.crt")
                 cmd_v1 = [
                     "nebula-cert",
@@ -326,6 +341,8 @@ class CertManager:
                     out_crt_v1,
                     "-ip",
                     ip_with_cidr,
+                    "-version",
+                    "1",
                 ] + groups_arg
                 
                 try:

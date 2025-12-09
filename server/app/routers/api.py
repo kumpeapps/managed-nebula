@@ -222,6 +222,65 @@ async def healthz():
     return {"status": "ok"}
 
 
+@router.get("/warnings")
+async def get_warnings(
+    session: AsyncSession = Depends(get_session),
+):
+    """Get system-wide warnings for display in UI banner.
+    
+    Checks for configuration mismatches that require user attention,
+    such as v1 clients when server is configured for v2/hybrid mode.
+    """
+    warnings = []
+    
+    # Check for v1 clients when server is in v2/hybrid mode
+    settings = (await session.execute(select(GlobalSettings))).scalars().first()
+    if settings and settings.cert_version in ['v2', 'hybrid']:
+        # Find clients with Nebula version < 1.10.0 or unknown
+        clients = (await session.execute(
+            select(Client).options(selectinload(Client.groups))
+        )).scalars().all()
+        
+        incompatible_clients = []
+        for client in clients:
+            version = getattr(client, 'nebula_version', None)
+            supports_v2 = False
+            if version:
+                try:
+                    version_str = version.lstrip('v')
+                    parts = version_str.split('.')
+                    if len(parts) >= 2:
+                        major = int(parts[0])
+                        minor = int(parts[1])
+                        supports_v2 = (major > 1) or (major == 1 and minor >= 10)
+                except (ValueError, AttributeError):
+                    pass
+            
+            if not supports_v2:
+                incompatible_clients.append({
+                    'id': client.id,
+                    'name': client.name,
+                    'version': version or 'unknown'
+                })
+        
+        if incompatible_clients:
+            client_list = ', '.join([f"{c['name']} ({c['version']})" for c in incompatible_clients[:5]])
+            if len(incompatible_clients) > 5:
+                client_list += f" and {len(incompatible_clients) - 5} more"
+            
+            warnings.append({
+                'severity': 'warning',
+                'message': f"Server is configured for {settings.cert_version} certificates but {len(incompatible_clients)} "
+                          f"client(s) have Nebula < 1.10.0: {client_list}. "
+                          f"V2 certificates require Nebula 1.10.0+. Please upgrade clients or change server to v1 mode.",
+                'type': 'version_mismatch',
+                'count': len(incompatible_clients),
+                'clients': incompatible_clients
+            })
+    
+    return {'warnings': warnings}
+
+
 @router.get("/version", response_model=VersionResponse)
 async def get_version():
     """Get server and Nebula versions.
@@ -733,10 +792,10 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
         raise HTTPException(
             status_code=409, detail="Client has no IP assignment")
 
-    # Load settings and active CA(s)
+    # Load settings and fetch all CAs that should be in config
     settings = (await session.execute(select(GlobalSettings))).scalars().first()
     now_ts = datetime.utcnow()
-    cas = (
+    all_cas = (
         await session.execute(
             select(CACertificate).where(
                 CACertificate.include_in_config == True,
@@ -744,8 +803,36 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
             )
         )
     ).scalars().all()
-    if not cas:
+    if not all_cas:
         raise HTTPException(status_code=503, detail="CA not configured")
+    
+    # CRITICAL: V2 CAs are NOT backwards compatible with v1 clients (< Nebula 1.10.0)
+    # Filter CA bundle based on client Nebula version
+    client_nebula_version = getattr(client, 'nebula_version', None)
+    supports_v2 = False
+    if client_nebula_version:
+        try:
+            version_str = client_nebula_version.lstrip('v')
+            parts = version_str.split('.')
+            if len(parts) >= 2:
+                major = int(parts[0])
+                minor = int(parts[1])
+                supports_v2 = (major > 1) or (major == 1 and minor >= 10)
+        except (ValueError, AttributeError):
+            supports_v2 = False
+    
+    # Filter CAs: v1 clients get only v1 CAs, v2 clients get all CAs
+    if supports_v2:
+        cas = all_cas
+    else:
+        # V1 clients cannot parse v2 CA certificates - exclude them
+        cas = [ca for ca in all_cas if ca.cert_version != 'v2']
+        if not cas:
+            raise HTTPException(
+                status_code=503,
+                detail=f"No v1 CA available for client with Nebula {client_nebula_version or 'unknown'}. "
+                       f"V2 CAs require Nebula 1.10.0+. Please create a v1 CA or upgrade client."
+            )
 
     # Determine IP/CIDR prefix for certificate and tun.ip
     from ..models import IPPool
