@@ -772,6 +772,11 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
     client_ip_version = getattr(client, 'ip_version', 'ipv4_only')
     client_nebula_version = getattr(client, 'nebula_version', None)
     
+    # Log for debugging certificate version decisions
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Certificate request for client '{client.name}' - Nebula version: {client_nebula_version}, IP version: {client_ip_version}, Global cert version: {cert_version}")
+    
     # Check if client's Nebula version supports v2 certs (1.10.0+)
     # Unknown version = old client (<=1.3.4) that doesn't report version
     supports_v2 = False
@@ -798,6 +803,7 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
     if not supports_v2:
         # Downgrade any v2/hybrid to v1 for incompatible/old clients
         if cert_version in ['v2', 'hybrid']:
+            logger.info(f"Client '{client.name}' does not support v2 (version: {client_nebula_version}), downgrading from {cert_version} to v1")
             cert_version = 'v1'
         
         # If client requires v2 features but doesn't support them, error
@@ -812,6 +818,8 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
     # If client requires v2 features (multiple IPs, IPv6, etc), force v2
     if requires_v2_features:
         cert_version = 'v2'
+    
+    logger.info(f"Final cert version for client '{client.name}': {cert_version} (supports_v2: {supports_v2})")
     
     # Hybrid mode: For single IPv4 clients with v2 support (>=1.10.0), issue both v1+v2
     # Hybrid automatically degrades to v1 for old/incompatible clients (handled above)
