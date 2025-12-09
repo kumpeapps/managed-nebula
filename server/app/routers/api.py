@@ -767,15 +767,13 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
     if getattr(client, 'is_blocked', False):
         raise HTTPException(status_code=403, detail="Client is blocked")
 
-    # Determine cert version: use v2/hybrid features if client requires multiple IPs or is compatible
+    # Determine cert version based on client capabilities and global setting
     cert_version = getattr(settings, 'cert_version', 'v1')
     client_ip_version = getattr(client, 'ip_version', 'ipv4_only')
     client_nebula_version = getattr(client, 'nebula_version', None)
     
-    # Client IP versions that require v2 features (multiple IPs or dual stack)
-    requires_v2_features = client_ip_version in ['multi_ipv4', 'multi_ipv6', 'multi_both', 'dual_stack', 'ipv6_only']
-    
     # Check if client's Nebula version supports v2 certs (1.10.0+)
+    # Unknown version = old client (<=1.3.4) that doesn't report version
     supports_v2 = False
     if client_nebula_version:
         try:
@@ -788,26 +786,36 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
                 # Nebula 1.10.0+ supports v2 certs
                 supports_v2 = (major > 1) or (major == 1 and minor >= 10)
         except (ValueError, AttributeError):
-            # If we can't parse version, assume it doesn't support v2
+            # If we can't parse version, it's too old - treat as not supporting v2
             supports_v2 = False
+    # else: client_nebula_version is None/empty = unknown/old client (<=1.3.4)
     
-    # If client needs v2 features but global is v1, upgrade to v2
-    if requires_v2_features and cert_version == 'v1':
-        cert_version = 'v2'
-    # Hybrid certificates have constraints: single IPv4 only
-    elif cert_version == 'hybrid':
-        # Hybrid certs cannot support multiple IPs or v2 features
+    # Client IP versions that require v2 features (multiple IPs or dual stack)
+    requires_v2_features = client_ip_version in ['multi_ipv4', 'multi_ipv6', 'multi_both', 'dual_stack', 'ipv6_only']
+    
+    # CRITICAL: Clients with Nebula < 1.10.0 or unknown version can ONLY receive v1 certificates
+    # Unknown/None version means old client (<=1.3.4) that doesn't support version reporting
+    if not supports_v2:
+        # Downgrade any v2/hybrid to v1 for incompatible/old clients
+        if cert_version in ['v2', 'hybrid']:
+            cert_version = 'v1'
+        
+        # If client requires v2 features but doesn't support them, error
         if requires_v2_features:
-            # Client needs multiple IPs or IPv6, but hybrid only supports single IPv4
-            # Upgrade to v2 if client supports it, otherwise error
-            if supports_v2:
-                cert_version = 'v2'
-            else:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Hybrid certificates only support single IPv4 addresses. Client requires multiple IPs or IPv6 but doesn't support v2 certificates. Please upgrade client to Nebula 1.10.0+ or change IP version to ipv4_only."
-                )
-    # Otherwise use global setting (v1, v2, or hybrid)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Client IP configuration '{client_ip_version}' requires v2 certificates (Nebula 1.10.0+). "
+                       f"Current client Nebula version: {client_nebula_version or 'unknown (<=1.3.4)'}. "
+                       f"Please upgrade client to Nebula 1.10.0+ or change IP version to 'ipv4_only'."
+            )
+    
+    # If client requires v2 features (multiple IPs, IPv6, etc), force v2
+    if requires_v2_features:
+        cert_version = 'v2'
+    
+    # Hybrid mode: For single IPv4 clients with v2 support (>=1.10.0), issue both v1+v2
+    # Hybrid automatically degrades to v1 for old/incompatible clients (handled above)
+    # When client version changes from <1.10.0 to >=1.10.0, cert_version mismatch triggers reissuance
     
     # For v2 certs with multiple IPs, gather all IPs for the client
     # Note: hybrid certs use single IP only (enforced in CertManager)
