@@ -221,37 +221,58 @@ class CertManager:
                 # Check cert version compatibility
                 existing_cert_version = getattr(existing, 'cert_version', 'v1')
                 
-                # For v2 certs with multiple IPs, check if all_ips match
-                # For hybrid certs, check single IP only
-                ips_match = True
-                if cert_version == "v2" and all_ips:
-                    # Must have matching cert version for v2
-                    if existing_cert_version != 'v2':
-                        # Existing cert is not v2 - must regenerate
-                        ips_match = False
-                    else:
-                        # Compare all IPs for v2 certificates
-                        existing_all_ips = getattr(existing, 'issued_for_all_ips', None)
-                        ips_match = (existing_all_ips == all_ips_str)
-                elif cert_version == "hybrid":
-                    # Hybrid certs must match version and single IP
-                    if existing_cert_version != 'hybrid':
-                        ips_match = False
-                    else:
-                        ips_match = (existing.issued_for_ip_cidr == ip_with_cidr)
-                else:
-                    # For v1 certs, only check primary IP and version
-                    if existing_cert_version != 'v1':
-                        # Existing is not v1 - must regenerate
-                        ips_match = False
-                    else:
-                        ips_match = (existing.issued_for_ip_cidr == ip_with_cidr)
+                # CRITICAL: Validate that the actual PEM content matches the cert_version field
+                # This catches cases where cert_version='v1' but PEM contains v2 data (bug in older code)
+                pem_content = existing.pem_cert or ""
+                actual_is_v2 = "NEBULA CERTIFICATE V2" in pem_content
+                actual_is_hybrid = pem_content.count("-----BEGIN NEBULA") >= 2
                 
-                if (
-                    ips_match
-                    and (existing.issued_for_groups_hash or "") == (groups_hash or "")
-                ):
-                    return existing.pem_cert, existing.not_before, existing.not_after
+                pem_format_mismatch = False
+                # If PEM format doesn't match database field, must regenerate
+                if actual_is_hybrid and existing_cert_version != 'hybrid':
+                    # Database says not hybrid but PEM has multiple certs
+                    pem_format_mismatch = True
+                elif actual_is_v2 and not actual_is_hybrid and existing_cert_version != 'v2':
+                    # Database says not v2 but PEM is v2 format
+                    pem_format_mismatch = True
+                elif not actual_is_v2 and not actual_is_hybrid and existing_cert_version != 'v1':
+                    # Database says not v1 but PEM is v1 format
+                    pem_format_mismatch = True
+                
+                if not pem_format_mismatch:
+                    # PEM format matches database field - continue with normal reuse checks
+                    
+                    # For v2 certs with multiple IPs, check if all_ips match
+                    # For hybrid certs, check single IP only
+                    ips_match = True
+                    if cert_version == "v2" and all_ips:
+                        # Must have matching cert version for v2
+                        if existing_cert_version != 'v2':
+                            # Existing cert is not v2 - must regenerate
+                            ips_match = False
+                        else:
+                            # Compare all IPs for v2 certificates
+                            existing_all_ips = getattr(existing, 'issued_for_all_ips', None)
+                            ips_match = (existing_all_ips == all_ips_str)
+                    elif cert_version == "hybrid":
+                        # Hybrid certs must match version and single IP
+                        if existing_cert_version != 'hybrid':
+                            ips_match = False
+                        else:
+                            ips_match = (existing.issued_for_ip_cidr == ip_with_cidr)
+                    else:
+                        # For v1 certs, only check primary IP and version
+                        if existing_cert_version != 'v1':
+                            # Existing is not v1 - must regenerate
+                            ips_match = False
+                        else:
+                            ips_match = (existing.issued_for_ip_cidr == ip_with_cidr)
+                    
+                    if (
+                        ips_match
+                        and (existing.issued_for_groups_hash or "") == (groups_hash or "")
+                    ):
+                        return existing.pem_cert, existing.not_before, existing.not_after
         
         # Validate that hybrid mode requires a v2 CA (v2 CAs can sign both v1 and v2)
         if cert_version == "hybrid" and ca.cert_version != "v2":
