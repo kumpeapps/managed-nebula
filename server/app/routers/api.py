@@ -857,12 +857,15 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
     # Determine cert version based on client capabilities and global setting
     cert_version = getattr(settings, 'cert_version', 'v1')
     client_ip_version = getattr(client, 'ip_version', 'ipv4_only')
-    client_nebula_version = getattr(client, 'nebula_version', None)
+    
+    # Use version from request body if provided (client may have been upgraded),
+    # otherwise fall back to database value
+    client_nebula_version = body.nebula_version or getattr(client, 'nebula_version', None)
     
     # Log for debugging certificate version decisions
     import logging
     logger = logging.getLogger(__name__)
-    logger.info(f"Certificate request for client '{client.name}' - Nebula version: {client_nebula_version}, IP version: {client_ip_version}, Global cert version: {cert_version}")
+    logger.info(f"Certificate request for client '{client.name}' - Nebula version: {client_nebula_version} (from {'request' if body.nebula_version else 'database'}), IP version: {client_ip_version}, Global cert version: {cert_version}")
     
     # Check if client's Nebula version supports v2 certs (1.10.0+)
     # Unknown version = old client (<=1.3.4) that doesn't report version
@@ -896,10 +899,10 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
         # If client requires v2 features but doesn't support them, error
         if requires_v2_features:
             raise HTTPException(
-                status_code=400,
+                status_code=426,
                 detail=f"Client IP configuration '{client_ip_version}' requires v2 certificates (Nebula 1.10.0+). "
                        f"Current client Nebula version: {client_nebula_version or 'unknown (<=1.3.4)'}. "
-                       f"Please upgrade client to Nebula 1.10.0+ or change IP version to 'ipv4_only'."
+                       f"Please upgrade to Managed Nebula Client >= 1.5.0 or Nebula >= 1.10.0, or change IP version to 'ipv4_only'."
             )
     
     # If client requires v2 features (multiple IPs, IPv6, etc), force v2
