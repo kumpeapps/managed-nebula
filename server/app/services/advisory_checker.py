@@ -522,8 +522,8 @@ async def refresh_version_cache(session, github_token: Optional[str] = None) -> 
             "latest_nebula_version": latest_nebula_release.version if latest_nebula_release else None
         }
     except Exception as e:
-        logger.error(f"Failed to refresh version cache: {e}")
+        logger.error(f"Failed to refresh version cache: {e}", exc_info=True)
         return {
             "success": False,
-            "error": str(e)
+            "error": "Internal error occurred while refreshing version cache."
         }
