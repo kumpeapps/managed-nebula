@@ -69,7 +69,8 @@ The PKG installer now includes a **privileged helper daemon** that:
 | Directory | Permissions | Purpose |
 |-----------|-------------|---------|
 | /etc/nebula/ | 0755 | Nebula configuration |
-| /var/log/ | Default | Log files |
+| /var/lib/nebula/ | 0700 | Private keys |
+| /var/log/nebula/ | 0755 | Log files |
 | /tmp/ | Default | IPC control file |
 
 ## Security
@@ -115,10 +116,10 @@ echo "stop" > /tmp/nebula-control
 ### View Logs
 ```bash
 # Helper daemon logs
-sudo tail -f /var/log/nebula-helper.log
+sudo tail -f /var/log/nebula/nebula-helper.log
 
 # Nebula logs  
-sudo tail -f /var/log/nebula.log
+sudo tail -f /var/log/nebula/nebula.log
 ```
 
 ## Comparison: Before vs After
