@@ -27,24 +27,23 @@ def upgrade() -> None:
     # Check if column already exists
     columns = {col['name'] for col in inspector.get_columns('client_certificates')}
     if 'issued_by_ca_id' not in columns:
-        # Add the column
-        op.add_column(
-            'client_certificates',
-            sa.Column(
-                'issued_by_ca_id',
-                sa.Integer(),
-                sa.ForeignKey('ca_certificates.id', ondelete='SET NULL'),
-                nullable=True
+        # Use batch mode for SQLite compatibility
+        with op.batch_alter_table('client_certificates', schema=None) as batch_op:
+            batch_op.add_column(
+                sa.Column('issued_by_ca_id', sa.Integer(), nullable=True)
             )
-        )
-        
-        # Create index for faster lookups
-        op.create_index(
-            'ix_client_certificates_issued_by_ca_id',
-            'client_certificates',
-            ['issued_by_ca_id'],
-            unique=False
-        )
+            batch_op.create_foreign_key(
+                'fk_client_certificates_issued_by_ca_id',
+                'ca_certificates',
+                ['issued_by_ca_id'],
+                ['id'],
+                ondelete='SET NULL'
+            )
+            batch_op.create_index(
+                'ix_client_certificates_issued_by_ca_id',
+                ['issued_by_ca_id'],
+                unique=False
+            )
 
 
 def downgrade() -> None:
@@ -52,12 +51,20 @@ def downgrade() -> None:
     conn = op.get_bind()
     inspector = sa.inspect(conn)
     
-    # Check if index exists
-    indexes = {idx['name'] for idx in inspector.get_indexes('client_certificates')}
-    if 'ix_client_certificates_issued_by_ca_id' in indexes:
-        op.drop_index('ix_client_certificates_issued_by_ca_id', table_name='client_certificates')
-    
     # Check if column exists
     columns = {col['name'] for col in inspector.get_columns('client_certificates')}
     if 'issued_by_ca_id' in columns:
-        op.drop_column('client_certificates', 'issued_by_ca_id')
+        # Use batch mode for SQLite compatibility
+        with op.batch_alter_table('client_certificates', schema=None) as batch_op:
+            # Drop index if it exists
+            indexes = {idx['name'] for idx in inspector.get_indexes('client_certificates')}
+            if 'ix_client_certificates_issued_by_ca_id' in indexes:
+                batch_op.drop_index('ix_client_certificates_issued_by_ca_id')
+            
+            # Drop foreign key if it exists (check is done inside batch mode)
+            foreign_keys = inspector.get_foreign_keys('client_certificates')
+            if any(fk['name'] == 'fk_client_certificates_issued_by_ca_id' for fk in foreign_keys):
+                batch_op.drop_constraint('fk_client_certificates_issued_by_ca_id', type_='foreignkey')
+            
+            # Drop the column
+            batch_op.drop_column('issued_by_ca_id')
