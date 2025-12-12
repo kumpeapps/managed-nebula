@@ -341,8 +341,6 @@ class CertManager:
                     out_crt_v1,
                     "-ip",
                     ip_with_cidr,
-                    "-version",
-                    "1",
                 ] + groups_arg
                 
                 try:
@@ -371,8 +369,6 @@ class CertManager:
                     out_crt_v2,
                     "-networks",
                     ip_with_cidr,
-                    "-version",
-                    "2",
                 ] + groups_arg
                 
                 try:
@@ -400,18 +396,16 @@ class CertManager:
                     out_crt,
                 ]
                 
-                # Add IP addresses and version flag
+                # Add IP addresses based on cert version
                 if cert_version == "v2" and all_ips:
                     # v2: Multiple IPs using -networks with comma-separated list
+                    # Note: -networks flag requires nebula-cert >= 1.10.0
                     networks_list = [f"{ip}/{cidr_prefix}" if cidr_prefix else f"{ip}/32" for ip in all_ips]
                     networks_str = ",".join(networks_list)
                     cmd.extend(["-networks", networks_str])
-                    cmd.extend(["-version", "2"])
                 else:
                     # v1: Single IP only with -ip flag
-                    # CRITICAL: Must explicitly specify -version 1 (newer nebula-cert defaults to v2)
                     cmd.extend(["-ip", ip_with_cidr])
-                    cmd.extend(["-version", "1"])
                 
                 cmd.extend(groups_arg)
 
