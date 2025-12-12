@@ -48,8 +48,8 @@ class VersionStatus(BaseModel):
     """Version status information for a client."""
     client_version_status: str  # current, outdated, vulnerable, unknown
     nebula_version_status: str  # current, outdated, vulnerable, unknown
-    client_advisories: List[SecurityAdvisoryInfo] = []
-    nebula_advisories: List[SecurityAdvisoryInfo] = []
+    client_advisories: List[SecurityAdvisoryInfo] = Field(default_factory=list)
+    nebula_advisories: List[SecurityAdvisoryInfo] = Field(default_factory=list)
     days_behind: Optional[int] = None
 
 
@@ -73,7 +73,7 @@ class ClientResponse(BaseModel):
     ip_version: str = "ipv4_only"  # ipv4_only, ipv6_only, dual_stack, multi_ipv4, multi_ipv6, multi_both
     owner: Optional[UserRef]  # Owner of the client
     groups: List[GroupRef]
-    firewall_rulesets: List[FirewallRulesetRef] = []
+    firewall_rulesets: List[FirewallRulesetRef] = Field(default_factory=list)
     token: Optional[str]  # Only included for admins or owner
     version_status: Optional[VersionStatus] = None  # Optional computed field
     assigned_ips: List[IPAssignmentResponse] = Field(default_factory=list)  # All assigned IPs (for v2 cert support)
@@ -88,8 +88,8 @@ class ClientCreate(BaseModel):
     is_lighthouse: bool = False
     public_ip: Optional[str] = None
     is_blocked: bool = False
-    group_ids: List[int] = []
-    firewall_ruleset_ids: List[int] = []
+    group_ids: List[int] = Field(default_factory=list)
+    firewall_ruleset_ids: List[int] = Field(default_factory=list)
     pool_id: Optional[int] = None
     ip_group_id: Optional[int] = None
     ip_address: Optional[str] = None  # Optional: specify exact IP instead of auto-allocation
@@ -402,7 +402,7 @@ class UserCreate(BaseModel):
     email: str
     password: str
     is_active: bool = True
-    user_group_ids: List[int] = []  # Assign to these user groups at creation
+    user_group_ids: List[int] = Field(default_factory=list)  # Assign to these user groups at creation
 
 
 class UserUpdate(BaseModel):
@@ -418,7 +418,7 @@ class UserResponse(BaseModel):
     id: int
     email: str
     is_active: bool
-    groups: List[UserGroupRef] = []
+    groups: List[UserGroupRef] = Field(default_factory=list)
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -706,8 +706,8 @@ class VersionStatusResponse(BaseModel):
     """Response model for version status check."""
     latest_client_version: Optional[str] = None
     latest_nebula_version: Optional[str] = None
-    client_advisories: List[SecurityAdvisoryInfo] = []
-    nebula_advisories: List[SecurityAdvisoryInfo] = []
+    client_advisories: List[SecurityAdvisoryInfo] = Field(default_factory=list)
+    nebula_advisories: List[SecurityAdvisoryInfo] = Field(default_factory=list)
     last_checked: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
