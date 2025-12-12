@@ -23,7 +23,16 @@ def upgrade() -> None:
     # Add nebula_version to global_settings
     global_settings_columns = {col['name'] for col in inspector.get_columns('global_settings')}
     if 'nebula_version' not in global_settings_columns:
-        op.add_column('global_settings', sa.Column('nebula_version', sa.String(length=50), server_default='1.9.7', nullable=False))
+        # Use 1.10.0 as the DB default to align with runtime defaults and ensure v2 capability
+        op.add_column(
+            'global_settings',
+            sa.Column(
+                'nebula_version',
+                sa.String(length=50),
+                server_default='1.10.0',
+                nullable=False,
+            ),
+        )
         # Set nebula_version to 1.10.0 for existing installations to allow v2 support
         op.execute("UPDATE global_settings SET nebula_version = '1.10.0'")
 
