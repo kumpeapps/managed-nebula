@@ -182,10 +182,10 @@ cat > "${PKG_ROOT}/Library/LaunchDaemons/com.managednebula.helper.plist" << EOF
     <true/>
     
     <key>StandardOutPath</key>
-    <string>/var/log/nebula-helper.log</string>
+    <string>/var/log/nebula/nebula-helper.log</string>
     
     <key>StandardErrorPath</key>
-    <string>/var/log/nebula-helper.error.log</string>
+    <string>/var/log/nebula/nebula-helper.error.log</string>
 </dict>
 </plist>
 EOF
@@ -212,10 +212,10 @@ cat > "${PKG_ROOT}/Library/LaunchDaemons/com.managednebula.nebula.plist" << EOF
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/var/log/nebula.log</string>
+    <string>/var/log/nebula/nebula.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/var/log/nebula.log</string>
+    <string>/var/log/nebula/nebula.log</string>
 </dict>
 </plist>
 EOF
@@ -269,10 +269,10 @@ cat > "${PKG_ROOT}/Library/LaunchDaemons/com.managednebula.logrotate.plist" << E
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/var/log/nebula-helper.log</string>
+    <string>/var/log/nebula/nebula-helper.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/var/log/nebula-helper.error.log</string>
+    <string>/var/log/nebula/nebula-helper.error.log</string>
 </dict>
 </plist>
 EOF
@@ -343,17 +343,17 @@ chmod 755 "/Library/Application Support/Managed Nebula"
 # Create log directory
 mkdir -p /var/log/nebula
 chmod 755 /var/log/nebula
-touch /var/log/nebula-helper.log
-touch /var/log/nebula-helper.error.log
-touch /var/log/nebula.log
-chmod 644 /var/log/nebula-helper.log
-chmod 644 /var/log/nebula-helper.error.log
-chmod 644 /var/log/nebula.log
+touch /var/log/nebula/nebula-helper.log
+touch /var/log/nebula/nebula-helper.error.log
+touch /var/log/nebula/nebula.log
+chmod 644 /var/log/nebula/nebula-helper.log
+chmod 644 /var/log/nebula/nebula-helper.error.log
+chmod 644 /var/log/nebula/nebula.log
 
 # Configure newsyslog rotation (daily at midnight, keep 7, compress)
 mkdir -p /etc/newsyslog.d
 cat > /etc/newsyslog.d/nebula.conf << 'NSLEOF'
-/var/log/nebula.log	root:wheel	644	7	*	$D0	Z
+/var/log/nebula/nebula.log	root:wheel	644	7	*	$D0	Z
 NSLEOF
 
 # Create IPC control file
@@ -524,7 +524,7 @@ To remove all settings and keychain data:
 
 Troubleshooting
 ---------------
-- Check logs: /var/log/nebula.log
+- Check logs: /var/log/nebula/nebula.log
 - Check status: launchctl list | grep managednebula
 - Support: https://github.com/kumpeapps/managed-nebula
 
