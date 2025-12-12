@@ -56,6 +56,23 @@ fi
 echo "✓ App bundle created"
 echo ""
 
+# Create uninstaller app bundle
+echo "Step 2.5: Creating uninstaller app bundle..."
+if [ ! -f "${SCRIPT_DIR}/create-uninstaller-app.sh" ]; then
+    echo "Error: create-uninstaller-app.sh not found"
+    exit 1
+fi
+
+bash "${SCRIPT_DIR}/create-uninstaller-app.sh"
+
+if [ ! -d "${SCRIPT_DIR}/Uninstall ManagedNebula.app" ]; then
+    echo "Error: Uninstaller app bundle creation failed"
+    exit 1
+fi
+
+echo "✓ Uninstaller app bundle created"
+echo ""
+
 # Sign app bundle (if identity provided) before packaging
 if [ -n "${APP_IDENTITY_HASH}" ]; then
     echo "Signing app bundle with identity ${APP_IDENTITY_HASH}..."
@@ -92,6 +109,14 @@ PKG_ROOT="${DIST_DIR}/pkg-root"
 mkdir -p "${PKG_ROOT}/Applications"
 mkdir -p "${PKG_ROOT}/usr/local/bin"
 mkdir -p "${PKG_ROOT}/Library/LaunchDaemons"
+mkdir -p "${PKG_ROOT}/etc/nebula"
+mkdir -p "${PKG_ROOT}/var/lib/nebula"
+mkdir -p "${PKG_ROOT}/var/log/nebula"
+
+# Set permissions on directories in payload
+chmod 755 "${PKG_ROOT}/etc/nebula"
+chmod 700 "${PKG_ROOT}/var/lib/nebula"
+chmod 755 "${PKG_ROOT}/var/log/nebula"
 
 # Copy app bundle
 if [ ! -d "${SCRIPT_DIR}/${APP_NAME}.app" ]; then
@@ -307,15 +332,23 @@ chown root:wheel /Library/LaunchDaemons/com.managednebula.logrotate.plist
 mkdir -p /etc/nebula
 chmod 755 /etc/nebula
 
+# Create key storage directory with restricted permissions
+mkdir -p /var/lib/nebula
+chmod 700 /var/lib/nebula
+
 # Create system-level ManagedNebula config directory
 mkdir -p "/Library/Application Support/Managed Nebula"
 chmod 755 "/Library/Application Support/Managed Nebula"
 
 # Create log directory
-mkdir -p /var/log
+mkdir -p /var/log/nebula
+chmod 755 /var/log/nebula
 touch /var/log/nebula-helper.log
 touch /var/log/nebula-helper.error.log
 touch /var/log/nebula.log
+chmod 644 /var/log/nebula-helper.log
+chmod 644 /var/log/nebula-helper.error.log
+chmod 644 /var/log/nebula.log
 
 # Configure newsyslog rotation (daily at midnight, keep 7, compress)
 mkdir -p /etc/newsyslog.d
@@ -433,13 +466,13 @@ mkdir -p "${DMG_DIR}"
 # Copy PKG installer
 cp "${PKG_FILE}" "${DMG_DIR}/"
 
-# Copy uninstaller app if it exists
-if [ -d "${SCRIPT_DIR}/Uninstall ManagedNebula.app" ]; then
-    cp -R "${SCRIPT_DIR}/Uninstall ManagedNebula.app" "${DMG_DIR}/"
-    echo "✓ Uninstaller app included in DMG"
-else
-    echo "⚠ Uninstaller app not found, skipping..."
+# Copy uninstaller app (should always exist at this point)
+if [ ! -d "${SCRIPT_DIR}/Uninstall ManagedNebula.app" ]; then
+    echo "Error: Uninstaller app not found at ${SCRIPT_DIR}/Uninstall ManagedNebula.app"
+    exit 1
 fi
+cp -R "${SCRIPT_DIR}/Uninstall ManagedNebula.app" "${DMG_DIR}/"
+echo "✓ Uninstaller app included in DMG"
 
 # Copy app bundle (for manual installation option)
 cp -R "${SCRIPT_DIR}/${APP_NAME}.app" "${DMG_DIR}/"
