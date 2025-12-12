@@ -736,32 +736,32 @@ async def create_demo_data():
         
         clients_data = [
             # Lighthouses
-            ("lighthouse-01", True, "203.0.113.10", False, ["lighthouses"], [], main_pool, None),
-            ("lighthouse-02", True, "203.0.113.11", False, ["lighthouses"], [], main_pool, None),
+            ("lighthouse-01", True, "203.0.113.10", False, ["lighthouses"], [], main_pool, None, "1.5.0", "1.10.0"),
+            ("lighthouse-02", True, "203.0.113.11", False, ["lighthouses"], [], main_pool, None, "1.5.0", "1.10.0"),
             
             # Web servers
-            ("web-server-01", False, None, False, ["web", "servers"], [web_ruleset], dmz_pool, "Servers"),
-            ("web-server-02", False, None, False, ["web", "servers"], [web_ruleset], dmz_pool, "Servers"),
+            ("web-server-01", False, None, False, ["web", "servers"], [web_ruleset], dmz_pool, "Servers", "1.3.0", "1.0.0"),
+            ("web-server-02", False, None, False, ["web", "servers"], [web_ruleset], dmz_pool, "Servers", "1.3.0", "1.0.0"),
             
             # Database servers
-            ("db-primary", False, None, False, ["database", "servers"], [db_ruleset], dmz_pool, "Servers"),
-            ("db-replica", False, None, False, ["database", "servers"], [db_ruleset], dmz_pool, "Servers"),
+            ("db-primary", False, None, False, ["database", "servers"], [db_ruleset], dmz_pool, "Servers", "1.5.0", "1.0.0"),
+            ("db-replica", False, None, False, ["database", "servers"], [db_ruleset], dmz_pool, "Servers", "1.5.0", "1.0.0"),
             
             # Developer machines
-            ("alice-laptop", False, None, False, ["developers"], [dev_ruleset], main_pool, "Developers"),
-            ("bob-workstation", False, None, False, ["developers", "qa"], [dev_ruleset], main_pool, "Developers"),
+            ("alice-laptop", False, None, False, ["developers"], [dev_ruleset], main_pool, "Developers", "1.4.0", "1.10.0"),
+            ("bob-workstation", False, None, False, ["developers", "qa"], [dev_ruleset], main_pool, "Developers", "1.4.0", "1.10.0"),
             
             # Operations
-            ("ops-server", False, None, False, ["operations", "servers"], [dev_ruleset], main_pool, "Operations"),
-            ("monitoring", False, None, False, ["operations"], [], main_pool, "Operations"),
+            ("ops-server", False, None, False, ["operations", "servers"], [dev_ruleset], main_pool, "Operations", "1.5.0", "1.10.0"),
+            ("monitoring", False, None, False, ["operations"], [], main_pool, "Operations", "1.5.0", "1.10.0"),
             
             # QA environment
-            ("qa-test-01", False, None, False, ["qa"], [], main_pool, "QA"),
-            ("qa-test-02", False, None, False, ["qa"], [], main_pool, "QA"),
+            ("qa-test-01", False, None, False, ["qa"], [], main_pool, "QA", "1.5.0", "1.10.0"),
+            ("qa-test-02", False, None, False, ["qa"], [], main_pool, "QA", "1.5.0", "1.10.0"),
         ]
         
         created_clients = {}
-        for name, is_lighthouse, public_ip, is_blocked, group_names, rulesets, pool, ip_group_name in clients_data:
+        for name, is_lighthouse, public_ip, is_blocked, group_names, rulesets, pool, ip_group_name, client_version, nebula_version in clients_data:
             existing = (await session.execute(select(Client).where(Client.name == name))).scalars().first()
             if not existing:
                 # Create client
@@ -771,7 +771,9 @@ async def create_demo_data():
                     public_ip=public_ip,
                     is_blocked=is_blocked,
                     owner_user_id=created_users["admin@demo.com"].id,
-                    config_last_changed_at=datetime.utcnow()
+                    config_last_changed_at=datetime.utcnow(),
+                    client_version=client_version,
+                    nebula_version=nebula_version,
                 )
                 session.add(client)
                 await session.flush()

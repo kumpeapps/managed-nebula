@@ -438,15 +438,108 @@ async def check_client_version_status_cached(
     latest_nebula_row = latest_nebula_result.scalar_one_or_none()
     latest_nebula_version = latest_nebula_row.value if latest_nebula_row else None
     
-    # Determine status without calling GitHub API
-    client_status = _determine_status(client_version, latest_client_version, [])
-    nebula_status = _determine_status(nebula_version, latest_nebula_version, [])
+    # Get cached advisories
+    import json
+    
+    client_advisories_result = await session.execute(
+        select(SystemSettings).where(SystemSettings.key == "cached_client_advisories")
+    )
+    client_advisories_row = client_advisories_result.scalar_one_or_none()
+    all_client_advisories = []
+    if client_advisories_row and client_advisories_row.value:
+        try:
+            all_client_advisories = json.loads(client_advisories_row.value)
+        except Exception as e:
+            logger.warning(f"Failed to parse cached client advisories: {e}")
+    
+    nebula_advisories_result = await session.execute(
+        select(SystemSettings).where(SystemSettings.key == "cached_nebula_advisories")
+    )
+    nebula_advisories_row = nebula_advisories_result.scalar_one_or_none()
+    all_nebula_advisories = []
+    if nebula_advisories_row and nebula_advisories_row.value:
+        try:
+            all_nebula_advisories = json.loads(nebula_advisories_row.value)
+        except Exception as e:
+            logger.warning(f"Failed to parse cached nebula advisories: {e}")
+    
+    # Filter advisories that affect the current versions
+    checker = AdvisoryChecker()
+    
+    applicable_client_advisories = []
+    if client_version and all_client_advisories:
+        for adv_dict in all_client_advisories:
+            if checker.is_version_affected(client_version, adv_dict.get("affected_versions", "")):
+                applicable_client_advisories.append(adv_dict)
+    
+    applicable_nebula_advisories = []
+    if nebula_version and all_nebula_advisories:
+        for adv_dict in all_nebula_advisories:
+            if checker.is_version_affected(nebula_version, adv_dict.get("affected_versions", "")):
+                applicable_nebula_advisories.append(adv_dict)
+    
+    # Also check managed-nebula advisories for Nebula-related CVEs
+    # Some managed-nebula advisories reference upstream Nebula vulnerabilities
+    if nebula_version and all_client_advisories:
+        for adv_dict in all_client_advisories:
+            summary = adv_dict.get("summary", "").lower()
+            # Check if this is a Nebula-related advisory (contains [Nebula] or mentions nebula in summary)
+            if "[nebula]" in summary or "nebula" in summary:
+                # Try to extract Nebula version info from the summary/description
+                # Common patterns: "Affects Nebula v1.9.x", "Nebula versions < 1.9.4", etc.
+                # For now, use a heuristic: if it mentions nebula and has a CVE, check common vulnerable versions
+                cve_id = adv_dict.get("cve_id")
+                if cve_id:
+                    # CVE-2025-62820: Source IP Spoofing Defect
+                    # Affects Nebula <= 1.9.7
+                    if cve_id == "CVE-2025-62820":
+                        # This CVE affects all Nebula versions <= 1.9.7
+                        if checker.is_version_affected(nebula_version, "<= 1.9.7"):
+                            # Create a Nebula-specific advisory entry
+                            nebula_adv = {
+                                "id": adv_dict["id"],
+                                "severity": adv_dict["severity"],
+                                "summary": adv_dict["summary"],
+                                "affected_versions": "<= 1.9.7",  # Nebula version range
+                                "patched_version": ">= 1.9.8",
+                                "published_at": adv_dict["published_at"],
+                                "url": adv_dict["url"],
+                                "cve_id": cve_id
+                            }
+                            applicable_nebula_advisories.append(nebula_adv)
+    
+    # Determine status using cached data
+    # Convert advisory dicts to SecurityAdvisory objects for _determine_status
+    client_advisory_objs = [SecurityAdvisory(
+        id=a.get("id", "unknown"),
+        severity=Severity(a.get("severity", "unknown")) if a.get("severity") in [s.value for s in Severity] else Severity.UNKNOWN,
+        summary=a.get("summary", ""),
+        affected_versions=a.get("affected_versions", ""),
+        patched_version=a.get("patched_version"),
+        published_at=a.get("published_at", ""),
+        url=a.get("url", ""),
+        cve_id=a.get("cve_id")
+    ) for a in applicable_client_advisories]
+    
+    nebula_advisory_objs = [SecurityAdvisory(
+        id=a.get("id", "unknown"),
+        severity=Severity(a.get("severity", "unknown")) if a.get("severity") in [s.value for s in Severity] else Severity.UNKNOWN,
+        summary=a.get("summary", ""),
+        affected_versions=a.get("affected_versions", ""),
+        patched_version=a.get("patched_version"),
+        published_at=a.get("published_at", ""),
+        url=a.get("url", ""),
+        cve_id=a.get("cve_id")
+    ) for a in applicable_nebula_advisories]
+    
+    client_status = _determine_status(client_version, latest_client_version, client_advisory_objs)
+    nebula_status = _determine_status(nebula_version, latest_nebula_version, nebula_advisory_objs)
     
     return {
         "client_version_status": client_status,
         "nebula_version_status": nebula_status,
-        "client_advisories": [],
-        "nebula_advisories": [],
+        "client_advisories": applicable_client_advisories,
+        "nebula_advisories": applicable_nebula_advisories,
         "latest_client_version": latest_client_version,
         "latest_nebula_version": latest_nebula_version,
         "current_client_version": client_version,
@@ -470,13 +563,19 @@ async def refresh_version_cache(session, github_token: Optional[str] = None) -> 
     from datetime import datetime
     from sqlalchemy import select
     from ..models import SystemSettings
+    import json
     
     try:
         github_client = get_github_client(token=github_token)
+        checker = AdvisoryChecker(github_token=github_token)
         
         # Get latest releases
         latest_client_release = await github_client.get_latest_release(*MANAGED_NEBULA_REPO)
         latest_nebula_release = await github_client.get_latest_release(*NEBULA_REPO)
+        
+        # Get all advisories for both repos
+        client_advisories = await checker.get_advisories_for_repo(*MANAGED_NEBULA_REPO)
+        nebula_advisories = await checker.get_advisories_for_repo(*NEBULA_REPO)
         
         # Update cache
         now = datetime.utcnow()
@@ -513,13 +612,37 @@ async def refresh_version_cache(session, github_token: Optional[str] = None) -> 
             else:
                 session.add(SystemSettings(key="latest_nebula_version", value=latest_nebula_release.version))
         
+        # Cache client advisories as JSON
+        client_advisories_json = json.dumps([_advisory_to_dict(a) for a in client_advisories])
+        client_adv_result = await session.execute(
+            select(SystemSettings).where(SystemSettings.key == "cached_client_advisories")
+        )
+        client_adv_row = client_adv_result.scalar_one_or_none()
+        if client_adv_row:
+            client_adv_row.value = client_advisories_json
+        else:
+            session.add(SystemSettings(key="cached_client_advisories", value=client_advisories_json))
+        
+        # Cache nebula advisories as JSON
+        nebula_advisories_json = json.dumps([_advisory_to_dict(a) for a in nebula_advisories])
+        nebula_adv_result = await session.execute(
+            select(SystemSettings).where(SystemSettings.key == "cached_nebula_advisories")
+        )
+        nebula_adv_row = nebula_adv_result.scalar_one_or_none()
+        if nebula_adv_row:
+            nebula_adv_row.value = nebula_advisories_json
+        else:
+            session.add(SystemSettings(key="cached_nebula_advisories", value=nebula_advisories_json))
+        
         await session.commit()
         
         return {
             "success": True,
             "last_checked": now.isoformat(),
             "latest_client_version": latest_client_release.version if latest_client_release else None,
-            "latest_nebula_version": latest_nebula_release.version if latest_nebula_release else None
+            "latest_nebula_version": latest_nebula_release.version if latest_nebula_release else None,
+            "client_advisories_count": len(client_advisories),
+            "nebula_advisories_count": len(nebula_advisories)
         }
     except Exception as e:
         logger.error(f"Failed to refresh version cache: {e}", exc_info=True)
