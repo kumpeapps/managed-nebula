@@ -21,7 +21,7 @@ The macOS client uses a privileged helper daemon to manage Nebula without requir
 3. **Nebula daemon**
    - Started/stopped by helper daemon with root privileges
    - Creates TUN interfaces (requires root on macOS)
-   - Logs to `/var/log/nebula.log`
+   - Logs to `/var/log/nebula/nebula.log`
 
 ### Communication Flow
 
@@ -69,7 +69,7 @@ The helper daemon:
 - Starts automatically on boot (`RunAtLoad: true`)
 - Restarts if it crashes (`KeepAlive: true`)
 - Runs as root (LaunchDaemon context)
-- Logs to `/var/log/nebula-helper.log`
+- Logs to `/var/log/nebula/nebula-helper.log`
 
 ## Security Considerations
 
@@ -116,11 +116,11 @@ The helper daemon:
 sudo launchctl list | grep managednebula
 
 # View helper daemon logs
-sudo tail -f /var/log/nebula-helper.log
-sudo tail -f /var/log/nebula-helper.error.log
+sudo tail -f /var/log/nebula/nebula-helper.log
+sudo tail -f /var/log/nebula/nebula-helper.error.log
 
 # View Nebula logs
-sudo tail -f /var/log/nebula.log
+sudo tail -f /var/log/nebula/nebula.log
 ```
 
 ### Manual Control
@@ -171,7 +171,7 @@ sudo rm /tmp/nebula-control.status
 
 2. Check helper daemon logs:
    ```bash
-   sudo tail -50 /var/log/nebula-helper.log
+   sudo tail -50 /var/log/nebula/nebula-helper.log
    ```
 
 3. Verify config file exists:
@@ -218,7 +218,7 @@ sudo rm /tmp/nebula-control.status
 
 3. Verify helper daemon is watching file:
    ```bash
-   sudo tail -f /var/log/nebula-helper.log &
+   sudo tail -f /var/log/nebula/nebula-helper.log &
    echo "status" > /tmp/nebula-control
    ```
 
