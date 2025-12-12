@@ -26,14 +26,27 @@ TPwacPvxYLFZnfM8QdU1XJ93RY0NiB0apbwkBMvGSBY=
 @pytest.fixture(scope="function")
 def client():
     """Create test client for each test function."""
-    with TestClient(app) as test_client:
-        yield test_client
-    # Ensure scheduler is properly shut down after each test
-    if hasattr(app.state, 'scheduler') and app.state.scheduler.running:
+    # Shutdown and remove any existing scheduler from previous tests
+    if hasattr(app.state, 'scheduler'):
         try:
-            app.state.scheduler.shutdown(wait=False)
+            if app.state.scheduler.running:
+                app.state.scheduler.shutdown(wait=False)
         except:
             pass
+        delattr(app.state, 'scheduler')
+    
+    # Create fresh scheduler for this test - will be initialized by TestClient lifespan
+    with TestClient(app) as test_client:
+        yield test_client
+    
+    # Clean up scheduler after test
+    if hasattr(app.state, 'scheduler'):
+        try:
+            if app.state.scheduler.running:
+                app.state.scheduler.shutdown(wait=False)
+        except:
+            pass
+        delattr(app.state, 'scheduler')
 
 
 @pytest.fixture(autouse=True)
