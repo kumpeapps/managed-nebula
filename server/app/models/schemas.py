@@ -51,6 +51,10 @@ class VersionStatus(BaseModel):
     client_advisories: List[SecurityAdvisoryInfo] = Field(default_factory=list)
     nebula_advisories: List[SecurityAdvisoryInfo] = Field(default_factory=list)
     days_behind: Optional[int] = None
+    latest_client_version: Optional[str] = None
+    latest_nebula_version: Optional[str] = None
+    current_client_version: Optional[str] = None
+    current_nebula_version: Optional[str] = None
 
 
 class ClientResponse(BaseModel):
