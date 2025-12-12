@@ -54,7 +54,7 @@ remove_app() {
 }
 
 remove_logs() {
-  rm -f /var/log/nebula.log /var/log/nebula-helper.log /var/log/nebula-helper.error.log 2>/dev/null || true
+  rm -rf /var/log/nebula 2>/dev/null || true
   rm -f /etc/newsyslog.d/nebula.conf 2>/dev/null || true
 }
 

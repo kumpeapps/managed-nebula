@@ -189,7 +189,7 @@ platform :mac do
 
       Troubleshooting
       ---------------
-      - Logs: /var/log/nebula.log
+      - Logs: /var/log/nebula/nebula.log
       - Uninstall: sudo managednebula-uninstall [--purge]
       - Support: https://github.com/kumpeapps/managed-nebula
     README
