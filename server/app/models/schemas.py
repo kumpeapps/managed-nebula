@@ -1,6 +1,6 @@
 """Pydantic schemas for API request/response models."""
 from __future__ import annotations
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from datetime import datetime
 from typing import List, Optional
 
@@ -76,7 +76,7 @@ class ClientResponse(BaseModel):
     firewall_rulesets: List[FirewallRulesetRef] = []
     token: Optional[str]  # Only included for admins or owner
     version_status: Optional[VersionStatus] = None  # Optional computed field
-    assigned_ips: List[IPAssignmentResponse] = []  # All assigned IPs (for v2 cert support)
+    assigned_ips: List[IPAssignmentResponse] = Field(default_factory=list)  # All assigned IPs (for v2 cert support)
     primary_ipv4: Optional[str] = None  # Extracted from assigned_ips where is_primary=true
 
     model_config = ConfigDict(from_attributes=True)

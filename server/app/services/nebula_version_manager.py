@@ -61,22 +61,12 @@ class NebulaVersionService:
         if version.startswith('nightly'):
             return True
         
+        # v2 support added in 1.10.0
         try:
-            # Parse version string (e.g., "1.10.0" -> [1, 10, 0])
-            # Remove 'v' prefix if present
-            clean_version = version.lstrip('v')
-            parts = clean_version.split('.')
-            major = int(parts[0])
-            minor = int(parts[1]) if len(parts) > 1 else 0
-            
-            # v2 support added in 1.10.0
-            if major > 1:
-                return True
-            if major == 1 and minor >= 10:
-                return True
-            return False
-        except (ValueError, IndexError):
-            logger.warning(f"Failed to parse Nebula version: {version}")
+            from .version_parser import compare_versions
+            return compare_versions(version, "1.10.0") >= 0
+        except Exception:
+            logger.warning(f"Failed to compare Nebula version: {version}")
             return False
     
     async def fetch_available_versions(self, include_prereleases: bool = False) -> List[NebulaVersionInfo]:
@@ -163,25 +153,24 @@ class NebulaVersionService:
         Returns:
             Dictionary with platform-specific download URLs
         """
-        urls = {}
-        
-        # Map asset filenames to platform keys
-        platform_map = {
-            'linux-amd64.tar.gz': 'download_url_linux_amd64',
-            'linux-arm64.tar.gz': 'download_url_linux_arm64',
-            'darwin-amd64.tar.gz': 'download_url_darwin_amd64',
-            'darwin-arm64.tar.gz': 'download_url_darwin_arm64',
-            'windows-amd64.zip': 'download_url_windows_amd64',
-        }
+        urls: dict = {}
         
         for asset in assets:
             name = asset.get("name", "")
-            browser_download_url = asset.get("browser_download_url")
+            url = asset.get("browser_download_url")
+            if not url:
+                continue
             
-            for pattern, key in platform_map.items():
-                if pattern in name and browser_download_url:
-                    urls[key] = browser_download_url
-                    break
+            if "linux-amd64" in name and name.endswith(".tar.gz"):
+                urls.setdefault("download_url_linux_amd64", url)
+            elif "linux-arm64" in name and name.endswith(".tar.gz"):
+                urls.setdefault("download_url_linux_arm64", url)
+            elif "darwin-amd64" in name and name.endswith(".tar.gz"):
+                urls.setdefault("download_url_darwin_amd64", url)
+            elif "darwin-arm64" in name and name.endswith(".tar.gz"):
+                urls.setdefault("download_url_darwin_arm64", url)
+            elif "windows-amd64" in name and name.endswith(".zip"):
+                urls.setdefault("download_url_windows_amd64", url)
         
         return urls
     

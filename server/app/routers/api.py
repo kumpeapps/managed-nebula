@@ -854,7 +854,7 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
     if getattr(client, 'is_blocked', False):
         raise HTTPException(status_code=403, detail="Client is blocked")
 
-    # Determine cert version based on client capabilities and global setting
+    # Determine cert version from database-backed GlobalSettings (not env settings)
     cert_version = getattr(settings, 'cert_version', 'v1')
     client_ip_version = getattr(client, 'ip_version', 'ipv4_only')
     
@@ -936,7 +936,7 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
             client_ip=ip_assignment.ip_address,
             cidr_prefix=prefix,
             cert_version=cert_version,
-            all_ips=all_ips if all_ips else None,
+            all_ips=all_ips or None,
         )
     except RuntimeError as e:
         # Convert cert generation errors (e.g., invalid public key) to 400 Bad Request
@@ -1951,9 +1951,11 @@ async def reissue_client_certificate(
     except Exception:
         prefix = 24
 
-    # Determine cert version: use v2/hybrid features if client requires multiple IPs or is compatible
-    from ..core.config import settings
-    cert_version = getattr(settings, 'cert_version', 'v1')
+    # Determine cert version from database-backed GlobalSettings (not env settings)
+    # Load GlobalSettings if not already available
+    settings_result = await session.execute(select(GlobalSettings))
+    settings_row = settings_result.scalars().first()
+    cert_version = getattr(settings_row, 'cert_version', 'v1') if settings_row else 'v1'
     client_ip_version = getattr(client, 'ip_version', 'ipv4_only')
     client_nebula_version = getattr(client, 'nebula_version', None)
     
@@ -2015,7 +2017,7 @@ async def reissue_client_certificate(
             client_ip=ip_assignment.ip_address,
             cidr_prefix=prefix,
             cert_version=cert_version,
-            all_ips=all_ips if all_ips else None
+            all_ips=all_ips or None
         )
 
     await session.commit()
