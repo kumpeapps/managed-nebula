@@ -28,6 +28,12 @@ def client():
     """Create test client for each test function."""
     with TestClient(app) as test_client:
         yield test_client
+    # Ensure scheduler is properly shut down after each test
+    if hasattr(app.state, 'scheduler') and app.state.scheduler.running:
+        try:
+            app.state.scheduler.shutdown(wait=False)
+        except:
+            pass
 
 
 @pytest.fixture(autouse=True)
