@@ -25,8 +25,12 @@ def init_scheduler(app):
 async def start_scheduler(app):
     """Start the scheduler (must be called from async context with running event loop)."""
     if hasattr(app.state, 'scheduler'):
-        app.state.scheduler.start()
-        print("[scheduler] Started background scheduler")
+        # Check if scheduler is already running to avoid errors in tests
+        if not app.state.scheduler.running:
+            app.state.scheduler.start()
+            print("[scheduler] Started background scheduler")
+        else:
+            print("[scheduler] Scheduler already running, skipping start")
 
 
 async def check_ca_rotation():

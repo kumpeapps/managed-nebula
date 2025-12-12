@@ -55,8 +55,8 @@ async def lifespan(app: FastAPI):
     yield
     
     # Shutdown scheduler
-    if hasattr(app.state, 'scheduler'):
-        app.state.scheduler.shutdown()
+    if hasattr(app.state, 'scheduler') and app.state.scheduler.running:
+        app.state.scheduler.shutdown(wait=False)
         print("[scheduler] Shutdown background scheduler")
 
 
