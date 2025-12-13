@@ -28,8 +28,15 @@ echo "Step 1: Cleaning previous builds..."
 # Clean dist directory (may contain root-owned files from previous PKG installations)
 if [ -d "${DIST_DIR}" ]; then
     if ! rm -rf "${DIST_DIR}" 2>/dev/null; then
-        echo "Some dist files require elevated permissions, cleaning with sudo..."
-        sudo rm -rf "${DIST_DIR}"
+        echo "ERROR: Cannot remove ${DIST_DIR} - files may be owned by root."
+        echo "Please run: sudo rm -rf ${DIST_DIR}"
+        echo "Or set ALLOW_SUDO=1 environment variable to auto-elevate."
+        if [ "${ALLOW_SUDO}" = "1" ]; then
+            echo "ALLOW_SUDO is set, attempting with sudo..."
+            sudo rm -rf "${DIST_DIR}"
+        else
+            exit 1
+        fi
     fi
 fi
 mkdir -p "${DIST_DIR}"
@@ -42,8 +49,14 @@ if [ -d "${SCRIPT_DIR}/${APP_NAME}.app" ]; then
     if ! rm -rf "${SCRIPT_DIR}/${APP_NAME}.app" 2>/dev/null; then
         chmod -R u+w "${SCRIPT_DIR}/${APP_NAME}.app" 2>/dev/null || true
         if ! rm -rf "${SCRIPT_DIR}/${APP_NAME}.app" 2>/dev/null; then
-            echo "Permission denied cleaning ${APP_NAME}.app; attempting sudo rm -rf..."
-            sudo rm -rf "${SCRIPT_DIR}/${APP_NAME}.app"
+            echo "ERROR: Cannot remove ${APP_NAME}.app - may be owned by root."
+            if [ "${ALLOW_SUDO}" = "1" ]; then
+                echo "ALLOW_SUDO is set, attempting with sudo..."
+                sudo rm -rf "${SCRIPT_DIR}/${APP_NAME}.app"
+            else
+                echo "Set ALLOW_SUDO=1 to auto-elevate or manually run: sudo rm -rf ${SCRIPT_DIR}/${APP_NAME}.app"
+                exit 1
+            fi
         fi
     fi
 fi
@@ -52,7 +65,14 @@ fi
 if [ -d "${SCRIPT_DIR}/Uninstall ManagedNebula.app" ]; then
     if ! rm -rf "${SCRIPT_DIR}/Uninstall ManagedNebula.app" 2>/dev/null; then
         chmod -R u+w "${SCRIPT_DIR}/Uninstall ManagedNebula.app" 2>/dev/null || true
-        rm -rf "${SCRIPT_DIR}/Uninstall ManagedNebula.app" 2>/dev/null || sudo rm -rf "${SCRIPT_DIR}/Uninstall ManagedNebula.app"
+        if ! rm -rf "${SCRIPT_DIR}/Uninstall ManagedNebula.app" 2>/dev/null; then
+            if [ "${ALLOW_SUDO}" = "1" ]; then
+                sudo rm -rf "${SCRIPT_DIR}/Uninstall ManagedNebula.app"
+            else
+                echo "ERROR: Cannot remove Uninstall app. Set ALLOW_SUDO=1 or run: sudo rm -rf '${SCRIPT_DIR}/Uninstall ManagedNebula.app'"
+                exit 1
+            fi
+        fi
     fi
 fi
 
@@ -129,14 +149,9 @@ PKG_ROOT="${DIST_DIR}/pkg-root"
 mkdir -p "${PKG_ROOT}/Applications"
 mkdir -p "${PKG_ROOT}/usr/local/bin"
 mkdir -p "${PKG_ROOT}/Library/LaunchDaemons"
-mkdir -p "${PKG_ROOT}/etc/nebula"
-mkdir -p "${PKG_ROOT}/var/lib/nebula"
-mkdir -p "${PKG_ROOT}/var/log/nebula"
 
-# Set permissions on directories in payload
-chmod 755 "${PKG_ROOT}/etc/nebula"
-chmod 700 "${PKG_ROOT}/var/lib/nebula"
-chmod 755 "${PKG_ROOT}/var/log/nebula"
+# Note: /etc/nebula, /var/lib/nebula, and /var/log/nebula are created
+# by the postinstall script to ensure correct permissions at install time
 
 # Copy app bundle
 if [ ! -d "${SCRIPT_DIR}/${APP_NAME}.app" ]; then

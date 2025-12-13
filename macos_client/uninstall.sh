@@ -54,7 +54,12 @@ remove_app() {
 }
 
 remove_logs() {
-  rm -rf /var/log/nebula 2>/dev/null || true
+  # Remove only ManagedNebula-specific log files, not the entire directory
+  rm -f /var/log/nebula/nebula.log* 2>/dev/null || true
+  rm -f /var/log/nebula/nebula-helper.log* 2>/dev/null || true
+  rm -f /var/log/nebula/nebula-helper.error.log* 2>/dev/null || true
+  # Remove directory only if empty
+  rmdir /var/log/nebula 2>/dev/null || true
   rm -f /etc/newsyslog.d/nebula.conf 2>/dev/null || true
 }
 
