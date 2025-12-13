@@ -390,6 +390,33 @@ swift build -c release
 swift test
 ```
 
+### Building Installers
+
+To create PKG and DMG installers:
+
+```bash
+# Build both PKG and DMG
+./create-installer.sh
+
+# For production builds with code signing
+./create-installer-prod.sh
+```
+
+**Environment Variables:**
+- `VERSION`: Set the app version (default: 1.0.0)
+- `NEBULA_VERSION`: Set Nebula version to download (default: v1.10.0)
+- `ALLOW_SUDO=1`: Enable automatic sudo elevation for cleaning root-owned files (not recommended for CI/CD)
+
+**Note for CI/CD:** The build script will fail with a clear error if it cannot remove root-owned files from previous builds. This prevents builds from hanging indefinitely waiting for password input. To clean manually:
+```bash
+sudo rm -rf dist/
+```
+
+Or enable automatic elevation (not recommended for unattended builds):
+```bash
+ALLOW_SUDO=1 ./create-installer.sh
+```
+
 ### Code Style
 - Follow Swift API Design Guidelines
 - Use SwiftLint for consistent formatting (optional)
