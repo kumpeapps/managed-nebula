@@ -14,8 +14,8 @@ PKG_VERSION="${VERSION%%-*}"
 BUNDLE_ID="com.managednebula.client"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 DIST_DIR="${SCRIPT_DIR}/dist"
-# Use NEBULA_VERSION from environment if provided, otherwise default to v1.9.7
-NEBULA_VERSION="${NEBULA_VERSION:-v1.9.7}"
+# Use NEBULA_VERSION from environment if provided, otherwise default to v1.10.0
+NEBULA_VERSION="${NEBULA_VERSION:-v1.10.0}"
 
 echo "=== ManagedNebula Installer Creator ==="
 echo "VERSION: ${VERSION}"
@@ -24,9 +24,20 @@ echo ""
 
 # Clean previous builds
 echo "Step 1: Cleaning previous builds..."
-rm -rf "${DIST_DIR}"
+
+# Clean dist directory (may contain root-owned files from previous PKG installations)
+if [ -d "${DIST_DIR}" ]; then
+    if ! rm -rf "${DIST_DIR}" 2>/dev/null; then
+        echo "Some dist files require elevated permissions, cleaning with sudo..."
+        sudo rm -rf "${DIST_DIR}"
+    fi
+fi
 mkdir -p "${DIST_DIR}"
-# Also clean any previous local app bundle which might be root-owned
+
+# CRITICAL: Clean any previous local app bundle to prevent macOS Installer app relocation
+# macOS Installer will relocate the app to an existing location with the same bundle ID
+# instead of installing to /Applications/ if it finds an existing copy
+echo "Removing any existing ${APP_NAME}.app to prevent installer relocation..."
 if [ -d "${SCRIPT_DIR}/${APP_NAME}.app" ]; then
     if ! rm -rf "${SCRIPT_DIR}/${APP_NAME}.app" 2>/dev/null; then
         chmod -R u+w "${SCRIPT_DIR}/${APP_NAME}.app" 2>/dev/null || true
@@ -36,6 +47,15 @@ if [ -d "${SCRIPT_DIR}/${APP_NAME}.app" ]; then
         fi
     fi
 fi
+
+# Also clean the uninstaller app from previous builds
+if [ -d "${SCRIPT_DIR}/Uninstall ManagedNebula.app" ]; then
+    if ! rm -rf "${SCRIPT_DIR}/Uninstall ManagedNebula.app" 2>/dev/null; then
+        chmod -R u+w "${SCRIPT_DIR}/Uninstall ManagedNebula.app" 2>/dev/null || true
+        rm -rf "${SCRIPT_DIR}/Uninstall ManagedNebula.app" 2>/dev/null || sudo rm -rf "${SCRIPT_DIR}/Uninstall ManagedNebula.app"
+    fi
+fi
+
 echo "✓ Clean complete"
 echo ""
 
@@ -397,7 +417,18 @@ cat > "${PKG_SCRIPTS}/preinstall" << 'PREEOF'
 # Note: PKG installers run non-interactively, so we just upgrade in-place
 # Users should run the uninstaller app first if they want a clean install
 
-echo "Pre-installation: Stopping existing services..."
+echo "Pre-installation: Stopping existing services and applications..."
+
+# Quit ManagedNebula.app if running
+if pgrep -x "ManagedNebula" > /dev/null 2>&1; then
+    echo "Quitting ManagedNebula.app..."
+    osascript -e 'quit app "ManagedNebula"' 2>/dev/null || true
+    # Give it a moment to quit gracefully
+    sleep 2
+    # Force kill if still running
+    pkill -9 -x "ManagedNebula" 2>/dev/null || true
+    echo "✓ ManagedNebula.app quit"
+fi
 
 # Track if nebula was running before upgrade
 NEBULA_WAS_RUNNING=0
@@ -458,6 +489,20 @@ fi
 echo "✓ PKG created: ${PKG_FILE}"
 echo ""
 
+# CRITICAL: Move source app bundles to dist to prevent app relocation during testing
+# When testing the installer, macOS will detect the app in the source directory
+# and relocate the installation there instead of /Applications/
+echo "Step 7.5: Moving source app bundles to dist directory..."
+if [ -d "${SCRIPT_DIR}/${APP_NAME}.app" ]; then
+    mv "${SCRIPT_DIR}/${APP_NAME}.app" "${DIST_DIR}/${APP_NAME}.app"
+    echo "✓ Moved ${APP_NAME}.app to dist/"
+fi
+if [ -d "${SCRIPT_DIR}/Uninstall ManagedNebula.app" ]; then
+    mv "${SCRIPT_DIR}/Uninstall ManagedNebula.app" "${DIST_DIR}/Uninstall ManagedNebula.app"
+    echo "✓ Moved Uninstall ManagedNebula.app to dist/"
+fi
+echo ""
+
 # Create DMG
 echo "Step 8: Creating DMG installer..."
 DMG_DIR="${DIST_DIR}/dmg-contents"
@@ -466,16 +511,21 @@ mkdir -p "${DMG_DIR}"
 # Copy PKG installer
 cp "${PKG_FILE}" "${DMG_DIR}/"
 
-# Copy uninstaller app (should always exist at this point)
-if [ ! -d "${SCRIPT_DIR}/Uninstall ManagedNebula.app" ]; then
-    echo "Error: Uninstaller app not found at ${SCRIPT_DIR}/Uninstall ManagedNebula.app"
+# Copy uninstaller app from dist directory
+if [ ! -d "${DIST_DIR}/Uninstall ManagedNebula.app" ]; then
+    echo "Error: Uninstaller app not found at ${DIST_DIR}/Uninstall ManagedNebula.app"
     exit 1
 fi
-cp -R "${SCRIPT_DIR}/Uninstall ManagedNebula.app" "${DMG_DIR}/"
+cp -R "${DIST_DIR}/Uninstall ManagedNebula.app" "${DMG_DIR}/"
 echo "✓ Uninstaller app included in DMG"
 
-# Copy app bundle (for manual installation option)
-cp -R "${SCRIPT_DIR}/${APP_NAME}.app" "${DMG_DIR}/"
+# Copy app bundle from dist directory (for manual installation option)
+if [ ! -d "${DIST_DIR}/${APP_NAME}.app" ]; then
+    echo "Error: ${APP_NAME}.app not found at ${DIST_DIR}/${APP_NAME}.app"
+    exit 1
+fi
+cp -R "${DIST_DIR}/${APP_NAME}.app" "${DMG_DIR}/"
+echo "✓ App bundle included in DMG"
 
 # Create symlink to Applications
 ln -s /Applications "${DMG_DIR}/Applications"
@@ -497,6 +547,20 @@ The PKG installer includes:
 - Nebula binaries (nebula, nebula-cert)
 - System LaunchDaemons for background operation
 - Uninstall script
+
+IMPORTANT: Installer Issue Workaround
+--------------------------------------
+If the app doesn't appear in /Applications/ after installation:
+1. This is a known macOS Installer bug with app relocation
+2. The app may have been installed to a different location
+3. Check: ~/Downloads/managed-nebula/macos_client/ManagedNebula.app
+4. Manually move it: sudo mv [location]/ManagedNebula.app /Applications/
+5. Or run the installer again after removing any existing copies
+
+To prevent this issue:
+- Download the DMG/PKG to a clean location (not a git repo)
+- Remove any existing ManagedNebula.app bundles before installing
+- Don't build and test the installer in the same directory
 
 UPGRADING: Uninstall First
 --------------------------
@@ -526,6 +590,7 @@ Troubleshooting
 ---------------
 - Check logs: /var/log/nebula/nebula.log
 - Check status: launchctl list | grep managednebula
+- Verify install location: mdfind -name ManagedNebula.app
 - Support: https://github.com/kumpeapps/managed-nebula
 
 READMEEOF
@@ -553,6 +618,14 @@ rm -rf "${PKG_ROOT}"
 rm -rf "${PKG_SCRIPTS}"
 rm -rf "${NEBULA_TMP}"
 rm -rf "${DMG_DIR}"
+
+# CRITICAL: Remove app bundles from dist to prevent installer relocation during testing
+# macOS Spotlight indexes these apps and causes the installer to relocate installations
+# The apps are already included in the DMG, so we don't need them loose in dist/
+echo "Removing app bundles from dist (included in DMG)..."
+rm -rf "${DIST_DIR}/${APP_NAME}.app"
+rm -rf "${DIST_DIR}/Uninstall ManagedNebula.app"
+
 echo "✓ Cleanup complete"
 echo ""
 
