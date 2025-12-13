@@ -1,5 +1,13 @@
 # Managed Nebula - Copilot Instructions
 
+## Critical Rules
+
+**NEVER CREATE .MD FILES TO DOCUMENT FIXES OR UPDATES**
+- Do NOT create implementation summaries, fix summaries, or progress documentation files
+- Do NOT create temporary .md files like `IMPLEMENTATION_SUMMARY.md`, `FIX_SUMMARY.md`, etc.
+- If documentation is needed, update the appropriate existing README.md only
+- Focus on code changes, not documentation artifacts
+
 ## Architecture Overview
 
 This is a **Nebula mesh VPN management platform** with three main components:
