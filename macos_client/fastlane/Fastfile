@@ -126,16 +126,15 @@ platform :mac do
     sh(%Q(codesign --deep --force --verify --verbose --sign "#{app_identity_hash}" --options runtime --timestamp '../Uninstall ManagedNebula.app'))
     sh("codesign --verify --deep --strict --verbose=2 '../Uninstall ManagedNebula.app'")
 
-    # Build unsigned installer (pass app identity so script can sign CLI binaries before packaging)
-    UI.message("Building unsigned installer...")
+    # Build installer with signing (create-installer.sh handles app bundle and binary signing)
+    # Note: Passes APP_IDENTITY_HASH to sign app bundle and Nebula binaries during build
+    # Note: create-installer.sh will move ManagedNebula.app and Uninstall app to dist/ after PKG creation
+    UI.message("Building installer with code signing...")
     sh(%Q(VERSION="#{version}" APP_IDENTITY_HASH="#{app_identity_hash}" bash ../create-installer.sh))
 
-    # Sign app bundle
-    UI.message("Signing app bundle...")
-    # Remove problematic extended attributes before signing
-    sh("xattr -cr ../ManagedNebula.app || true")
-    sh(%Q(codesign --deep --force --verify --verbose --sign "#{app_identity_hash}" --options runtime --timestamp ../ManagedNebula.app))
-    sh("codesign --verify --deep --strict --verbose=2 ../ManagedNebula.app")
+    # Verify app bundle was signed correctly (now in dist/)
+    UI.message("Verifying app bundle signature...")
+    sh("codesign --verify --deep --strict --verbose=2 ../dist/ManagedNebula.app")
 
     # Sign PKG
     UI.message("Signing PKG...")
@@ -167,7 +166,8 @@ platform :mac do
     # Create signed DMG
     UI.message("Creating signed DMG...")
     sh("rm -rf ../dist/dmg-contents-signed && mkdir -p ../dist/dmg-contents-signed")
-    sh("cp -R ../ManagedNebula.app ../dist/dmg-contents-signed/")
+    # Use the signed app bundle from dist/ (moved there by create-installer.sh)
+    sh("cp -R ../dist/ManagedNebula.app ../dist/dmg-contents-signed/")
     sh("ln -s /Applications ../dist/dmg-contents-signed/Applications")
     
     # Create README for DMG
