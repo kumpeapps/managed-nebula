@@ -11,7 +11,7 @@ echo.
 
 REM Configuration
 set "VERSION=1.0.0"
-set "NEBULA_VERSION=1.9.7"
+set "NEBULA_VERSION=1.10.0"
 set "APP_NAME=NebulaAgent"
 set "SCRIPT_DIR=%~dp0"
 set "DIST_DIR=%SCRIPT_DIR%dist"
@@ -84,13 +84,21 @@ set "NEBULA_URL=https://github.com/slackhq/nebula/releases/download/v%NEBULA_VER
 set "NEBULA_TMP=%DIST_DIR%\nebula-tmp"
 mkdir "%NEBULA_TMP%"
 
+echo   Downloading Nebula version v%NEBULA_VERSION%
+echo   URL: %NEBULA_URL%
 curl -L -o "%NEBULA_TMP%\nebula.zip" "%NEBULA_URL%"
 if errorlevel 1 (
-    echo Error: Failed to download Nebula binaries
+    echo Error: Failed to download Nebula binaries from %NEBULA_URL%
+    echo.
+    echo Please verify:
+    echo   1. Version %NEBULA_VERSION% exists at https://github.com/slackhq/nebula/releases
+    echo   2. Internet connection is working
+    echo.
     exit /b 1
 )
 
 REM Extract Nebula binaries
+echo   Extracting Nebula binaries...
 powershell -Command "Expand-Archive -Path '%NEBULA_TMP%\nebula.zip' -DestinationPath '%NEBULA_TMP%' -Force"
 if not exist "%NEBULA_TMP%\nebula.exe" (
     echo Error: Failed to extract Nebula binaries
@@ -225,6 +233,10 @@ REM Summary
 echo ===================================================
 echo Build Complete!
 echo ===================================================
+echo.
+echo Versions:
+echo   Package Version: %VERSION%
+echo   Nebula Version: %NEBULA_VERSION%
 echo.
 echo Output files:
 echo   %DIST_DIR%\%APP_NAME%-%VERSION%.zip
