@@ -634,16 +634,6 @@ rm -rf "${PKG_SCRIPTS}"
 rm -rf "${NEBULA_TMP}"
 rm -rf "${DMG_DIR}"
 
-# CRITICAL: Remove app bundles from dist to prevent installer relocation during testing
-# macOS Spotlight indexes these apps and causes the installer to relocate installations
-# The apps are already included in the DMG, so we don't need them loose in dist/
-echo "Removing app bundles from dist (included in DMG)..."
-rm -rf "${DIST_DIR}/${APP_NAME}.app"
-rm -rf "${DIST_DIR}/Uninstall ManagedNebula.app"
-
-echo "✓ Cleanup complete"
-echo ""
-
 # Summary
 echo "=== Build Complete ==="
 echo ""
