@@ -366,8 +366,8 @@ def check_and_update_nebula(server_url: str, config: dict = None) -> bool:
             tmpdir_path = Path(tmpdir)
             zip_path = tmpdir_path / "nebula.zip"
             
-            # Download zip
-            with httpx.Client(timeout=120, verify=True) as dl_client:
+            # Download zip (follow redirects for GitHub releases)
+            with httpx.Client(timeout=120, verify=True, follow_redirects=True) as dl_client:
                 with dl_client.stream("GET", download_url) as response:
                     response.raise_for_status()
                     with open(zip_path, 'wb') as f:
