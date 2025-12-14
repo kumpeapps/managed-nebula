@@ -199,22 +199,27 @@ if errorlevel 1 (
     echo.
 ) else (
     REM Read first line of version output (nebula -version outputs single line)
+    set "ACTUAL_VERSION="
     set /p ACTUAL_VERSION=<"%NEBULA_TMP%\version.txt"
-    echo   Downloaded version: !ACTUAL_VERSION!
-    echo   Expected version: v%NEBULA_VERSION%
-    
-    REM Check if version matches (allowing for formatting differences like "v1.10.0" or "Nebula v1.10.0")
-    echo !ACTUAL_VERSION! | findstr /C:"v%NEBULA_VERSION%" >nul
-    if errorlevel 1 (
-        echo !ACTUAL_VERSION! | findstr /C:"%NEBULA_VERSION%" >nul
+    if "!ACTUAL_VERSION!"=="" (
+        echo   WARNING: Version output was empty
+    ) else (
+        echo   Downloaded version: !ACTUAL_VERSION!
+        echo   Expected version: v%NEBULA_VERSION%
+        
+        REM Check if version matches (allowing for formatting differences like "v1.10.0" or "Nebula v1.10.0")
+        echo !ACTUAL_VERSION! | findstr /C:"v%NEBULA_VERSION%" >nul
         if errorlevel 1 (
-            echo.
-            echo WARNING: Downloaded Nebula version does not match requested version
-            echo   Requested: v%NEBULA_VERSION%
-            echo   Downloaded: !ACTUAL_VERSION!
-            echo.
-            echo Continuing anyway, but please verify the installer includes the correct version.
-            echo.
+            echo !ACTUAL_VERSION! | findstr /C:"%NEBULA_VERSION%" >nul
+            if errorlevel 1 (
+                echo.
+                echo WARNING: Downloaded Nebula version does not match requested version
+                echo   Requested: v%NEBULA_VERSION%
+                echo   Downloaded: !ACTUAL_VERSION!
+                echo.
+                echo Continuing anyway, but please verify the installer includes the correct version.
+                echo.
+            )
         )
     )
 )
@@ -321,8 +326,13 @@ echo   Verifying Nebula version in installer directory...
 if errorlevel 1 (
     echo   WARNING: Could not verify nebula.exe version in installer directory
 ) else (
+    set "INSTALLER_VERSION="
     set /p INSTALLER_VERSION=<"%INSTALLER_DIR%\version-check.txt"
-    echo   Nebula version in installer: !INSTALLER_VERSION!
+    if "!INSTALLER_VERSION!"=="" (
+        echo   WARNING: Version output was empty
+    ) else (
+        echo   Nebula version in installer: !INSTALLER_VERSION!
+    )
     del /q "%INSTALLER_DIR%\version-check.txt" 2>nul
 )
 echo.
@@ -346,7 +356,7 @@ if errorlevel 1 (
 )
 
 REM Move installer to dist directory
-move "ManagedNebulaInstaller-*.exe" "%DIST_DIR%\"
+move "ManagedNebula-*-Setup.exe" "%DIST_DIR%\"
 
 echo NSIS installer built
 echo.
@@ -379,7 +389,7 @@ echo   Nebula Version: %NEBULA_VERSION%
 echo   Wintun Version: %WINTUN_VERSION%
 echo.
 echo Installer created:
-dir "%DIST_DIR%\ManagedNebulaInstaller-*.exe"
+dir "%DIST_DIR%\ManagedNebula-*-Setup.exe"
 echo.
 echo To verify Nebula version in the installer:
 echo   1. Run the installer
