@@ -37,8 +37,13 @@
   !define VERSION "1.0.0"
 !endif
 
+; Nebula version will be set by build script
+!ifndef NEBULA_VERSION
+  !define NEBULA_VERSION "1.10.0"
+!endif
+
 Name "${PRODUCT_NAME} ${VERSION}"
-OutFile "ManagedNebula-${VERSION}-Setup.exe"
+OutFile "ManagedNebulaInstaller-${VERSION}.exe"
 InstallDir "$PROGRAMFILES\ManagedNebula"
 InstallDirRegKey HKLM "${PRODUCT_DIR_REGKEY}" ""
 RequestExecutionLevel admin
@@ -55,7 +60,7 @@ ShowUnInstDetails show
 
 ; Welcome page
 !define MUI_WELCOMEPAGE_TITLE "Welcome to ${PRODUCT_NAME} Setup"
-!define MUI_WELCOMEPAGE_TEXT "This wizard will guide you through the installation of ${PRODUCT_NAME} ${VERSION}.$\r$\n$\r$\n${PRODUCT_NAME} is a Windows client for managing Nebula mesh VPN connections.$\r$\n$\r$\nClick Next to continue."
+!define MUI_WELCOMEPAGE_TEXT "This wizard will guide you through the installation of ${PRODUCT_NAME} ${VERSION}.$\r$\n$\r$\n${PRODUCT_NAME} is a Windows client for managing Nebula mesh VPN connections.$\r$\n$\r$\nIncludes Nebula ${NEBULA_VERSION}$\r$\n$\r$\nClick Next to continue."
 
 ; Finish page
 !define MUI_FINISHPAGE_RUN "$INSTDIR\NebulaAgentGUI.exe"
@@ -93,6 +98,9 @@ ShowUnInstDetails show
 Section "Main Application" SecMain
   SectionIn RO
   
+  DetailPrint "Installing ${PRODUCT_NAME} ${VERSION}"
+  DetailPrint "Nebula Version: ${NEBULA_VERSION}"
+  
   SetOutPath "$INSTDIR"
   SetOverwrite on
   
@@ -107,6 +115,16 @@ Section "Main Application" SecMain
   File "nebula-cert.exe"
   ; Include Wintun driver DLL if available (non-fatal if missing)
   File /nonfatal "wintun.dll"
+  
+  ; Verify Nebula version
+  DetailPrint "Verifying Nebula version..."
+  nsExec::ExecToLog '"$INSTDIR\nebula.exe" -version'
+  Pop $0
+  ${If} $0 == 0
+    DetailPrint "Nebula binary verified successfully"
+  ${Else}
+    DetailPrint "Warning: Could not verify Nebula version (exit code: $0)"
+  ${EndIf}
   
   ; Copy support files
   File "nebula.ico"
