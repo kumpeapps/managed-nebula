@@ -432,6 +432,35 @@ def check_and_update_nebula(server_url: str, config: dict = None) -> bool:
             shutil.copy2(new_nebula_cert, NEBULA_CERT_BIN)
             
             logger.info(f"Successfully updated Nebula from {local_version} to {server_version}")
+            
+            # Also ensure wintun.dll is present (download if missing)
+            if not WINTUN_DLL.exists():
+                logger.info("wintun.dll not found, downloading...")
+                try:
+                    wintun_url = "https://www.wintun.net/builds/wintun-0.14.1.zip"
+                    wintun_zip = tmpdir_path / "wintun.zip"
+                    
+                    with httpx.Client(timeout=60, verify=True, follow_redirects=True) as wintun_client:
+                        r = wintun_client.get(wintun_url)
+                        r.raise_for_status()
+                        wintun_zip.write_bytes(r.content)
+                    
+                    with zipfile.ZipFile(wintun_zip, 'r') as zip_ref:
+                        zip_ref.extractall(tmpdir_path / "wintun_extract")
+                    
+                    # Copy appropriate architecture DLL
+                    import platform
+                    arch = "amd64" if platform.machine().endswith('64') else "x86"
+                    wintun_dll_src = tmpdir_path / "wintun_extract" / "wintun" / "bin" / arch / "wintun.dll"
+                    
+                    if wintun_dll_src.exists():
+                        shutil.copy2(wintun_dll_src, WINTUN_DLL)
+                        logger.info(f"Downloaded and installed wintun.dll ({arch})")
+                    else:
+                        logger.warning(f"wintun.dll not found in archive at expected path: {wintun_dll_src}")
+                except Exception as e:
+                    logger.warning(f"Failed to download wintun.dll (non-critical): {e}")
+            
             return True
             
     except httpx.HTTPStatusError as e:
