@@ -101,6 +101,24 @@ Section "Main Application" SecMain
   DetailPrint "Installing ${PRODUCT_NAME} ${VERSION}"
   DetailPrint "Nebula Version: ${NEBULA_VERSION}"
   
+  ; Check if service was running before upgrade
+  Push $R0
+  nsExec::ExecToStack 'sc query NebulaAgent'
+  Pop $0  ; Return code
+  Pop $R0 ; Output
+  StrCpy $R1 "0"  ; Default: service not running
+  ${If} $0 == 0
+    ; Service exists - check if it was running
+    Push $R0
+    Push "RUNNING"
+    Call StrContains
+    Pop $R2
+    ${If} $R2 != ""
+      StrCpy $R1 "1"  ; Service was running
+      DetailPrint "Service was running - will restart after upgrade"
+    ${EndIf}
+  ${EndIf}
+  
   SetOutPath "$INSTDIR"
   SetOverwrite on
   
@@ -191,6 +209,20 @@ WintunFail:
   DetailPrint "Failed to install wintun.dll; Nebula may not create the tunnel"
 WintunPresent:
 WintunDone:
+
+  ; Restart service if it was running before upgrade
+  ${If} $R1 == "1"
+    DetailPrint "Restarting NebulaAgent service..."
+    nsExec::ExecToLog 'sc start NebulaAgent'
+    Pop $0
+    ${If} $0 == 0
+      DetailPrint "Service restarted successfully"
+    ${Else}
+      DetailPrint "Note: Service restart returned code $0. You may need to restart it manually."
+    ${EndIf}
+  ${EndIf}
+  
+  Pop $R0
 SectionEnd
 
 Section "Windows Service" SecService
@@ -340,6 +372,30 @@ Function .onInit
   StrCmp $0 "Admin" +3 0
     MessageBox MB_OK|MB_ICONSTOP "Administrator privileges required to install ${PRODUCT_NAME}."
     Abort
+  
+  ; Check if this is an upgrade (existing installation)
+  ReadRegStr $0 ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "UninstallString"
+  StrCmp $0 "" NotInstalled 0
+  
+  ; Existing installation found - stop processes and service for upgrade
+  DetailPrint "Existing installation detected - preparing for upgrade..."
+  
+  ; Stop Windows Service (ignore errors if not installed/running)
+  DetailPrint "Stopping NebulaAgent service..."
+  nsExec::ExecToLog 'sc stop NebulaAgent'
+  Sleep 3000
+  
+  ; Kill any running processes to allow file replacement
+  DetailPrint "Stopping Nebula processes..."
+  nsExec::ExecToLog 'taskkill /IM nebula.exe /F'
+  nsExec::ExecToLog 'taskkill /IM NebulaAgent.exe /F'
+  nsExec::ExecToLog 'taskkill /IM NebulaAgentService.exe /F'
+  nsExec::ExecToLog 'taskkill /IM NebulaAgentGUI.exe /F'
+  Sleep 2000
+  
+  DetailPrint "Ready to upgrade"
+  
+NotInstalled:
 FunctionEnd
 
 Function un.onInit
