@@ -316,6 +316,132 @@ def get_nebula_version() -> str:
         return "error"
 
 
+def check_and_update_nebula(server_url: str, config: dict = None) -> bool:
+    """
+    Check server's Nebula version and auto-update if different.
+    
+    Returns True if update was performed (and might need restart).
+    """
+    logger.info("Checking for Nebula version updates...")
+    
+    # SSL verification (disable for self-signed certs if configured)
+    if config and "allow_self_signed_cert" in config:
+        verify_ssl = not config["allow_self_signed_cert"]
+    else:
+        verify_ssl = os.environ.get("ALLOW_SELF_SIGNED_CERT", "false").lower() != "true"
+    
+    try:
+        # Get server info (public endpoint, no auth required)
+        info_url = server_url.rstrip("/") + "/v1/client/server-info"
+        with httpx.Client(timeout=10, verify=verify_ssl) as client:
+            r = client.get(info_url)
+            r.raise_for_status()
+            server_info = r.json()
+        
+        server_version = server_info.get("nebula_version", "").lstrip('v')
+        local_version = get_nebula_version().lstrip('v')
+        
+        logger.info(f"Nebula version check: local={local_version}, server={server_version}")
+        
+        # If versions match or local version is unknown/error, skip update
+        if local_version in ["unknown", "error", "timeout", "not_installed"]:
+            logger.warning(f"Cannot determine local Nebula version: {local_version}")
+            return False
+        
+        if local_version == server_version:
+            logger.info("Nebula version matches server, no update needed")
+            return False
+        
+        # Versions differ - download and install matching version
+        logger.warning(f"Nebula version mismatch detected. Upgrading from {local_version} to {server_version}")
+        
+        # Download Nebula binaries from GitHub
+        download_url = f"https://github.com/slackhq/nebula/releases/download/v{server_version}/nebula-windows-amd64.zip"
+        logger.info(f"Downloading Nebula {server_version} from {download_url}")
+        
+        import zipfile
+        import tempfile
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            zip_path = tmpdir_path / "nebula.zip"
+            
+            # Download zip
+            with httpx.Client(timeout=120, verify=True) as dl_client:
+                with dl_client.stream("GET", download_url) as response:
+                    response.raise_for_status()
+                    with open(zip_path, 'wb') as f:
+                        for chunk in response.iter_bytes():
+                            f.write(chunk)
+            
+            logger.info("Download complete, extracting...")
+            
+            # Extract zip
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(tmpdir_path)
+            
+            # Verify extracted files exist
+            new_nebula = tmpdir_path / "nebula.exe"
+            new_nebula_cert = tmpdir_path / "nebula-cert.exe"
+            
+            if not new_nebula.exists():
+                raise FileNotFoundError(f"nebula.exe not found in downloaded archive")
+            if not new_nebula_cert.exists():
+                raise FileNotFoundError(f"nebula-cert.exe not found in downloaded archive")
+            
+            # Verify new version
+            result = subprocess.run(
+                [str(new_nebula), "-version"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            new_version = "unknown"
+            for line in result.stdout.splitlines():
+                if line.startswith("Version:"):
+                    new_version = line.split(":", 1)[1].strip().lstrip('v')
+            
+            if new_version != server_version:
+                logger.error(f"Downloaded version {new_version} doesn't match expected {server_version}")
+                return False
+            
+            logger.info(f"Verified downloaded Nebula version: {new_version}")
+            
+            # Stop Nebula if running (we'll restart it later)
+            stop_nebula()
+            import time
+            time.sleep(2)  # Wait for process to fully stop
+            
+            # Replace binaries
+            logger.info("Replacing Nebula binaries...")
+            
+            # Backup existing binaries
+            if NEBULA_BIN.exists():
+                backup_path = NEBULA_BIN.parent / f"nebula.exe.backup.{int(time.time())}"
+                NEBULA_BIN.rename(backup_path)
+                logger.info(f"Backed up old nebula.exe to {backup_path}")
+            
+            if NEBULA_CERT_BIN.exists():
+                backup_path = NEBULA_CERT_BIN.parent / f"nebula-cert.exe.backup.{int(time.time())}"
+                NEBULA_CERT_BIN.rename(backup_path)
+                logger.info(f"Backed up old nebula-cert.exe to {backup_path}")
+            
+            # Copy new binaries
+            import shutil
+            shutil.copy2(new_nebula, NEBULA_BIN)
+            shutil.copy2(new_nebula_cert, NEBULA_CERT_BIN)
+            
+            logger.info(f"Successfully updated Nebula from {local_version} to {server_version}")
+            return True
+            
+    except httpx.HTTPStatusError as e:
+        logger.warning(f"Failed to check server version: HTTP {e.response.status_code}")
+        return False
+    except Exception as e:
+        logger.error(f"Failed to auto-update Nebula: {e}", exc_info=True)
+        return False
+
+
 def fetch_config(token: str, server_url: str, public_key: str, config: dict = None) -> dict:
     """Fetch configuration from server"""
     url = server_url.rstrip("/") + "/v1/client/config"
@@ -569,6 +695,11 @@ def run_once(restart_on_change: bool = False) -> bool:
         server_url = cfg.get("server_url", "http://localhost:8080")
     
     try:
+        # Check and auto-update Nebula version to match server
+        nebula_updated = check_and_update_nebula(server_url, config=cfg)
+        if nebula_updated:
+            logger.info("Nebula was updated - configuration fetch will use new version")
+        
         _priv, pub = ensure_keypair()
         data = fetch_config(token, server_url, pub, config=cfg)
         
@@ -579,6 +710,10 @@ def run_once(restart_on_change: bool = False) -> bool:
         config_changed = write_config_and_pki(config_yaml, client_cert_pem, ca_chain_pems)
         
         if config_changed and restart_on_change:
+            restart_nebula()
+        elif nebula_updated and restart_on_change:
+            # If Nebula was updated but config didn't change, still restart to use new binary
+            logger.info("Restarting Nebula to use updated binary")
             restart_nebula()
         
         return True
