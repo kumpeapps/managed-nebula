@@ -43,7 +43,7 @@
 !endif
 
 Name "${PRODUCT_NAME} ${VERSION}"
-OutFile "ManagedNebulaInstaller-${VERSION}.exe"
+OutFile "ManagedNebula-${VERSION}-Setup.exe"
 InstallDir "$PROGRAMFILES\ManagedNebula"
 InstallDirRegKey HKLM "${PRODUCT_DIR_REGKEY}" ""
 RequestExecutionLevel admin
