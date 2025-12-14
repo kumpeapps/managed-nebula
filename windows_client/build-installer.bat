@@ -27,7 +27,7 @@ echo.
 
 REM Configuration
 set "VERSION=1.0.0"
-set "NEBULA_VERSION=1.9.7"
+set "NEBULA_VERSION=1.10.0"
 set "WINTUN_VERSION=0.14.1"
 set "APP_NAME=NebulaAgent"
 set "SCRIPT_DIR=%~dp0"
@@ -113,6 +113,22 @@ REM Clean previous builds
 echo Step 2: Cleaning previous builds...
 if exist "%DIST_DIR%" rmdir /s /q "%DIST_DIR%"
 if exist "%BUILD_DIR%" rmdir /s /q "%BUILD_DIR%"
+
+REM Clean any cached Nebula downloads to ensure fresh download
+echo   Cleaning cached Nebula downloads...
+if exist "%SCRIPT_DIR%nebula-*.zip" (
+    del /q "%SCRIPT_DIR%nebula-*.zip"
+    echo   Removed cached Nebula zip files
+)
+if exist "%SCRIPT_DIR%nebula.exe" (
+    del /q "%SCRIPT_DIR%nebula.exe"
+    echo   Removed cached nebula.exe
+)
+if exist "%SCRIPT_DIR%nebula-cert.exe" (
+    del /q "%SCRIPT_DIR%nebula-cert.exe"
+    echo   Removed cached nebula-cert.exe
+)
+
 mkdir "%DIST_DIR%"
 echo Clean complete
 echo.
@@ -123,18 +139,83 @@ set "NEBULA_URL=https://github.com/slackhq/nebula/releases/download/v%NEBULA_VER
 set "NEBULA_TMP=%DIST_DIR%\nebula-tmp"
 mkdir "%NEBULA_TMP%"
 
-echo   Downloading from %NEBULA_URL%
+echo   Downloading Nebula version v%NEBULA_VERSION%
+echo   URL: %NEBULA_URL%
+echo.
 curl -L -o "%NEBULA_TMP%\nebula.zip" "%NEBULA_URL%"
 if errorlevel 1 (
-    echo Error: Failed to download Nebula binaries
+    echo.
+    echo ERROR: Failed to download Nebula binaries from %NEBULA_URL%
+    echo.
+    echo Possible causes:
+    echo   - Network connectivity issues
+    echo   - Invalid version number: %NEBULA_VERSION%
+    echo   - GitHub releases unavailable
+    echo.
+    echo Please verify:
+    echo   1. Version %NEBULA_VERSION% exists at https://github.com/slackhq/nebula/releases
+    echo   2. Internet connection is working
+    echo   3. No firewall blocking GitHub downloads
+    echo.
     exit /b 1
 )
 
+echo   Download complete: %NEBULA_TMP%\nebula.zip
 echo   Extracting Nebula binaries...
 powershell -Command "Expand-Archive -Path '%NEBULA_TMP%\nebula.zip' -DestinationPath '%NEBULA_TMP%' -Force"
-if not exist "%NEBULA_TMP%\nebula.exe" (
-    echo Error: Failed to extract Nebula binaries
+if errorlevel 1 (
+    echo.
+    echo ERROR: Failed to extract Nebula binaries
+    echo Downloaded file may be corrupted
+    echo.
     exit /b 1
+)
+
+if not exist "%NEBULA_TMP%\nebula.exe" (
+    echo.
+    echo ERROR: nebula.exe not found after extraction
+    echo Contents of %NEBULA_TMP%:
+    dir "%NEBULA_TMP%"
+    echo.
+    exit /b 1
+)
+
+if not exist "%NEBULA_TMP%\nebula-cert.exe" (
+    echo.
+    echo ERROR: nebula-cert.exe not found after extraction
+    echo Contents of %NEBULA_TMP%:
+    dir "%NEBULA_TMP%"
+    echo.
+    exit /b 1
+)
+
+REM Verify downloaded Nebula version
+echo   Verifying Nebula version...
+"%NEBULA_TMP%\nebula.exe" -version > "%NEBULA_TMP%\version.txt" 2>&1
+if errorlevel 1 (
+    echo.
+    echo WARNING: Could not verify nebula.exe version
+    echo This may indicate a corrupted or incompatible binary
+    echo.
+) else (
+    set /p ACTUAL_VERSION=<"%NEBULA_TMP%\version.txt"
+    echo   Downloaded version: !ACTUAL_VERSION!
+    echo   Expected version: v%NEBULA_VERSION%
+    
+    REM Check if version matches (allowing for formatting differences)
+    echo !ACTUAL_VERSION! | findstr /C:"v%NEBULA_VERSION%" >nul
+    if errorlevel 1 (
+        echo !ACTUAL_VERSION! | findstr /C:"%NEBULA_VERSION%" >nul
+        if errorlevel 1 (
+            echo.
+            echo WARNING: Downloaded Nebula version does not match requested version
+            echo   Requested: v%NEBULA_VERSION%
+            echo   Downloaded: !ACTUAL_VERSION!
+            echo.
+            echo Continuing anyway, but please verify the installer includes the correct version.
+            echo.
+        )
+    )
 )
 
 echo Nebula binaries ready
@@ -232,6 +313,17 @@ copy "%NEBULA_TMP%\nebula.exe" "%INSTALLER_DIR%\"
 copy "%NEBULA_TMP%\nebula-cert.exe" "%INSTALLER_DIR%\"
 
 echo Files copied to installer directory
+
+REM Verify Nebula version in installer directory
+echo   Verifying Nebula version in installer directory...
+"%INSTALLER_DIR%\nebula.exe" -version > "%INSTALLER_DIR%\version-check.txt" 2>&1
+if errorlevel 1 (
+    echo   WARNING: Could not verify nebula.exe version in installer directory
+) else (
+    set /p INSTALLER_VERSION=<"%INSTALLER_DIR%\version-check.txt"
+    echo   Nebula version in installer: !INSTALLER_VERSION!
+    del /q "%INSTALLER_DIR%\version-check.txt" 2>nul
+)
 echo.
 
 REM Update version in NSIS script (in-place)
@@ -280,8 +372,19 @@ echo ===================================================
 echo Build Complete!
 echo ===================================================
 echo.
+echo Versions:
+echo   Installer Version: %VERSION%
+echo   Nebula Version: %NEBULA_VERSION%
+echo   Wintun Version: %WINTUN_VERSION%
+echo.
 echo Installer created:
 dir "%DIST_DIR%\ManagedNebulaInstaller-*.exe"
+echo.
+echo To verify Nebula version in the installer:
+echo   1. Run the installer
+echo   2. After installation, open Command Prompt
+echo   3. Run: "C:\Program Files\ManagedNebula\nebula.exe" -version
+echo   4. Should show: v%NEBULA_VERSION%
 echo.
 echo Next steps:
 echo   1. Copy the installer to target Windows machine
