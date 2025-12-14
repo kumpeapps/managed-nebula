@@ -198,11 +198,12 @@ if errorlevel 1 (
     echo This may indicate a corrupted or incompatible binary
     echo.
 ) else (
+    REM Read first line of version output (nebula -version outputs single line)
     set /p ACTUAL_VERSION=<"%NEBULA_TMP%\version.txt"
     echo   Downloaded version: !ACTUAL_VERSION!
     echo   Expected version: v%NEBULA_VERSION%
     
-    REM Check if version matches (allowing for formatting differences)
+    REM Check if version matches (allowing for formatting differences like "v1.10.0" or "Nebula v1.10.0")
     echo !ACTUAL_VERSION! | findstr /C:"v%NEBULA_VERSION%" >nul
     if errorlevel 1 (
         echo !ACTUAL_VERSION! | findstr /C:"%NEBULA_VERSION%" >nul
