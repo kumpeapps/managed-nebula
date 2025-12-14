@@ -251,6 +251,32 @@ NebulaAgent.exe --loop --log-level DEBUG
 
 ## Troubleshooting
 
+### Verifying Nebula Version After Installation
+
+After installing or upgrading, verify the correct Nebula version is installed:
+
+1. **Check Nebula Version:**
+   ```cmd
+   "C:\Program Files\ManagedNebula\nebula.exe" -version
+   ```
+   
+   Should output: `Nebula v1.10.0` (or the version you specified during build)
+
+2. **If version is incorrect:**
+   - Uninstall completely (see Uninstallation section below)
+   - Delete `C:\Program Files\ManagedNebula` directory
+   - Delete `C:\ProgramData\Nebula` directory
+   - Rebuild installer with correct version:
+     ```cmd
+     build-installer.bat --nebula-version 1.10.0
+     ```
+   - Reinstall with new installer
+
+3. **Check file properties:**
+   - Right-click `C:\Program Files\ManagedNebula\nebula.exe`
+   - Select "Properties" → "Details" tab
+   - Verify "Product version" matches expected version
+
 ### Service Won't Start
 
 1. Check the event log:
@@ -344,7 +370,7 @@ set LOG_LEVEL=DEBUG
    ```
 
    This will:
-   - Download Nebula binaries
+   - Download Nebula binaries (v1.10.0 by default)
    - Build all executables with PyInstaller:
      - `NebulaAgent.exe` - CLI agent
      - `NebulaAgentService.exe` - Windows Service executable
@@ -352,10 +378,25 @@ set LOG_LEVEL=DEBUG
    - Build NSIS installer
    - Output: `dist\ManagedNebulaInstaller-X.X.X.exe`
 
-3. Optionally, customize the version:
+3. **Customize versions** (recommended for upgrades):
    ```cmd
-   build-installer.bat --version 1.2.3 --nebula-version 1.9.7
+   build-installer.bat --version 1.2.3 --nebula-version 1.10.0
    ```
+
+   **Important Notes:**
+   - `--version`: Sets the installer version (Managed Nebula version)
+   - `--nebula-version`: Sets the Nebula binary version to download
+   - The script will download and verify the Nebula binaries
+   - Build will fail explicitly if download or verification fails
+   - Check build output to confirm correct versions are being packaged
+
+4. **Verify the build:**
+   After build completes, verify Nebula version in the built installer directory:
+   ```cmd
+   dist\nebula-tmp\nebula.exe -version
+   ```
+
+   Should output: `Nebula v1.10.0` (or your specified version)
 
 ### Build Components Only
 
