@@ -76,14 +76,14 @@ If testing an upgrade from 1.9.7 to 1.10.0:
 
 4. **Verify build output:**
    ```cmd
-   dir dist\ManagedNebulaInstaller-*.exe
+   dir dist\ManagedNebula-*-Setup.exe
    ```
-   Should show a file like: `ManagedNebulaInstaller-1.0.1.exe`
+   Should show a file like: `ManagedNebula-1.0.1-Setup.exe`
 
 ### Installation Verification
 
 1. **Run installer:**
-   - Double-click `ManagedNebulaInstaller-1.0.1.exe`
+   - Double-click `ManagedNebula-1.0.1-Setup.exe`
    - Watch installation details window for:
      - "Installing Managed Nebula 1.0.1"
      - "Nebula Version: 1.10.0"
