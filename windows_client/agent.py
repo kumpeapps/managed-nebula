@@ -331,14 +331,14 @@ def check_and_update_nebula(server_url: str, config: dict = None) -> bool:
         verify_ssl = os.environ.get("ALLOW_SELF_SIGNED_CERT", "false").lower() != "true"
     
     try:
-        # Get server info (public endpoint, no auth required)
-        info_url = server_url.rstrip("/") + "/v1/client/server-info"
+        # Get server version (public endpoint, no auth required)
+        version_url = server_url.rstrip("/") + "/v1/version"
         with httpx.Client(timeout=10, verify=verify_ssl) as client:
-            r = client.get(info_url)
+            r = client.get(version_url)
             r.raise_for_status()
-            server_info = r.json()
+            version_info = r.json()
         
-        server_version = server_info.get("nebula_version", "").lstrip('v')
+        server_version = version_info.get("nebula_version", "").lstrip('v')
         local_version = get_nebula_version().lstrip('v')
         
         logger.info(f"Nebula version check: local={local_version}, server={server_version}")
