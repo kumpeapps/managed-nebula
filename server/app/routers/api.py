@@ -760,23 +760,6 @@ async def get_nebula_versions(
     )
 
 
-@router.get("/client/server-info")
-async def get_server_info(session: AsyncSession = Depends(get_session)):
-    """
-    Get server information including Nebula version (public endpoint for clients).
-    
-    This endpoint allows clients to check the server's Nebula version before
-    authenticating, enabling automatic version synchronization.
-    """
-    settings = (await session.execute(select(GlobalSettings))).scalars().first()
-    nebula_version = getattr(settings, 'nebula_version', '1.9.7') if settings else '1.9.7'
-    
-    return {
-        "nebula_version": nebula_version,
-        "server_version": "1.5.1"  # TODO: Get from VERSION file or environment
-    }
-
-
 @router.post("/client/config")
 async def get_client_config(body: ClientConfigRequest, session: AsyncSession = Depends(get_session)):
     # Validate token
