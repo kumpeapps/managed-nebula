@@ -129,6 +129,21 @@ if exist "%SCRIPT_DIR%nebula-cert.exe" (
     echo   Removed cached nebula-cert.exe
 )
 
+REM Clean cached files in installer directory to ensure fresh binaries
+echo   Cleaning cached installer directory files...
+if exist "%INSTALLER_DIR%\nebula.exe" (
+    del /q "%INSTALLER_DIR%\nebula.exe"
+    echo   Removed cached installer\nebula.exe
+)
+if exist "%INSTALLER_DIR%\nebula-cert.exe" (
+    del /q "%INSTALLER_DIR%\nebula-cert.exe"
+    echo   Removed cached installer\nebula-cert.exe
+)
+if exist "%INSTALLER_DIR%\wintun.dll" (
+    del /q "%INSTALLER_DIR%\wintun.dll"
+    echo   Removed cached installer\wintun.dll
+)
+
 mkdir "%DIST_DIR%"
 echo Clean complete
 echo.
@@ -312,11 +327,19 @@ echo.
 
 REM Copy files to installer directory for NSIS
 echo Step 7: Preparing files for NSIS installer...
-copy "%DIST_DIR%\%APP_NAME%.exe" "%INSTALLER_DIR%\"
-copy "%DIST_DIR%\%APP_NAME%Service.exe" "%INSTALLER_DIR%\"
-copy "%DIST_DIR%\%APP_NAME%GUI.exe" "%INSTALLER_DIR%\"
-copy "%NEBULA_TMP%\nebula.exe" "%INSTALLER_DIR%\"
-copy "%NEBULA_TMP%\nebula-cert.exe" "%INSTALLER_DIR%\"
+echo   Before copy - checking installer directory...
+if exist "%INSTALLER_DIR%\nebula.exe" (
+    echo   WARNING: Old nebula.exe found in installer directory
+    "%INSTALLER_DIR%\nebula.exe" -version 2>&1
+    del /f /q "%INSTALLER_DIR%\nebula.exe"
+    echo   Deleted old nebula.exe
+)
+echo   Copying fresh files with force overwrite...
+copy /Y "%DIST_DIR%\%APP_NAME%.exe" "%INSTALLER_DIR%\"
+copy /Y "%DIST_DIR%\%APP_NAME%Service.exe" "%INSTALLER_DIR%\"
+copy /Y "%DIST_DIR%\%APP_NAME%GUI.exe" "%INSTALLER_DIR%\"
+copy /Y "%NEBULA_TMP%\nebula.exe" "%INSTALLER_DIR%\"
+copy /Y "%NEBULA_TMP%\nebula-cert.exe" "%INSTALLER_DIR%\"
 
 echo Files copied to installer directory
 
@@ -325,13 +348,28 @@ echo   Verifying Nebula version in installer directory...
 "%INSTALLER_DIR%\nebula.exe" -version > "%INSTALLER_DIR%\version-check.txt" 2>&1
 if errorlevel 1 (
     echo   WARNING: Could not verify nebula.exe version in installer directory
+    echo   ERROR: This is a critical issue - installer will contain invalid nebula.exe
+    exit /b 1
 ) else (
     set "INSTALLER_VERSION="
     set /p INSTALLER_VERSION=<"%INSTALLER_DIR%\version-check.txt"
     if "!INSTALLER_VERSION!"=="" (
         echo   WARNING: Version output was empty
+        echo   ERROR: This is a critical issue
+        exit /b 1
     ) else (
-        echo   Nebula version in installer: !INSTALLER_VERSION!
+        echo   SUCCESS: Nebula version in installer directory: !INSTALLER_VERSION!
+        echo !INSTALLER_VERSION! | findstr /C:"%NEBULA_VERSION%" >nul
+        if errorlevel 1 (
+            echo   ERROR: Version mismatch detected!
+            echo   Expected: %NEBULA_VERSION%
+            echo   Found: !INSTALLER_VERSION!
+            echo   Build cannot continue with mismatched version
+            exit /b 1
+        ) else (
+            echo   Version verified: Correct version %NEBULA_VERSION% confirmed
+        )
+    )
     )
     del /q "%INSTALLER_DIR%\version-check.txt" 2>nul
 )
