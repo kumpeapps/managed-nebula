@@ -378,19 +378,27 @@ Function .onInit
   StrCmp $0 "" NotInstalled 0
   
   ; Existing installation found - stop processes and service for upgrade
+  MessageBox MB_OKCANCEL|MB_ICONINFORMATION "An existing installation was detected. The installer will stop the Nebula service and all related processes before upgrading.$\r$\n$\r$\nClick OK to continue with the upgrade." IDOK ContinueUpgrade
+    Abort
+  
+ContinueUpgrade:
   DetailPrint "Existing installation detected - preparing for upgrade..."
   
   ; Stop Windows Service (ignore errors if not installed/running)
   DetailPrint "Stopping NebulaAgent service..."
   nsExec::ExecToLog 'sc stop NebulaAgent'
-  Sleep 3000
+  Sleep 5000
   
   ; Kill any running processes to allow file replacement
-  DetailPrint "Stopping Nebula processes..."
+  DetailPrint "Stopping Nebula processes (forcefully)..."
   nsExec::ExecToLog 'taskkill /IM nebula.exe /F'
   nsExec::ExecToLog 'taskkill /IM NebulaAgent.exe /F'
   nsExec::ExecToLog 'taskkill /IM NebulaAgentService.exe /F'
   nsExec::ExecToLog 'taskkill /IM NebulaAgentGUI.exe /F'
+  Sleep 3000
+  
+  ; Additional wait to ensure file handles are fully released
+  DetailPrint "Waiting for file handles to be released..."
   Sleep 2000
   
   DetailPrint "Ready to upgrade"
