@@ -148,6 +148,7 @@ def check_and_update_nebula(server_url: str) -> bool:
                         os.kill(pid, 9)
                         time.sleep(1)
                     except OSError:
+                        # OSError is expected if the process is already terminated; safe to ignore.
                         pass
                 except OSError:
                     pass
