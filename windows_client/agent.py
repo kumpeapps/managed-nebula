@@ -326,18 +326,32 @@ def ensure_wintun_dll() -> bool:
     
     Returns True if wintun.dll is present or was successfully downloaded.
     """
-    # Check if wintun.dll exists in any expected location
-    if WINTUN_DLL.exists() or WINTUN_DLL_NESTED.exists():
-        logger.debug("wintun.dll already exists")
+    import shutil
+    import platform
+    
+    # If nested path exists, we're good
+    if WINTUN_DLL_NESTED.exists():
+        logger.debug("wintun.dll already exists in nested path")
         return True
     
+    # Check if we have wintun.dll in root and can copy it to nested path
+    if WINTUN_DLL.exists():
+        logger.info("wintun.dll found in root, copying to nested path...")
+        try:
+            WINTUN_DLL_NESTED.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(WINTUN_DLL, WINTUN_DLL_NESTED)
+            logger.info(f"Copied wintun.dll to {WINTUN_DLL_NESTED}")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to copy wintun.dll to nested path: {e}")
+            # Continue to download fresh copy
+    
+    # Need to download wintun.dll
     logger.info("wintun.dll not found, downloading...")
     
     try:
         import tempfile
         import zipfile
-        import platform
-        import shutil
         
         wintun_url = "https://www.wintun.net/builds/wintun-0.14.1.zip"
         
