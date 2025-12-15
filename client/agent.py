@@ -386,8 +386,8 @@ def run_once(restart_on_change: bool = False):
     
     config_changed = write_config_and_pki(cfg, client_cert_pem, ca_chain_pems)
     
-    # Restart Nebula if config changed and we're asked to
-    if config_changed and restart_on_change:
+    # Restart Nebula if config changed or if binary was updated
+    if restart_on_change and (config_changed or nebula_updated):
         restart_nebula()
 
 

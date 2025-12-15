@@ -828,11 +828,10 @@ def run_once(restart_on_change: bool = False) -> bool:
         
         config_changed = write_config_and_pki(config_yaml, client_cert_pem, ca_chain_pems)
         
-        if config_changed and restart_on_change:
-            restart_nebula()
-        elif nebula_updated and restart_on_change:
-            # If Nebula was updated but config didn't change, still restart to use new binary
-            logger.info("Restarting Nebula to use updated binary")
+        # Restart Nebula if config changed or if binary was updated
+        if restart_on_change and (config_changed or nebula_updated):
+            if nebula_updated and not config_changed:
+                logger.info("Restarting Nebula to use updated binary")
             restart_nebula()
         
         return True
