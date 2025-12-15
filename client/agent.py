@@ -49,6 +49,111 @@ def get_nebula_version() -> str:
         return "unknown"
 
 
+# Helper functions for check_and_update_nebula
+
+def _resolve_arch() -> Optional[str]:
+    """Resolve system architecture for Nebula downloads"""
+    import platform
+    machine = platform.machine().lower()
+    if machine in ['x86_64', 'amd64']:
+        return 'amd64'
+    if machine in ['aarch64', 'arm64']:
+        return 'arm64'
+    if machine.startswith('arm'):
+        return 'arm'
+    return None
+
+
+def _stop_nebula_with_timeout() -> None:
+    """Stop Nebula daemon with graceful timeout"""
+    pid = get_nebula_pid()
+    if not pid:
+        return
+    try:
+        os.kill(pid, 15)  # SIGTERM
+        time.sleep(2)
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            return  # Process exited
+        print("[agent] Process still running, sending SIGKILL...")
+        os.kill(pid, 9)
+        time.sleep(1)
+    except OSError:
+        pass
+
+
+def _download_and_extract_nebula(download_url: str, verify_ssl: bool) -> Optional[tuple[Path, Path]]:
+    """Download and extract Nebula binaries, returning paths or None on failure"""
+    import tarfile
+    import tempfile
+    
+    tmpdir = tempfile.mkdtemp()
+    tmpdir_path = Path(tmpdir)
+    tar_path = tmpdir_path / "nebula.tar.gz"
+    
+    try:
+        with httpx.Client(timeout=120, verify=verify_ssl, follow_redirects=True) as dl_client:
+            with dl_client.stream("GET", download_url) as response:
+                response.raise_for_status()
+                with open(tar_path, "wb") as f:
+                    for chunk in response.iter_bytes(chunk_size=8192):
+                        f.write(chunk)
+        
+        print(f"[agent] Downloaded {tar_path.stat().st_size} bytes")
+        
+        extract_dir = tmpdir_path / "nebula_extract"
+        extract_dir.mkdir()
+        with tarfile.open(tar_path, "r:gz") as tar_ref:
+            tar_ref.extractall(extract_dir)
+        
+        nebula_bin = extract_dir / "nebula"
+        nebula_cert_bin = extract_dir / "nebula-cert"
+        if not nebula_bin.exists() or not nebula_cert_bin.exists():
+            print("[agent] ERROR: Nebula binaries not found in archive")
+            return None
+        
+        return nebula_bin, nebula_cert_bin
+    except Exception as e:
+        print(f"[agent] Failed to download/extract Nebula: {e}")
+        return None
+
+
+def _backup_and_install(nebula_bin: Path, nebula_cert_bin: Path) -> bool:
+    """Backup old binaries and install new ones"""
+    import shutil
+    
+    nebula_path = shutil.which("nebula")
+    nebula_cert_path = shutil.which("nebula-cert")
+    
+    # Backup existing binaries
+    for src in (nebula_path, nebula_cert_path):
+        if not src:
+            continue
+        try:
+            src_path = Path(src)
+            backup_path = src_path.with_suffix(".bak")
+            shutil.copy2(src_path, backup_path)
+            print(f"[agent] Backed up {src_path.name} to {backup_path}")
+        except Exception as e:
+            print(f"[agent] Warning: Failed to backup {src}: {e}")
+    
+    install_dir = Path("/usr/local/bin")
+    if not os.access(install_dir, os.W_OK):
+        print(f"[agent] ERROR: No write permission to {install_dir}")
+        return False
+    
+    try:
+        shutil.copy2(nebula_bin, install_dir / "nebula")
+        shutil.copy2(nebula_cert_bin, install_dir / "nebula-cert")
+        (install_dir / "nebula").chmod(0o755)
+        (install_dir / "nebula-cert").chmod(0o755)
+        return True
+    except Exception as e:
+        print(f"[agent] ERROR: Failed to install binaries: {e}")
+        return False
+
+
 def check_and_update_nebula(server_url: str) -> bool:
     """
     Check server's Nebula version and auto-update if different.
@@ -56,8 +161,6 @@ def check_and_update_nebula(server_url: str) -> bool:
     Returns True if update was performed (and might need restart).
     """
     print("[agent] Checking for Nebula version updates...")
-    
-    # Allow self-signed certificates in development
     verify_ssl = os.getenv("ALLOW_SELF_SIGNED_CERT", "false").lower() != "true"
     
     try:
@@ -85,123 +188,41 @@ def check_and_update_nebula(server_url: str) -> bool:
         # Versions differ - download and install matching version
         print(f"[agent] Nebula version mismatch detected. Upgrading from {local_version} to {server_version}")
         
-        # Detect architecture
-        import platform
-        machine = platform.machine().lower()
-        if machine in ['x86_64', 'amd64']:
-            arch = 'amd64'
-        elif machine in ['aarch64', 'arm64']:
-            arch = 'arm64'
-        elif machine.startswith('arm'):
-            arch = 'arm'
-        else:
-            print(f"[agent] Unsupported architecture: {machine}")
+        arch = _resolve_arch()
+        if not arch:
+            import platform
+            print(f"[agent] Unsupported architecture: {platform.machine().lower()}")
             return False
         
-        # Download Nebula binaries from GitHub
-        download_url = f"https://github.com/slackhq/nebula/releases/download/v{server_version}/nebula-linux-{arch}.tar.gz"
+        download_url = (
+            f"https://github.com/slackhq/nebula/releases/download/"
+            f"v{server_version}/nebula-linux-{arch}.tar.gz"
+        )
         print(f"[agent] Downloading Nebula {server_version} from {download_url}")
         
-        import tarfile
-        import tempfile
-        import shutil
+        result = _download_and_extract_nebula(download_url, verify_ssl)
+        if not result:
+            return False
+        nebula_bin, nebula_cert_bin = result
         
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir_path = Path(tmpdir)
-            tar_path = tmpdir_path / "nebula.tar.gz"
-            
-            # Download tar.gz (follow redirects for GitHub releases)
-            with httpx.Client(timeout=120, verify=True, follow_redirects=True) as dl_client:
-                with dl_client.stream("GET", download_url) as response:
-                    response.raise_for_status()
-                    with open(tar_path, 'wb') as f:
-                        for chunk in response.iter_bytes(chunk_size=8192):
-                            f.write(chunk)
-            
-            print(f"[agent] Downloaded {tar_path.stat().st_size} bytes")
-            
-            # Extract tar.gz
-            extract_dir = tmpdir_path / "nebula_extract"
-            extract_dir.mkdir()
-            with tarfile.open(tar_path, 'r:gz') as tar_ref:
-                tar_ref.extractall(extract_dir)
-            
-            # Find nebula and nebula-cert binaries
-            nebula_bin = extract_dir / "nebula"
-            nebula_cert_bin = extract_dir / "nebula-cert"
-            
-            if not nebula_bin.exists() or not nebula_cert_bin.exists():
-                print(f"[agent] ERROR: Nebula binaries not found in archive")
-                return False
-            
-            # Stop Nebula before replacing binaries
-            print("[agent] Stopping Nebula process before upgrade...")
-            pid = get_nebula_pid()
-            if pid:
-                try:
-                    os.kill(pid, 15)  # SIGTERM
-                    time.sleep(2)
-                    # Check if still running
-                    try:
-                        os.kill(pid, 0)
-                        print("[agent] Process still running, sending SIGKILL...")
-                        os.kill(pid, 9)
-                        time.sleep(1)
-                    except OSError:
-                        # OSError is expected if the process is already terminated; safe to ignore.
-                        pass
-                except OSError:
-                    pass
-            
-            # Backup current binaries
-            nebula_path = shutil.which("nebula")
-            nebula_cert_path = shutil.which("nebula-cert")
-            
-            if nebula_path:
-                backup_path = Path(nebula_path).with_suffix('.bak')
-                try:
-                    shutil.copy2(nebula_path, backup_path)
-                    print(f"[agent] Backed up nebula to {backup_path}")
-                except Exception as e:
-                    print(f"[agent] Warning: Failed to backup nebula: {e}")
-            
-            if nebula_cert_path:
-                backup_path = Path(nebula_cert_path).with_suffix('.bak')
-                try:
-                    shutil.copy2(nebula_cert_path, backup_path)
-                    print(f"[agent] Backed up nebula-cert to {backup_path}")
-                except Exception as e:
-                    print(f"[agent] Warning: Failed to backup nebula-cert: {e}")
-            
-            # Replace binaries (typically /usr/local/bin in Docker, might require privileges)
-            install_dir = Path("/usr/local/bin")
-            if not os.access(install_dir, os.W_OK):
-                print(f"[agent] ERROR: No write permission to {install_dir}")
-                return False
-            
-            try:
-                # Copy new binaries
-                shutil.copy2(nebula_bin, install_dir / "nebula")
-                shutil.copy2(nebula_cert_bin, install_dir / "nebula-cert")
-                
-                # Set executable permissions
-                (install_dir / "nebula").chmod(0o755)
-                (install_dir / "nebula-cert").chmod(0o755)
-                
-                print(f"[agent] Successfully installed Nebula {server_version}")
-            except Exception as e:
-                print(f"[agent] ERROR: Failed to install binaries: {e}")
-                return False
+        print("[agent] Stopping Nebula process before upgrade...")
+        _stop_nebula_with_timeout()
+        
+        if not _backup_and_install(nebula_bin, nebula_cert_bin):
+            return False
         
         # Verify new version
         new_version = get_nebula_version().lstrip('v')
         if new_version == server_version:
             print(f"[agent] ✓ Nebula successfully upgraded to {new_version}")
             return True
-        else:
-            print(f"[agent] WARNING: Version mismatch after upgrade. Expected {server_version}, got {new_version}")
-            return False
-            
+        
+        print(
+            f"[agent] WARNING: Version mismatch after upgrade. "
+            f"Expected {server_version}, got {new_version}"
+        )
+        return False
+        
     except httpx.HTTPStatusError as e:
         print(f"[agent] Failed to check version or download: HTTP {e.response.status_code}")
         return False

@@ -150,8 +150,30 @@ while true; do
                     install_files
                     > "$CONTROL_FILE"  # Clear command
                     ;;
+                upgrade:*)
+                    # Install new Nebula binaries from unique staging directory
+                    # Command format: upgrade:/tmp/managed-nebula-upgrade-<UUID>
+                    UPGRADE_STAGING="${COMMAND#upgrade:}"
+                    if [ -f "$UPGRADE_STAGING/nebula" ] && [ -f "$UPGRADE_STAGING/nebula-cert" ]; then
+                        # Validate that files are not zero-length
+                        if [ -s "$UPGRADE_STAGING/nebula" ] && [ -s "$UPGRADE_STAGING/nebula-cert" ]; then
+                            stop_nebula
+                            sleep 1
+                            cp -f "$UPGRADE_STAGING/nebula" /usr/local/bin/nebula
+                            cp -f "$UPGRADE_STAGING/nebula-cert" /usr/local/bin/nebula-cert
+                            chmod 755 /usr/local/bin/nebula /usr/local/bin/nebula-cert
+                            rm -rf "$UPGRADE_STAGING"
+                            echo "Nebula binaries upgraded successfully from $UPGRADE_STAGING"
+                        else
+                            echo "Upgrade staging files are empty or incomplete"
+                        fi
+                    else
+                        echo "Upgrade staging files not found at $UPGRADE_STAGING"
+                    fi
+                    > "$CONTROL_FILE"  # Clear command
+                    ;;
                 upgrade)
-                    # Install new Nebula binaries from staging directory
+                    # Legacy upgrade command for backwards compatibility (uses fixed path)
                     UPGRADE_STAGING="/tmp/managed-nebula-upgrade"
                     if [ -f "$UPGRADE_STAGING/nebula" ] && [ -f "$UPGRADE_STAGING/nebula-cert" ]; then
                         stop_nebula

@@ -455,8 +455,9 @@ class NebulaManager {
             }
             
             // Replace binaries (requires root privileges via helper script)
-            // Stage the new binaries in temp location for the helper daemon
-            let stagingDir = URL(fileURLWithPath: "/tmp/managed-nebula-upgrade")
+            // Stage the new binaries in a unique temp location for the helper daemon to avoid races
+            let upgradeAttemptID = UUID().uuidString
+            let stagingDir = URL(fileURLWithPath: "/tmp/managed-nebula-upgrade-\(upgradeAttemptID)")
             try? FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
             
             let stagedNebula = stagingDir.appendingPathComponent("nebula")
@@ -465,8 +466,8 @@ class NebulaManager {
             try FileManager.default.copyItem(at: nebulaBin, to: stagedNebula)
             try FileManager.default.copyItem(at: nebulaCertBin, to: stagedCert)
             
-            // Tell helper to install the upgrades via control file
-            try writeControlCommand("upgrade")
+            // Tell helper to install the upgrades via control file, passing the unique staging path
+            try writeControlCommand("upgrade:\(stagingDir.path)")
             
             // Wait a moment for upgrade to complete
             sleep(2)
