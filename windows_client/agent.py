@@ -318,6 +318,135 @@ def get_nebula_version() -> str:
         return "error"
 
 
+# Helper functions for check_and_update_nebula
+
+def _resolve_verify_ssl(config: dict = None) -> bool:
+    """Resolve SSL verification setting from config or environment"""
+    if config and "allow_self_signed_cert" in config:
+        return not config["allow_self_signed_cert"]
+    return os.environ.get("ALLOW_SELF_SIGNED_CERT", "false").lower() != "true"
+
+
+def _fetch_server_nebula_version(server_url: str, verify_ssl: bool) -> str:
+    """Fetch Nebula version from server"""
+    version_url = server_url.rstrip("/") + "/v1/version"
+    with httpx.Client(timeout=10, verify=verify_ssl) as client:
+        r = client.get(version_url)
+        r.raise_for_status()
+        version_info = r.json()
+    return version_info.get("nebula_version", "").lstrip('v')
+
+
+def _effective_local_nebula_version() -> Optional[str]:
+    """Get local Nebula version, returning None if unknown/unavailable"""
+    raw = get_nebula_version()
+    if raw in {"unknown", "error", "timeout", "not_installed"}:
+        return None
+    return raw.lstrip('v')
+
+
+def _download_and_install_nebula(server_version: str, local_version: str, verify_ssl: bool) -> bool:
+    """Download and install new Nebula binaries"""
+    download_url = f"https://github.com/slackhq/nebula/releases/download/v{server_version}/nebula-windows-amd64.zip"
+    logger.info(f"Downloading Nebula {server_version} from {download_url}")
+    
+    import zipfile
+    import tempfile
+    import shutil
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        zip_path = tmpdir_path / "nebula.zip"
+        
+        # Download zip (follow redirects for GitHub releases)
+        # Reuse the same SSL verification configuration as the version check
+        with httpx.Client(timeout=120, verify=verify_ssl, follow_redirects=True) as dl_client:
+            with dl_client.stream("GET", download_url) as response:
+                response.raise_for_status()
+                with open(zip_path, 'wb') as f:
+                    for chunk in response.iter_bytes():
+                        f.write(chunk)
+        
+        logger.info("Download complete, extracting...")
+        
+        # Extract zip
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(tmpdir_path)
+        
+        # Verify extracted files exist
+        new_nebula = tmpdir_path / "nebula.exe"
+        new_nebula_cert = tmpdir_path / "nebula-cert.exe"
+        
+        if not new_nebula.exists():
+            raise FileNotFoundError(f"nebula.exe not found in downloaded archive")
+        if not new_nebula_cert.exists():
+            raise FileNotFoundError(f"nebula-cert.exe not found in downloaded archive")
+        
+        # Verify new version - The subprocess call is safe here because:
+        # - new_nebula is a Path object we created from our controlled temporary directory
+        # - It's not derived from user input or external data
+        # - The path is fully controlled by tempfile.TemporaryDirectory()
+        result = subprocess.run(
+            [str(new_nebula), "-version"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        new_version = "unknown"
+        for line in result.stdout.splitlines():
+            if line.startswith("Version:"):
+                new_version = line.split(":", 1)[1].strip().lstrip('v')
+        
+        if new_version != server_version:
+            logger.error(f"Downloaded version {new_version} doesn't match expected {server_version}")
+            return False
+        
+        logger.info(f"Verified downloaded Nebula version: {new_version}")
+        
+        # Stop Nebula if running (we'll restart it later)
+        stop_nebula()
+        time.sleep(2)  # Wait for process to fully stop
+        
+        # Replace binaries
+        logger.info("Replacing Nebula binaries...")
+        
+        # Backup existing binaries
+        if NEBULA_BIN.exists():
+            backup_path = NEBULA_BIN.parent / f"nebula.exe.backup.{int(time.time())}"
+            NEBULA_BIN.rename(backup_path)
+            logger.info(f"Backed up old nebula.exe to {backup_path}")
+        
+        if NEBULA_CERT_BIN.exists():
+            backup_path = NEBULA_CERT_BIN.parent / f"nebula-cert.exe.backup.{int(time.time())}"
+            NEBULA_CERT_BIN.rename(backup_path)
+            logger.info(f"Backed up old nebula-cert.exe to {backup_path}")
+        
+        # Copy new binaries
+        shutil.copy2(new_nebula, NEBULA_BIN)
+        shutil.copy2(new_nebula_cert, NEBULA_CERT_BIN)
+        
+        logger.info(f"Successfully updated Nebula from {local_version} to {server_version}")
+        return True
+
+
+def _install_wintun_from_src(src: Path) -> bool:
+    """Install wintun.dll from source to both root and nested locations"""
+    import shutil
+    try:
+        # root
+        shutil.copy2(src, WINTUN_DLL)
+        logger.info(f"Installed wintun.dll to {WINTUN_DLL}")
+        
+        # nested
+        WINTUN_DLL_NESTED.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, WINTUN_DLL_NESTED)
+        logger.info(f"Installed wintun.dll to {WINTUN_DLL_NESTED}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to install wintun.dll: {e}", exc_info=True)
+        return False
+
+
 def ensure_wintun_dll() -> bool:
     """
     Ensure wintun.dll is present for Nebula to create tunnel interface.
@@ -374,17 +503,7 @@ def ensure_wintun_dll() -> bool:
             wintun_dll_src = tmpdir_path / "wintun_extract" / "wintun" / "bin" / arch / "wintun.dll"
             
             if wintun_dll_src.exists():
-                # Place wintun.dll in root Nebula directory (next to nebula.exe)
-                shutil.copy2(wintun_dll_src, WINTUN_DLL)
-                logger.info(f"Installed wintun.dll to {WINTUN_DLL}")
-                
-                # Also place in nested path that Nebula looks for
-                WINTUN_DLL_NESTED.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(wintun_dll_src, WINTUN_DLL_NESTED)
-                logger.info(f"Installed wintun.dll to {WINTUN_DLL_NESTED}")
-                
-                logger.info(f"Successfully downloaded and installed wintun.dll ({arch})")
-                return True
+                return _install_wintun_from_src(wintun_dll_src)
             else:
                 logger.error(f"wintun.dll not found in archive at expected path: {wintun_dll_src}")
                 return False
@@ -401,117 +520,27 @@ def check_and_update_nebula(server_url: str, config: dict = None) -> bool:
     Returns True if update was performed (and might need restart).
     """
     logger.info("Checking for Nebula version updates...")
-    
-    # SSL verification (disable for self-signed certs if configured)
-    if config and "allow_self_signed_cert" in config:
-        verify_ssl = not config["allow_self_signed_cert"]
-    else:
-        verify_ssl = os.environ.get("ALLOW_SELF_SIGNED_CERT", "false").lower() != "true"
+    verify_ssl = _resolve_verify_ssl(config)
     
     try:
-        # Get server version (public endpoint, no auth required)
-        version_url = server_url.rstrip("/") + "/v1/version"
-        with httpx.Client(timeout=10, verify=verify_ssl) as client:
-            r = client.get(version_url)
-            r.raise_for_status()
-            version_info = r.json()
-        
-        server_version = version_info.get("nebula_version", "").lstrip('v')
-        local_version = get_nebula_version().lstrip('v')
+        server_version = _fetch_server_nebula_version(server_url, verify_ssl)
+        local_version = _effective_local_nebula_version()
         
         logger.info(f"Nebula version check: local={local_version}, server={server_version}")
         
-        # If versions match or local version is unknown/error, skip update
-        if local_version in ["unknown", "error", "timeout", "not_installed"]:
-            logger.warning(f"Cannot determine local Nebula version: {local_version}")
+        if local_version is None:
+            logger.warning("Cannot determine local Nebula version")
             return False
         
         if local_version == server_version:
             logger.info("Nebula version matches server, no update needed")
             return False
         
-        # Versions differ - download and install matching version
-        logger.warning(f"Nebula version mismatch detected. Upgrading from {local_version} to {server_version}")
+        logger.warning(
+            f"Nebula version mismatch detected. Upgrading from {local_version} to {server_version}"
+        )
+        return _download_and_install_nebula(server_version, local_version, verify_ssl)
         
-        # Download Nebula binaries from GitHub
-        download_url = f"https://github.com/slackhq/nebula/releases/download/v{server_version}/nebula-windows-amd64.zip"
-        logger.info(f"Downloading Nebula {server_version} from {download_url}")
-        
-        import zipfile
-        import tempfile
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir_path = Path(tmpdir)
-            zip_path = tmpdir_path / "nebula.zip"
-            
-            # Download zip (follow redirects for GitHub releases)
-            with httpx.Client(timeout=120, verify=True, follow_redirects=True) as dl_client:
-                with dl_client.stream("GET", download_url) as response:
-                    response.raise_for_status()
-                    with open(zip_path, 'wb') as f:
-                        for chunk in response.iter_bytes():
-                            f.write(chunk)
-            
-            logger.info("Download complete, extracting...")
-            
-            # Extract zip
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(tmpdir_path)
-            
-            # Verify extracted files exist
-            new_nebula = tmpdir_path / "nebula.exe"
-            new_nebula_cert = tmpdir_path / "nebula-cert.exe"
-            
-            if not new_nebula.exists():
-                raise FileNotFoundError(f"nebula.exe not found in downloaded archive")
-            if not new_nebula_cert.exists():
-                raise FileNotFoundError(f"nebula-cert.exe not found in downloaded archive")
-            
-            # Verify new version
-            result = subprocess.run(
-                [str(new_nebula), "-version"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            new_version = "unknown"
-            for line in result.stdout.splitlines():
-                if line.startswith("Version:"):
-                    new_version = line.split(":", 1)[1].strip().lstrip('v')
-            
-            if new_version != server_version:
-                logger.error(f"Downloaded version {new_version} doesn't match expected {server_version}")
-                return False
-            
-            logger.info(f"Verified downloaded Nebula version: {new_version}")
-            
-            # Stop Nebula if running (we'll restart it later)
-            stop_nebula()
-            import time
-            time.sleep(2)  # Wait for process to fully stop
-            
-            # Replace binaries
-            logger.info("Replacing Nebula binaries...")
-            
-            # Backup existing binaries
-            if NEBULA_BIN.exists():
-                backup_path = NEBULA_BIN.parent / f"nebula.exe.backup.{int(time.time())}"
-                NEBULA_BIN.rename(backup_path)
-                logger.info(f"Backed up old nebula.exe to {backup_path}")
-            
-            if NEBULA_CERT_BIN.exists():
-                backup_path = NEBULA_CERT_BIN.parent / f"nebula-cert.exe.backup.{int(time.time())}"
-                NEBULA_CERT_BIN.rename(backup_path)
-                logger.info(f"Backed up old nebula-cert.exe to {backup_path}")
-            
-            # Copy new binaries
-            import shutil
-            shutil.copy2(new_nebula, NEBULA_BIN)
-            shutil.copy2(new_nebula_cert, NEBULA_CERT_BIN)
-            
-            logger.info(f"Successfully updated Nebula from {local_version} to {server_version}")
-            return True
-            
     except httpx.HTTPStatusError as e:
         logger.warning(f"Failed to check server version: HTTP {e.response.status_code}")
         return False
@@ -782,7 +811,13 @@ def run_once(restart_on_change: bool = False) -> bool:
             logger.info("Nebula was updated - configuration fetch will use new version")
         
         # Always ensure wintun.dll is present (required for Nebula to work on Windows)
-        ensure_wintun_dll()
+        wintun_ok = ensure_wintun_dll()
+        if not wintun_ok:
+            logger.error(
+                "Failed to ensure wintun.dll is present; Nebula cannot be started on Windows. "
+                "Aborting this run and leaving existing state unchanged."
+            )
+            return False
         
         _priv, pub = ensure_keypair()
         data = fetch_config(token, server_url, pub, config=cfg)
