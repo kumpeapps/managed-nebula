@@ -333,6 +333,160 @@ class NebulaManager {
         return "Unknown"
     }
     
+    /// Check server's Nebula version and auto-update if different
+    /// Returns true if update was performed
+    func checkAndUpdateNebula(serverURL: String) async -> Bool {
+        print("[NebulaManager] Checking for Nebula version updates...")
+        
+        do {
+            // Get server version (public endpoint, no auth required)
+            let versionURL = URL(string: "\(serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")))/v1/version")!
+            
+            let (data, response) = try await URLSession.shared.data(from: versionURL)
+            
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                print("[NebulaManager] Failed to fetch server version")
+                return false
+            }
+            
+            let versionInfo = try JSONDecoder().decode(VersionResponse.self, from: data)
+            let serverVersion = versionInfo.nebulaVersion.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
+            let localVersion = getNebulaVersion().trimmingCharacters(in: CharacterSet(charactersIn: "v"))
+            
+            print("[NebulaManager] Nebula version check: local=\(localVersion), server=\(serverVersion)")
+            
+            // If versions match or local version is unknown, skip update
+            if localVersion == "Unknown" {
+                print("[NebulaManager] Cannot determine local Nebula version")
+                return false
+            }
+            
+            if localVersion == serverVersion {
+                print("[NebulaManager] Nebula version matches server, no update needed")
+                return false
+            }
+            
+            // Versions differ - download and install matching version
+            print("[NebulaManager] Nebula version mismatch detected. Upgrading from \(localVersion) to \(serverVersion)")
+            
+            // Detect architecture
+            var arch = "amd64"
+            #if arch(arm64)
+            arch = "arm64"
+            #endif
+            
+            // Download Nebula binaries from GitHub
+            let downloadURL = URL(string: "https://github.com/slackhq/nebula/releases/download/v\(serverVersion)/nebula-darwin-\(arch).tar.gz")!
+            print("[NebulaManager] Downloading Nebula \(serverVersion) from \(downloadURL)")
+            
+            let (tarData, downloadResponse) = try await URLSession.shared.data(from: downloadURL)
+            
+            guard let httpDownloadResponse = downloadResponse as? HTTPURLResponse, httpDownloadResponse.statusCode == 200 else {
+                print("[NebulaManager] Failed to download Nebula binary")
+                return false
+            }
+            
+            print("[NebulaManager] Downloaded \(tarData.count) bytes")
+            
+            // Create temporary directory
+            let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+            defer {
+                try? FileManager.default.removeItem(at: tempDir)
+            }
+            
+            // Write tar.gz file
+            let tarPath = tempDir.appendingPathComponent("nebula.tar.gz")
+            try tarData.write(to: tarPath)
+            
+            // Extract tar.gz
+            let extractDir = tempDir.appendingPathComponent("extract")
+            try FileManager.default.createDirectory(at: extractDir, withIntermediateDirectories: true)
+            
+            let extractProcess = Process()
+            extractProcess.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+            extractProcess.arguments = ["-xzf", tarPath.path, "-C", extractDir.path]
+            try extractProcess.run()
+            extractProcess.waitUntilExit()
+            
+            guard extractProcess.terminationStatus == 0 else {
+                print("[NebulaManager] Failed to extract Nebula archive")
+                return false
+            }
+            
+            // Find binaries
+            let nebulaBin = extractDir.appendingPathComponent("nebula")
+            let nebulaCertBin = extractDir.appendingPathComponent("nebula-cert")
+            
+            guard FileManager.default.fileExists(atPath: nebulaBin.path),
+                  FileManager.default.fileExists(atPath: nebulaCertBin.path) else {
+                print("[NebulaManager] ERROR: Nebula binaries not found in archive")
+                return false
+            }
+            
+            // Stop Nebula before replacing binaries
+            print("[NebulaManager] Stopping Nebula daemon before upgrade...")
+            stopNebula()
+            
+            // Wait for Nebula to stop (max 5 seconds)
+            var stopAttempts = 0
+            while isRunning() && stopAttempts < 10 {
+                usleep(500_000) // 500ms
+                stopAttempts += 1
+            }
+            
+            // Backup current binaries
+            let installDir = URL(fileURLWithPath: "/usr/local/bin")
+            let nebulaPath = installDir.appendingPathComponent("nebula")
+            let nebulaCertPath = installDir.appendingPathComponent("nebula-cert")
+            
+            if FileManager.default.fileExists(atPath: nebulaPath.path) {
+                let backupPath = nebulaPath.appendingPathExtension("bak")
+                try? FileManager.default.removeItem(at: backupPath)
+                try? FileManager.default.copyItem(at: nebulaPath, to: backupPath)
+                print("[NebulaManager] Backed up nebula to \(backupPath.path)")
+            }
+            
+            if FileManager.default.fileExists(atPath: nebulaCertPath.path) {
+                let backupPath = nebulaCertPath.appendingPathExtension("bak")
+                try? FileManager.default.removeItem(at: backupPath)
+                try? FileManager.default.copyItem(at: nebulaCertPath, to: backupPath)
+                print("[NebulaManager] Backed up nebula-cert to \(backupPath.path)")
+            }
+            
+            // Replace binaries (requires root privileges via helper script)
+            // Stage the new binaries in temp location for the helper daemon
+            let stagingDir = URL(fileURLWithPath: "/tmp/managed-nebula-upgrade")
+            try? FileManager.default.createDirectory(at: stagingDir, withIntermediateDirectories: true)
+            
+            let stagedNebula = stagingDir.appendingPathComponent("nebula")
+            let stagedCert = stagingDir.appendingPathComponent("nebula-cert")
+            
+            try FileManager.default.copyItem(at: nebulaBin, to: stagedNebula)
+            try FileManager.default.copyItem(at: nebulaCertBin, to: stagedCert)
+            
+            // Tell helper to install the upgrades via control file
+            try writeControlCommand("upgrade")
+            
+            // Wait a moment for upgrade to complete
+            sleep(2)
+            
+            // Verify new version
+            let newVersion = getNebulaVersion().trimmingCharacters(in: CharacterSet(charactersIn: "v"))
+            if newVersion == serverVersion {
+                print("[NebulaManager] ✓ Nebula successfully upgraded to \(newVersion)")
+                return true
+            } else {
+                print("[NebulaManager] WARNING: Version mismatch after upgrade. Expected \(serverVersion), got \(newVersion)")
+                return false
+            }
+            
+        } catch {
+            print("[NebulaManager] Failed to update Nebula: \(error)")
+            return false
+        }
+    }
+    
     // MARK: - Private Helpers
     
     private func calculateConfigHash(config: String, cert: String, caCerts: [String]) -> String {

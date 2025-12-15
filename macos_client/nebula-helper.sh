@@ -150,6 +150,22 @@ while true; do
                     install_files
                     > "$CONTROL_FILE"  # Clear command
                     ;;
+                upgrade)
+                    # Install new Nebula binaries from staging directory
+                    UPGRADE_STAGING="/tmp/managed-nebula-upgrade"
+                    if [ -f "$UPGRADE_STAGING/nebula" ] && [ -f "$UPGRADE_STAGING/nebula-cert" ]; then
+                        stop_nebula
+                        sleep 1
+                        cp -f "$UPGRADE_STAGING/nebula" /usr/local/bin/nebula
+                        cp -f "$UPGRADE_STAGING/nebula-cert" /usr/local/bin/nebula-cert
+                        chmod 755 /usr/local/bin/nebula /usr/local/bin/nebula-cert
+                        rm -rf "$UPGRADE_STAGING"
+                        echo "Nebula binaries upgraded successfully"
+                    else
+                        echo "Upgrade staging files not found"
+                    fi
+                    > "$CONTROL_FILE"  # Clear command
+                    ;;
                 status)
                     check_status > "${CONTROL_FILE}.status"
                     > "$CONTROL_FILE"  # Clear command
