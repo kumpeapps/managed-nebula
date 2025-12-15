@@ -82,6 +82,13 @@ class PollingService {
                 return
             }
             
+            // Check for Nebula version updates first
+            let nebulaUpdated = await nebulaManager.checkAndUpdateNebula(serverURL: configuration.serverURL)
+            var forceRestart = nebulaUpdated
+            if nebulaUpdated {
+                print("[PollingService] Nebula was updated, will restart with new version")
+            }
+            
             // Generate keypair if needed
             try nebulaManager.generateKeypair()
             
@@ -106,7 +113,7 @@ class PollingService {
             let pollingDebug2 = pollingDebug + "writeConfiguration returned: \(configChanged)\n"
             try? pollingDebug2.write(toFile: "/tmp/nebula-polling-debug.log", atomically: true, encoding: .utf8)
 
-            try handlePostFetch(configChanged: configChanged)
+            try handlePostFetch(configChanged: configChanged || forceRestart)
             print("[PollingService] Configuration check completed successfully")
             
         } catch let error as APIError {

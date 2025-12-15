@@ -49,6 +49,15 @@ struct Configuration: Codable {
     }
 }
 
+/// Response from /v1/version endpoint
+struct VersionResponse: Codable {
+    let nebulaVersion: String
+    
+    enum CodingKeys: String, CodingKey {
+        case nebulaVersion = "nebula_version"
+    }
+}
+
 /// Response from /v1/client/config endpoint
 struct ClientConfigResponse: Codable {
     let config: String
