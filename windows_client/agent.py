@@ -30,6 +30,8 @@ AGENT_LOG = LOG_DIR / "agent.log"
 NEBULA_BIN = NEBULA_DIR / "nebula.exe"
 NEBULA_CERT_BIN = NEBULA_DIR / "nebula-cert.exe"
 WINTUN_DLL = NEBULA_DIR / "wintun.dll"
+# Nebula also looks for wintun.dll in this nested path structure
+WINTUN_DLL_NESTED = NEBULA_DIR / "dist" / "windows" / "wintun" / "bin" / "amd64" / "wintun.dll"
 
 def _inject_windows_tun_dev(config_path: Path) -> None:
     """Inject 'dev: Nebula' into the tun section if missing (Windows only).
@@ -320,10 +322,12 @@ def ensure_wintun_dll() -> bool:
     """
     Ensure wintun.dll is present for Nebula to create tunnel interface.
     Downloads from wintun.net if missing.
+    Places wintun.dll in multiple locations for compatibility.
     
     Returns True if wintun.dll is present or was successfully downloaded.
     """
-    if WINTUN_DLL.exists():
+    # Check if wintun.dll exists in any expected location
+    if WINTUN_DLL.exists() or WINTUN_DLL_NESTED.exists():
         logger.debug("wintun.dll already exists")
         return True
     
@@ -356,7 +360,15 @@ def ensure_wintun_dll() -> bool:
             wintun_dll_src = tmpdir_path / "wintun_extract" / "wintun" / "bin" / arch / "wintun.dll"
             
             if wintun_dll_src.exists():
+                # Place wintun.dll in root Nebula directory (next to nebula.exe)
                 shutil.copy2(wintun_dll_src, WINTUN_DLL)
+                logger.info(f"Installed wintun.dll to {WINTUN_DLL}")
+                
+                # Also place in nested path that Nebula looks for
+                WINTUN_DLL_NESTED.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(wintun_dll_src, WINTUN_DLL_NESTED)
+                logger.info(f"Installed wintun.dll to {WINTUN_DLL_NESTED}")
+                
                 logger.info(f"Successfully downloaded and installed wintun.dll ({arch})")
                 return True
             else:
@@ -663,12 +675,15 @@ def start_nebula() -> bool:
     _inject_windows_tun_dev(CONFIG_PATH)
 
     # Preflight: check for Wintun driver DLL presence (required on Windows)
-    # Usually placed alongside nebula.exe as wintun.dll
+    # Nebula looks in multiple locations: next to nebula.exe, in NEBULA_DIR, or in nested dist/ path
     wintun_candidate = Path(nebula).parent / "wintun.dll"
-    if not WINTUN_DLL.exists() and not wintun_candidate.exists():
+    if not WINTUN_DLL.exists() and not wintun_candidate.exists() and not WINTUN_DLL_NESTED.exists():
         logger.warning(
-            "wintun.dll not found next to nebula.exe or in %s. Nebula may fail to create the tunnel.",
-            NEBULA_DIR,
+            "wintun.dll not found in any expected location. Nebula may fail to create the tunnel."
+        )
+        logger.warning(
+            "Expected locations: %s, %s, %s", 
+            WINTUN_DLL, wintun_candidate, WINTUN_DLL_NESTED
         )
         logger.warning(
             "Ensure wintun.dll is present or WireGuard is installed. See https://www.wintun.net/."
