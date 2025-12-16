@@ -4,6 +4,7 @@ import time
 import signal
 import hashlib
 from pathlib import Path
+from typing import Optional
 import httpx
 import subprocess
 
