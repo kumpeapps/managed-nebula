@@ -504,7 +504,7 @@ async def update_settings(body: SettingsUpdate, session: AsyncSession = Depends(
         # Additional check: if switching to pure v2 (not hybrid), verify all clients are compatible
         if body.cert_version == 'v2':
             # Query all clients with their nebula_version
-            from ..models.db import Client
+            from ..models.client import Client
             incompatible_clients = []
             result = await session.execute(select(Client))
             clients = result.scalars().all()
