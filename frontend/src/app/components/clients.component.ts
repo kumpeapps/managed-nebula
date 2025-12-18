@@ -50,7 +50,7 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
                   <th class="hide-mobile">Version</th>
                   <th class="hide-mobile">Groups</th>
                   <th class="hide-mobile">Rulesets</th>
-                  <th class="hide-mobile">Last Config Download</th>
+                  <th class="hide-mobile">Last Download</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -65,16 +65,16 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
                     <span *ngIf="!client.owner" class="text-muted">—</span>
                   </td>
                   <td>
-                    <div *ngIf="client.assigned_ips && client.assigned_ips.length > 0" style="display: flex; flex-direction: column; gap: 0.25em;">
+                    <div *ngIf="client.assigned_ips && client.assigned_ips.length > 0" style="display: flex; flex-direction: column; gap: 0.2em; font-size: 0.9em;">
                       <div *ngFor="let ip of client.assigned_ips" style="display: flex; align-items: center; gap: 0.3em;">
-                        <span style="font-family: monospace;">{{ ip.ip_address }}</span>
-                        <span *ngIf="ip.is_primary" class="badge badge-primary" style="font-size: 0.7em;">Primary</span>
-                        <span class="badge" [ngClass]="ip.ip_version === 'ipv4' ? 'badge-info' : 'badge-secondary'" style="font-size: 0.7em;">
+                        <span style="font-family: monospace; white-space: nowrap;">{{ ip.ip_address }}</span>
+                        <span *ngIf="ip.is_primary" class="badge badge-primary" style="font-size: 0.65em; padding: 0.15rem 0.5rem;">Primary</span>
+                        <span class="badge" [ngClass]="ip.ip_version === 'ipv4' ? 'badge-info' : 'badge-secondary'" style="font-size: 0.65em; padding: 0.15rem 0.5rem;">
                           {{ ip.ip_version.toUpperCase() }}
                         </span>
                       </div>
                     </div>
-                    <span *ngIf="!client.assigned_ips || client.assigned_ips.length === 0">Not assigned</span>
+                    <span *ngIf="!client.assigned_ips || client.assigned_ips.length === 0" style="font-size: 0.9em;">—</span>
                   </td>
                   <td>
                     <div class="status-badges">
@@ -84,21 +84,21 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
                     </div>
                   </td>
                   <td class="hide-mobile">
-                    <div class="version-info" style="font-size: 0.85em; line-height: 1.4;">
-                      <div style="display: flex; flex-direction: column; gap: 0.3em;">
-                        <div *ngIf="client.client_version" style="display: flex; align-items: center; gap: 0.3em;">
+                    <div class="version-info" style="font-size: 0.75em; line-height: 1.3;">
+                      <div style="display: flex; flex-direction: column; gap: 0.2em;">
+                        <div *ngIf="client.client_version" style="display: flex; align-items: center; gap: 0.2em; white-space: nowrap;">
                           <span [title]="getClientVersionStatusTitle(client)" style="cursor: help;">
                             {{getClientVersionStatusIcon(client)}}
                           </span>
-                          <span>Client: {{client.client_version}}</span>
+                          <span>C: {{client.client_version}}</span>
                         </div>
-                        <div *ngIf="client.nebula_version" style="display: flex; align-items: center; gap: 0.3em;">
+                        <div *ngIf="client.nebula_version" style="display: flex; align-items: center; gap: 0.2em; white-space: nowrap;">
                           <span [title]="getNebulaVersionStatusTitle(client)" style="cursor: help;">
                             {{getNebulaVersionStatusIcon(client)}}
                           </span>
-                          <span>Nebula: {{client.nebula_version}}</span>
+                          <span>N: {{client.nebula_version}}</span>
                         </div>
-                        <div *ngIf="!client.client_version && !client.nebula_version" class="text-muted">Unknown</div>
+                        <div *ngIf="!client.client_version && !client.nebula_version" class="text-muted">—</div>
                       </div>
                     </div>
                   </td>
@@ -277,7 +277,7 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
     }
     
     .container {
-      max-width: 1400px;
+      max-width: 100%;
       margin: 0 auto;
       padding: 2rem;
     }
@@ -306,21 +306,20 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
     
     .clients-list {
       background: white;
-      padding: 1.5rem;
+      padding: 1rem;
       border-radius: 8px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     
     .table-responsive {
-      position: static;
-      z-index: auto;
+      width: 100%;
+      overflow-x: auto;
     }
     
     table {
       width: 100%;
       border-collapse: collapse;
-      position: static;
-      z-index: auto;
+      table-layout: fixed;
     }
     
     tbody, tr {
@@ -330,10 +329,12 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
     
     th, td {
       text-align: left;
-      padding: 0.75rem;
+      padding: 0.5rem;
       border-bottom: 1px solid #eee;
       position: static;
       z-index: auto;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
     }
     
     th {
@@ -343,11 +344,12 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
     }
     
     .badge {
-      padding: 0.25rem 0.75rem;
+      padding: 0.2rem 0.6rem;
       border-radius: 12px;
-      font-size: 0.85rem;
+      font-size: 0.75rem;
       font-weight: 500;
-      margin-right: 0.25rem;
+      margin-right: 0.15rem;
+      white-space: nowrap;
     }
     
     .badge-success {
@@ -401,7 +403,14 @@ import { Client, Group, IPPool, IPGroup, AvailableIP, FirewallRuleset, ClientCre
     
     .action-buttons {
       display: flex;
-      gap: 0.5rem;
+      gap: 0.3rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    
+    .action-buttons button {
+      padding: 0.3rem 0.6rem;
+      font-size: 0.85em;
     }
     
     .header-info {
