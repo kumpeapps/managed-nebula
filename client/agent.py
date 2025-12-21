@@ -3,8 +3,10 @@ import os
 import time
 import signal
 import hashlib
+import json
 from pathlib import Path
 from typing import Optional
+from datetime import datetime, timedelta
 import httpx
 import subprocess
 
@@ -15,6 +17,74 @@ CONFIG_PATH = Path("/etc/nebula/config.yml")
 KEY_PATH = STATE_DIR / "host.key"
 PUB_PATH = STATE_DIR / "host.pub"
 PIDFILE = STATE_DIR / "nebula.pid"
+METRICS_FILE = STATE_DIR / "metrics.json"
+CACHED_CONFIG_FILE = STATE_DIR / "cached_config.json"
+
+# Configuration with environment variable defaults
+PROCESS_CHECK_INTERVAL = int(os.getenv("PROCESS_CHECK_INTERVAL", "10"))  # seconds
+HEALTH_CHECK_INTERVAL = int(os.getenv("HEALTH_CHECK_INTERVAL", "60"))  # seconds
+CONFIG_FETCH_TIMEOUT = int(os.getenv("CONFIG_FETCH_TIMEOUT", "30"))  # seconds
+MAX_RESTART_ATTEMPTS = int(os.getenv("MAX_RESTART_ATTEMPTS", "5"))
+MAX_FETCH_RETRIES = int(os.getenv("MAX_FETCH_RETRIES", "5"))
+POST_RESTART_WAIT = int(os.getenv("POST_RESTART_WAIT", "10"))  # seconds
+RESTART_INIT_TIMEOUT = int(os.getenv("RESTART_INIT_TIMEOUT", "30"))  # seconds
+
+# Metrics tracking
+class Metrics:
+    def __init__(self):
+        self.crash_count = 0
+        self.disconnect_count = 0
+        self.restart_count = 0
+        self.config_fetch_failures = 0
+        self.last_crash_time = None
+        self.last_successful_restart = None
+        self.consecutive_failures = 0
+        
+    def to_dict(self):
+        return {
+            "crash_count": self.crash_count,
+            "disconnect_count": self.disconnect_count,
+            "restart_count": self.restart_count,
+            "config_fetch_failures": self.config_fetch_failures,
+            "last_crash_time": self.last_crash_time.isoformat() if self.last_crash_time else None,
+            "last_successful_restart": self.last_successful_restart.isoformat() if self.last_successful_restart else None,
+            "consecutive_failures": self.consecutive_failures
+        }
+    
+    @classmethod
+    def from_dict(cls, data):
+        m = cls()
+        m.crash_count = data.get("crash_count", 0)
+        m.disconnect_count = data.get("disconnect_count", 0)
+        m.restart_count = data.get("restart_count", 0)
+        m.config_fetch_failures = data.get("config_fetch_failures", 0)
+        m.consecutive_failures = data.get("consecutive_failures", 0)
+        if data.get("last_crash_time"):
+            m.last_crash_time = datetime.fromisoformat(data["last_crash_time"])
+        if data.get("last_successful_restart"):
+            m.last_successful_restart = datetime.fromisoformat(data["last_successful_restart"])
+        return m
+    
+    def save(self):
+        """Save metrics to file"""
+        try:
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            METRICS_FILE.write_text(json.dumps(self.to_dict(), indent=2))
+        except Exception as e:
+            print(f"[agent] Warning: Failed to save metrics: {e}")
+    
+    @classmethod
+    def load(cls):
+        """Load metrics from file"""
+        try:
+            if METRICS_FILE.exists():
+                data = json.loads(METRICS_FILE.read_text())
+                return cls.from_dict(data)
+        except Exception as e:
+            print(f"[agent] Warning: Failed to load metrics: {e}")
+        return cls()
+
+metrics = Metrics.load()
 
 
 def ensure_keypair() -> tuple[str, str]:
@@ -232,7 +302,30 @@ def check_and_update_nebula(server_url: str) -> bool:
         return False
 
 
-def fetch_config(token: str, server_url: str, public_key: str) -> dict:
+def save_cached_config(config_data: dict):
+    """Cache config for fallback when server is unavailable"""
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        CACHED_CONFIG_FILE.write_text(json.dumps(config_data, indent=2))
+        print("[agent] Config cached successfully")
+    except Exception as e:
+        print(f"[agent] Warning: Failed to cache config: {e}")
+
+
+def load_cached_config() -> Optional[dict]:
+    """Load cached config as fallback"""
+    try:
+        if CACHED_CONFIG_FILE.exists():
+            return json.loads(CACHED_CONFIG_FILE.read_text())
+    except Exception as e:
+        print(f"[agent] Warning: Failed to load cached config: {e}")
+    return None
+
+
+def fetch_config_with_retry(token: str, server_url: str, public_key: str) -> Optional[dict]:
+    """Fetch config with exponential backoff retry logic"""
+    global metrics
+    
     url = server_url.rstrip("/") + "/v1/client/config"
     payload = {
         "token": token,
@@ -240,12 +333,61 @@ def fetch_config(token: str, server_url: str, public_key: str) -> dict:
         "client_version": os.getenv("CLIENT_VERSION_OVERRIDE", __version__),
         "nebula_version": os.getenv("NEBULA_VERSION_OVERRIDE", get_nebula_version())
     }
-    # Allow self-signed certificates in development (set ALLOW_SELF_SIGNED_CERT=false in production)
     verify_ssl = os.getenv("ALLOW_SELF_SIGNED_CERT", "false").lower() != "true"
-    with httpx.Client(timeout=30, verify=verify_ssl) as client:
-        r = client.post(url, json=payload)
-        r.raise_for_status()
-        return r.json()
+    
+    for attempt in range(MAX_FETCH_RETRIES):
+        try:
+            print(f"[agent] Fetching config (attempt {attempt + 1}/{MAX_FETCH_RETRIES})...")
+            with httpx.Client(timeout=CONFIG_FETCH_TIMEOUT, verify=verify_ssl) as client:
+                r = client.post(url, json=payload)
+                r.raise_for_status()
+                config_data = r.json()
+                
+                # Cache successful config
+                save_cached_config(config_data)
+                
+                # Reset failure counter on success
+                metrics.config_fetch_failures = 0
+                metrics.save()
+                
+                return config_data
+                
+        except httpx.TimeoutException:
+            metrics.config_fetch_failures += 1
+            print(f"[agent] Config fetch timeout (attempt {attempt + 1}/{MAX_FETCH_RETRIES})")
+            
+        except httpx.HTTPError as e:
+            metrics.config_fetch_failures += 1
+            print(f"[agent] HTTP error during config fetch: {e} (attempt {attempt + 1}/{MAX_FETCH_RETRIES})")
+            
+        except Exception as e:
+            metrics.config_fetch_failures += 1
+            print(f"[agent] Error fetching config: {e} (attempt {attempt + 1}/{MAX_FETCH_RETRIES})")
+        
+        # Exponential backoff: 1s, 2s, 4s, 8s, max 60s
+        if attempt < MAX_FETCH_RETRIES - 1:
+            wait_time = min(2 ** attempt, 60)
+            print(f"[agent] Retrying in {wait_time} seconds...")
+            time.sleep(wait_time)
+    
+    # All retries failed
+    metrics.save()
+    print("[agent] All config fetch attempts failed, trying cached config...")
+    cached = load_cached_config()
+    if cached:
+        print("[agent] Using cached config as fallback")
+        return cached
+    
+    print("[agent] ERROR: No cached config available")
+    return None
+
+
+def fetch_config(token: str, server_url: str, public_key: str) -> dict:
+    """Fetch config (backwards compatible wrapper)"""
+    result = fetch_config_with_retry(token, server_url, public_key)
+    if result is None:
+        raise Exception("Failed to fetch config after all retries and no cache available")
+    return result
 
 
 def calculate_config_hash(config_yaml: str, client_cert_pem: str, ca_chain_pems: list[str]) -> str:
@@ -326,44 +468,144 @@ def get_nebula_pid() -> int:
     return 0
 
 
-def restart_nebula():
-    """Restart the Nebula daemon"""
-    print("[agent] Restarting Nebula daemon...")
-    
-    # Find and stop current nebula process
+def is_nebula_running() -> bool:
+    """Check if Nebula process is currently running"""
     pid = get_nebula_pid()
-    if pid:
-        try:
-            print(f"[agent] Stopping Nebula process {pid}")
-            os.kill(pid, signal.SIGTERM)
-            # Give it a moment to stop gracefully
-            time.sleep(2)
-            # Check if it's still running
-            try:
-                os.kill(pid, 0)
-                print(f"[agent] Process {pid} still running, sending SIGKILL")
-                os.kill(pid, signal.SIGKILL)
-                time.sleep(1)
-            except OSError:
-                pass  # Process already stopped
-        except OSError as e:
-            print(f"[agent] Error stopping Nebula process {pid}: {e}")
-        
-        # Clean up pidfile
-        PIDFILE.unlink(missing_ok=True)
+    if pid == 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def validate_config() -> bool:
+    """Validate Nebula config syntax before starting"""
+    if not CONFIG_PATH.exists():
+        print("[agent] Config file does not exist")
+        return False
     
-    # Only restart if we're running in daemon mode (START_NEBULA=true)
-    if os.environ.get("START_NEBULA", "true") == "true":
-        print("[agent] Starting new Nebula process...")
+    try:
+        result = subprocess.run(
+            ["nebula", "-test", "-config", str(CONFIG_PATH)],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            return True
+        else:
+            print(f"[agent] Config validation failed: {result.stderr}")
+            return False
+    except Exception as e:
+        print(f"[agent] Error validating config: {e}")
+        return False
+
+
+def restart_nebula_with_backoff() -> bool:
+    """Restart Nebula with exponential backoff and failure tracking"""
+    global metrics
+    
+    # Validate config before attempting restart
+    if not validate_config():
+        print("[agent] Skipping restart due to invalid config")
+        return False
+    
+    attempts = 0
+    while attempts < MAX_RESTART_ATTEMPTS:
+        attempts += 1
+        
+        # Log restart attempt
+        timestamp = datetime.now().isoformat()
+        print(f"[agent] [{timestamp}] Restart attempt {attempts}/{MAX_RESTART_ATTEMPTS}")
+        
+        # Find and stop current nebula process
+        pid = get_nebula_pid()
+        if pid:
+            try:
+                print(f"[agent] Stopping Nebula process {pid}")
+                os.kill(pid, signal.SIGTERM)
+                # Give it a moment to stop gracefully
+                time.sleep(2)
+                # Check if it's still running
+                try:
+                    os.kill(pid, 0)
+                    print(f"[agent] Process {pid} still running, sending SIGKILL")
+                    os.kill(pid, signal.SIGKILL)
+                    time.sleep(1)
+                except OSError:
+                    pass  # Process already stopped
+            except OSError as e:
+                print(f"[agent] Error stopping Nebula process {pid}: {e}")
+            
+            # Clean up pidfile
+            PIDFILE.unlink(missing_ok=True)
+        
+        # Only restart if we're running in daemon mode
+        if os.environ.get("START_NEBULA", "true") != "true":
+            print("[agent] START_NEBULA=false, not restarting")
+            return False
+        
         # Start nebula as background process
+        print("[agent] Starting new Nebula process...")
         proc = subprocess.Popen(
             ["nebula", "-config", str(CONFIG_PATH)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
+        
         # Write new PID
         PIDFILE.write_text(str(proc.pid))
         print(f"[agent] Started Nebula process {proc.pid}")
+        
+        # Wait for Nebula to initialize (up to RESTART_INIT_TIMEOUT seconds)
+        print(f"[agent] Waiting {RESTART_INIT_TIMEOUT}s for Nebula to initialize...")
+        start_time = time.time()
+        initialized = False
+        
+        while (time.time() - start_time) < RESTART_INIT_TIMEOUT:
+            time.sleep(1)
+            if is_nebula_running():
+                # Check if process is actually the one we started
+                current_pid = get_nebula_pid()
+                if current_pid == proc.pid:
+                    initialized = True
+                    break
+        
+        if initialized:
+            # Restart successful
+            metrics.restart_count += 1
+            metrics.consecutive_failures = 0
+            metrics.last_successful_restart = datetime.now()
+            metrics.save()
+            
+            timestamp = datetime.now().isoformat()
+            print(f"[agent] [{timestamp}] Nebula restarted successfully (PID: {proc.pid})")
+            return True
+        else:
+            # Restart failed
+            metrics.consecutive_failures += 1
+            print(f"[agent] Restart attempt {attempts} failed - Nebula did not start within {RESTART_INIT_TIMEOUT}s")
+            
+            # Exponential backoff: 1s, 2s, 4s, max 30s
+            if attempts < MAX_RESTART_ATTEMPTS:
+                wait_time = min(2 ** (attempts - 1), 30)
+                print(f"[agent] Waiting {wait_time}s before next attempt...")
+                time.sleep(wait_time)
+    
+    # All restart attempts failed
+    metrics.save()
+    timestamp = datetime.now().isoformat()
+    print(f"[agent] [{timestamp}] ERROR: Failed to restart Nebula after {MAX_RESTART_ATTEMPTS} attempts")
+    print(f"[agent] Consecutive failures: {metrics.consecutive_failures}")
+    print(f"[agent] ALERT: Administrator intervention required!")
+    return False
+
+
+def restart_nebula():
+    """Restart the Nebula daemon (legacy function for compatibility)"""
+    restart_nebula_with_backoff()
 
 
 def run_once(restart_on_change: bool = False):
@@ -371,6 +613,7 @@ def run_once(restart_on_change: bool = False):
     server_url = os.environ.get("SERVER_URL", "http://localhost:8080")
     
     # Check for Nebula version updates first
+    nebula_updated = False
     try:
         nebula_updated = check_and_update_nebula(server_url)
         if nebula_updated:
@@ -389,7 +632,111 @@ def run_once(restart_on_change: bool = False):
     
     # Restart Nebula if config changed or if binary was updated
     if restart_on_change and (config_changed or nebula_updated):
-        restart_nebula()
+        timestamp = datetime.now().isoformat()
+        print(f"[agent] [{timestamp}] Coordinated recovery: restarting Nebula")
+        
+        if restart_nebula_with_backoff():
+            # Wait after restart, then fetch fresh config
+            print(f"[agent] Waiting {POST_RESTART_WAIT}s before fetching fresh config...")
+            time.sleep(POST_RESTART_WAIT)
+            
+            try:
+                print("[agent] Fetching fresh config after restart...")
+                fresh_data = fetch_config(token, server_url, pub)
+                fresh_cfg = fresh_data["config"]
+                fresh_cert_pem = fresh_data.get("client_cert_pem", "")
+                fresh_ca_pems = fresh_data.get("ca_chain_pems", [])
+                
+                # Check if fresh config differs from what we just wrote
+                fresh_changed = write_config_and_pki(fresh_cfg, fresh_cert_pem, fresh_ca_pems)
+                if fresh_changed:
+                    print("[agent] Fresh config differs, restarting again...")
+                    restart_nebula_with_backoff()
+            except Exception as e:
+                print(f"[agent] Failed to fetch fresh config after restart: {e}")
+                print("[agent] Continuing with existing config")
+        else:
+            print("[agent] Failed to restart Nebula")
+
+
+def check_nebula_health() -> bool:
+    """
+    Check if Nebula is healthy by examining its state.
+    Returns True if healthy, False if unhealthy and needs restart.
+    """
+    # Basic check: is process running?
+    if not is_nebula_running():
+        return False
+    
+    # TODO: Advanced health checks could include:
+    # - Parse nebula logs for errors
+    # - Check lighthouse connectivity via nebula stats/info endpoint
+    # - Verify neighbor handshakes
+    # For now, if process is running, consider it healthy
+    return True
+
+
+def monitor_nebula_process():
+    """
+    Continuously monitor Nebula process and restart on crash.
+    This runs in the background during run_loop_with_monitoring.
+    """
+    global metrics
+    
+    print(f"[agent] Starting process monitor (check interval: {PROCESS_CHECK_INTERVAL}s)")
+    
+    last_health_check = time.time()
+    
+    while True:
+        try:
+            # Check if process is running
+            if not is_nebula_running():
+                # Process crashed!
+                timestamp = datetime.now().isoformat()
+                print(f"[agent] [{timestamp}] CRASH DETECTED: Nebula process not running")
+                
+                metrics.crash_count += 1
+                metrics.last_crash_time = datetime.now()
+                metrics.consecutive_failures += 1
+                metrics.save()
+                
+                # Check if we've exceeded max consecutive failures
+                if metrics.consecutive_failures >= MAX_RESTART_ATTEMPTS:
+                    timestamp = datetime.now().isoformat()
+                    print(f"[agent] [{timestamp}] ALERT: Too many consecutive failures ({metrics.consecutive_failures})")
+                    print(f"[agent] Stopping automatic restarts. Administrator intervention required.")
+                    print(f"[agent] Metrics: {metrics.to_dict()}")
+                    # Sleep longer before checking again
+                    time.sleep(300)  # 5 minutes
+                    continue
+                
+                # Attempt recovery
+                print(f"[agent] Attempting automatic recovery...")
+                if restart_nebula_with_backoff():
+                    print(f"[agent] Recovery successful")
+                else:
+                    print(f"[agent] Recovery failed")
+            
+            # Periodic health check (in addition to process check)
+            current_time = time.time()
+            if current_time - last_health_check >= HEALTH_CHECK_INTERVAL:
+                last_health_check = current_time
+                
+                if is_nebula_running() and not check_nebula_health():
+                    # Process is running but unhealthy
+                    timestamp = datetime.now().isoformat()
+                    print(f"[agent] [{timestamp}] Health check failed, restarting Nebula")
+                    
+                    metrics.disconnect_count += 1
+                    metrics.save()
+                    
+                    restart_nebula_with_backoff()
+        
+        except Exception as e:
+            print(f"[agent] Error in process monitor: {e}")
+        
+        # Sleep before next check
+        time.sleep(PROCESS_CHECK_INTERVAL)
 
 
 def run_loop():
@@ -403,15 +750,53 @@ def run_loop():
         time.sleep(interval_hours * 3600)
 
 
+def run_loop_with_monitoring():
+    """
+    Run in continuous polling loop with process monitoring.
+    This is the enhanced mode with resilient recovery.
+    """
+    import threading
+    
+    print("[agent] Starting enhanced mode with process monitoring and resilient recovery")
+    print(f"[agent] Configuration:")
+    print(f"  - Process check interval: {PROCESS_CHECK_INTERVAL}s")
+    print(f"  - Health check interval: {HEALTH_CHECK_INTERVAL}s")
+    print(f"  - Config fetch timeout: {CONFIG_FETCH_TIMEOUT}s")
+    print(f"  - Max restart attempts: {MAX_RESTART_ATTEMPTS}")
+    print(f"  - Max fetch retries: {MAX_FETCH_RETRIES}")
+    print(f"  - Post-restart wait: {POST_RESTART_WAIT}s")
+    
+    # Start process monitoring in background thread
+    monitor_thread = threading.Thread(target=monitor_nebula_process, daemon=True)
+    monitor_thread.start()
+    
+    # Run normal polling loop in main thread
+    interval_hours = int(os.environ.get("POLL_INTERVAL_HOURS", "24"))
+    
+    while True:
+        try:
+            # In loop mode, always restart on config changes
+            run_once(restart_on_change=True)
+        except Exception as e:
+            print(f"[agent] Config refresh failed: {e}")
+            # Don't crash the loop, just log and continue
+        
+        # Sleep for the poll interval
+        time.sleep(interval_hours * 3600)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--once", action="store_true", help="Run once and exit")
     parser.add_argument("--loop", action="store_true", help="Run in polling loop")
+    parser.add_argument("--monitor", action="store_true", help="Run in enhanced monitoring mode (recommended)")
     parser.add_argument("--restart", action="store_true", help="Restart Nebula if config changes (only with --once)")
     args = parser.parse_args()
 
     if args.once:
         run_once(restart_on_change=args.restart)
+    elif args.monitor:
+        run_loop_with_monitoring()
     elif args.loop:
         run_loop()
     else:
