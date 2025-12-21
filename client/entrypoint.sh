@@ -40,31 +40,54 @@ if [[ "${START_NEBULA:-true}" != "true" ]]; then
   exit 0
 fi
 
-# Start background poller
-python3 /app/agent.py --loop &
-POLLER_PID=$!
-
-# Function to handle shutdown signals
+# Shared cleanup function for both enhanced and legacy modes
 cleanup() {
     echo "Shutting down..."
-    kill $POLLER_PID 2>/dev/null || true
     
+    # Best-effort stop of whichever background processes are in use
+    if [[ -n "${AGENT_PID:-}" ]]; then
+        kill "${AGENT_PID}" 2>/dev/null || true
+    fi
+    if [[ -n "${POLLER_PID:-}" ]]; then
+        kill "${POLLER_PID}" 2>/dev/null || true
+    fi
+
     # Stop nebula if running
     if [[ -f /var/lib/nebula/nebula.pid ]]; then
-        NEBULA_PID=$(cat /var/lib/nebula/nebula.pid)
-        kill $NEBULA_PID 2>/dev/null || true
+        NEBULA_PID="$(cat /var/lib/nebula/nebula.pid)"
+        kill "${NEBULA_PID}" 2>/dev/null || true
         rm -f /var/lib/nebula/nebula.pid
     fi
+
     exit 0
 }
 
-# Set up signal handlers
-trap cleanup SIGTERM SIGINT
+# Set up signal handlers for both modes
+trap cleanup SIGINT SIGTERM
 
-# Start nebula and track its PID
-nebula -config /etc/nebula/config.yml &
-NEBULA_PID=$!
-echo $NEBULA_PID > /var/lib/nebula/nebula.pid
+# Use enhanced monitoring mode if ENABLE_MONITORING is true (default)
+ENABLE_MONITORING="${ENABLE_MONITORING:-true}"
 
-# Wait for either process to exit
-wait
+if [[ "${ENABLE_MONITORING}" == "true" ]]; then
+  echo "Starting agent in enhanced monitoring mode..."
+  # Enhanced mode handles both config polling and process monitoring
+  python3 /app/agent.py --monitor &
+  AGENT_PID=$!
+  
+  # Agent's monitor mode will start Nebula automatically
+  # Just wait for the agent process
+  wait $AGENT_PID
+else
+  echo "Starting agent in legacy mode (no process monitoring)..."
+  # Start background poller
+  python3 /app/agent.py --loop &
+  POLLER_PID=$!
+  
+  # Start nebula and track its PID
+  nebula -config /etc/nebula/config.yml &
+  NEBULA_PID=$!
+  echo $NEBULA_PID > /var/lib/nebula/nebula.pid
+  
+  # Wait for either process to exit
+  wait
+fi
