@@ -22,10 +22,10 @@ services:
     image: managed-nebula-client:dev
     environment:
       - CLIENT_TOKEN=${CLIENT_TOKEN:?Set CLIENT_TOKEN to your client token}
-      - SERVER_URL=https://localhost:4200/api
+      - SERVER_URL=${SERVER_URL:-http://localhost:8080/api}
       - POLL_INTERVAL_HOURS=${POLL_INTERVAL_HOURS:-24}
       - START_NEBULA=${START_NEBULA:-true}
-      - ALLOW_SELF_SIGNED_CERT=${ALLOW_SELF_SIGNED_CERT:-true}
+      - ALLOW_SELF_SIGNED_CERT=${ALLOW_SELF_SIGNED_CERT:-false}
       - CLIENT_VERSION_OVERRIDE=${CLIENT_VERSION_OVERRIDE:-}
       - NEBULA_VERSION_OVERRIDE=${NEBULA_VERSION_OVERRIDE:-}
     cap_add:

@@ -3,10 +3,16 @@ import Foundation
 /// Service that polls the server for configuration updates
 class PollingService {
     private var timer: Timer?
+    private var monitorTimer: Timer?
     private let nebulaManager: NebulaManager
     private let keychainService: KeychainService
     private var configuration: Configuration
     private var isManuallyDisconnected: Bool = false
+    private var restartInProgress: Bool = false
+    private var consecutiveFailures: Int = 0
+    private let processCheckInterval: TimeInterval = 10
+    private let restartInitTimeout: TimeInterval = 30
+    private let maxRestartAttempts: Int = 5
     
     var onStatusChange: ((ConnectionStatus) -> Void)?
     
@@ -59,12 +65,14 @@ class PollingService {
         }
         
         print("[PollingService] Started polling every \(configuration.pollIntervalHours) hours")
+        startMonitoring()
     }
     
     /// Stop polling
     func stopPolling() {
         timer?.invalidate()
         timer = nil
+        stopMonitoring()
         print("[PollingService] Stopped polling")
     }
 
@@ -160,4 +168,73 @@ class PollingService {
         }
         onStatusChange?(.connected)
     }
+
+    // MARK: - Monitoring & Auto-Heal
+    private func startMonitoring() {
+        monitorTimer?.invalidate()
+        monitorTimer = Timer.scheduledTimer(withTimeInterval: processCheckInterval, repeats: true) { [weak self] _ in
+            Task { await self?.monitorNebula() }
+        }
+        print("[PollingService] Started process monitoring (every \(processCheckInterval)s)")
+    }
+
+    private func stopMonitoring() {
+        monitorTimer?.invalidate()
+        monitorTimer = nil
+        restartInProgress = false
+        print("[PollingService] Stopped process monitoring")
+    }
+
+    private func monitorNebula() async {
+        guard !isManuallyDisconnected else { return }
+        if restartInProgress { return }
+        if nebulaManager.isRunning() { return }
+        restartInProgress = true
+        onStatusChange?(.connecting)
+        print("[PollingService] Nebula process not running; attempting recovery")
+        let recovered = await restartWithBackoff()
+        if recovered {
+            print("[PollingService] Recovery successful")
+            onStatusChange?(.connected)
+        } else {
+            print("[PollingService] Recovery failed after \(maxRestartAttempts) attempts")
+            onStatusChange?(.error("Failed to restart Nebula"))
+        }
+        restartInProgress = false
+    }
+
+    private func restartWithBackoff() async -> Bool {
+        for attempt in 0..<maxRestartAttempts {
+            let timestamp = ISO8601DateFormatter().string(from: Date())
+            print("[PollingService] [\(timestamp)] Restart attempt \(attempt + 1)/\(maxRestartAttempts)")
+            do {
+                try nebulaManager.restartNebula()
+            } catch {
+                print("[PollingService] Restart attempt failed: \(error.localizedDescription)")
+            }
+
+            var waited: TimeInterval = 0
+            while waited < restartInitTimeout {
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+                waited += 0.5
+                if nebulaManager.isRunning() {
+                    consecutiveFailures = 0
+                    return true
+                }
+            }
+            consecutiveFailures += 1
+            print("[PollingService] Restart attempt \(attempt + 1) failed - Nebula did not start within \(restartInitTimeout)s")
+            if attempt < maxRestartAttempts - 1 {
+                let delay = computeBackoff(attempt: attempt, cap: 30)
+                print("[PollingService] Waiting \(delay)s before next attempt...")
+                try? await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000_000)
+            }
+        }
+        return false
+    }
+
+    private func computeBackoff(attempt: Int, base: Int = 1, cap: Int = 60) -> Int {
+        return min(base * (1 << attempt), cap)
+    }
 }
+

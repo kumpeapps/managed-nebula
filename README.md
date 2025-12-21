@@ -55,6 +55,11 @@ Nebula is a scalable overlay networking tool focusing on performance, simplicity
 - Automatic keypair generation on client side
 - Dynamic configuration delivery via REST API
 - Periodic polling for certificate rotation and config updates
+- **Process monitoring & resilient recovery** (NEW!)
+  - Automatic crash detection and restart with exponential backoff
+  - Config fetch timeout and retry with caching fallback
+  - Metrics tracking (crash/restart/failure counts)
+  - Coordinated recovery after restarts
 - Docker Compose file generation for easy deployment
 - Client blocking/unblocking support
 - Granular per-client user permissions
@@ -95,6 +100,22 @@ Nebula is a scalable overlay networking tool focusing on performance, simplicity
 - **Admin Lockout Protection** - Admin role + admin group bypass ensures continuous access
 
 ## 🆕 Recent Updates
+
+### 🔄 Process Monitoring & Resilient Recovery (NEW!)
+- 🛡️ **Automatic Crash Detection** - Monitors Nebula process with configurable intervals (default: 10s)
+- 🔄 **Intelligent Restart Logic** - Exponential backoff (1s → 2s → 4s, max 30s) with max 5 attempts
+- 📊 **Comprehensive Metrics** - Tracks crashes, restarts, disconnects, and config fetch failures
+- ⏱️ **Timeout & Retry** - Config fetches timeout after 30s with exponential backoff retry (up to 5 attempts)
+- 💾 **Config Caching** - Falls back to cached config when the server is unavailable
+- 🔍 **Health Checks** - Periodic connectivity verification (default: 60s intervals)
+- 🔧 **Config Validation** - Validates syntax before restart to prevent boot loops
+- 🚨 **Administrator Alerts** - Stops auto-restart after max failures and alerts for intervention
+- 📚 **Documentation**: See [MONITORING_AND_RECOVERY.md](MONITORING_AND_RECOVERY.md) for full details
+
+**Supported Clients:**
+- ✅ **Docker/Linux Client** - Full implementation with `--monitor` mode
+- ✅ **Windows Client** - Full implementation with `--monitor` mode  
+- 🚧 **macOS Client** - Basic monitoring via PollingService (enhanced features pending)
 
 ### 🔒 Security & Token Management (NEW!)
 - 🔐 **Standardized Token Format** - Configurable prefix (default: `mnebula_`) + 32 secure random characters

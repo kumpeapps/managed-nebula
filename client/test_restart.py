@@ -82,25 +82,34 @@ def test_pid_parsing():
 
 def test_restart_logic():
     """Test the restart logic without actually starting processes"""
-    with patch('agent.get_nebula_pid') as mock_get_pid:
-        with patch('os.kill') as mock_kill:
-            with patch('subprocess.Popen') as mock_popen:
-                with patch.dict(os.environ, {'START_NEBULA': 'true'}):
-                    # Mock a running process
-                    mock_get_pid.return_value = 12345
-                    mock_process = MagicMock()
-                    mock_process.pid = 54321
-                    mock_popen.return_value = mock_process
-                    
-                    restart_nebula()
-                    
-                    # Should have tried to kill the old process
-                    mock_kill.assert_called()
-                    
-                    # Should have started a new process
-                    mock_popen.assert_called_once()
-                    
-                    print("✅ Restart logic test passed")
+    import tempfile
+    from pathlib import Path
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Mock the pidfile location to use temp directory
+        with patch('agent.PIDFILE', Path(tmpdir) / 'nebula.pid'):
+            with patch('agent.get_nebula_pid') as mock_get_pid:
+                # Bypass real config validation to exercise restart path
+                with patch('agent.validate_config', return_value=True):
+                    with patch('os.kill') as mock_kill:
+                        with patch('subprocess.Popen') as mock_popen:
+                            with patch('agent.is_nebula_running', return_value=True) as mock_is_running:
+                                with patch.dict(os.environ, {'START_NEBULA': 'true'}):
+                                    # Mock a running process
+                                    mock_get_pid.return_value = 54321
+                                    mock_process = MagicMock()
+                                    mock_process.pid = 54321
+                                    mock_popen.return_value = mock_process
+                                    
+                                    restart_nebula()
+                                    
+                                    # Should have tried to kill the old process
+                                    mock_kill.assert_called()
+                                    
+                                    # Should have started a new process
+                                    mock_popen.assert_called_once()
+                                    
+                                    print("✅ Restart logic test passed")
 
 
 if __name__ == "__main__":
