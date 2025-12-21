@@ -52,7 +52,7 @@ RESTART_INIT_TIMEOUT = int(os.getenv("RESTART_INIT_TIMEOUT", "30"))  # seconds
 
 # Metrics tracking class
 class Metrics:
-    def __init__(self):
+    def __init__(self, logger=None):
         self.crash_count = 0
         self.disconnect_count = 0
         self.restart_count = 0
@@ -60,6 +60,7 @@ class Metrics:
         self.last_crash_time = None
         self.last_successful_restart = None
         self.consecutive_failures = 0
+        self.logger = logger
         
     def to_dict(self):
         return {
@@ -73,8 +74,8 @@ class Metrics:
         }
     
     @classmethod
-    def from_dict(cls, data):
-        m = cls()
+    def from_dict(cls, data, logger=None):
+        m = cls(logger)
         m.crash_count = data.get("crash_count", 0)
         m.disconnect_count = data.get("disconnect_count", 0)
         m.restart_count = data.get("restart_count", 0)
@@ -92,20 +93,24 @@ class Metrics:
             NEBULA_DIR.mkdir(parents=True, exist_ok=True)
             METRICS_FILE.write_text(json.dumps(self.to_dict(), indent=2))
         except Exception as e:
-            if 'logger' in globals():
-                logger.warning("Failed to save metrics: %s", e)
+            if self.logger:
+                self.logger.warning("Failed to save metrics: %s", e)
+            else:
+                print(f"Warning: Failed to save metrics: {e}")
     
     @classmethod
-    def load(cls):
+    def load(cls, logger=None):
         """Load metrics from file"""
         try:
             if METRICS_FILE.exists():
                 data = json.loads(METRICS_FILE.read_text())
-                return cls.from_dict(data)
+                return cls.from_dict(data, logger)
         except Exception as e:
-            if 'logger' in globals():
+            if logger:
                 logger.warning("Failed to load metrics: %s", e)
-        return cls()
+            else:
+                print(f"Warning: Failed to load metrics: {e}")
+        return cls(logger)
 
 
 def _inject_windows_tun_dev(config_path: Path) -> None:
@@ -173,7 +178,7 @@ def setup_logging(log_level: str = "INFO") -> logging.Logger:
 logger = setup_logging()
 
 # Initialize metrics after logger is setup
-metrics = Metrics.load()
+metrics = Metrics.load(logger)
 
 def ensure_directories() -> None:
     """Ensure all required directories exist with proper permissions"""

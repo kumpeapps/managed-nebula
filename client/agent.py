@@ -71,6 +71,7 @@ class Metrics:
             STATE_DIR.mkdir(parents=True, exist_ok=True)
             METRICS_FILE.write_text(json.dumps(self.to_dict(), indent=2))
         except Exception as e:
+            # Use print for consistency across platforms (no logger dependency)
             print(f"[agent] Warning: Failed to save metrics: {e}")
     
     @classmethod
@@ -81,6 +82,7 @@ class Metrics:
                 data = json.loads(METRICS_FILE.read_text())
                 return cls.from_dict(data)
         except Exception as e:
+            # Use print for consistency across platforms (no logger dependency)
             print(f"[agent] Warning: Failed to load metrics: {e}")
         return cls()
 
