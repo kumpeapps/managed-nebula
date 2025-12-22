@@ -460,7 +460,7 @@ def write_config_and_pki(config_yaml: str, client_cert_pem: str, ca_chain_pems: 
 
 
 def get_nebula_pid() -> int:
-    """Get Nebula process PID from pidfile or process list"""
+    """Get Nebula process PID from pidfile or /proc filesystem"""
     # First try pidfile
     if PIDFILE.exists():
         try:
@@ -471,18 +471,28 @@ def get_nebula_pid() -> int:
         except (ValueError, OSError):
             PIDFILE.unlink(missing_ok=True)
     
-    # Fallback: find nebula process by command line
+    # Fallback: scan /proc for nebula process by checking command lines
     try:
-        result = subprocess.run(
-            ["pgrep", "-f", "nebula.*-config.*config.yml"],
-            capture_output=True, text=True
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            pid = int(result.stdout.strip().split('\n')[0])
-            # Write to pidfile for future use
-            PIDFILE.write_text(str(pid))
-            return pid
-    except (subprocess.SubprocessError, ValueError):
+        for proc_dir in Path("/proc").iterdir():
+            if not proc_dir.is_dir():
+                continue
+            try:
+                pid = int(proc_dir.name)
+                cmdline_file = proc_dir / "cmdline"
+                if cmdline_file.exists():
+                    cmdline = cmdline_file.read_text()
+                    # /proc/[pid]/cmdline uses null bytes as separators
+                    if "nebula" in cmdline and "config.yml" in cmdline:
+                        # Verify process still exists
+                        os.kill(pid, 0)
+                        # Write to pidfile for future use
+                        PIDFILE.write_text(str(pid))
+                        return pid
+            except (ValueError, OSError):
+                # Not a valid pid directory or process is gone
+                continue
+    except (OSError, FileNotFoundError, PermissionError, UnicodeError):
+        # /proc might not be available or readable on some systems
         pass
     
     return 0
