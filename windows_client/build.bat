@@ -11,7 +11,7 @@ echo.
 
 REM Configuration
 set "VERSION=1.0.0"
-set "NEBULA_VERSION=1.10.0"
+set "NEBULA_VERSION=1.10.1"
 set "APP_NAME=NebulaAgent"
 set "SCRIPT_DIR=%~dp0"
 set "DIST_DIR=%SCRIPT_DIR%dist"

@@ -3,8 +3,8 @@
 
 set -e
 
-# Use NEBULA_VERSION from environment if provided, otherwise default to v1.10.0
-NEBULA_VERSION="${NEBULA_VERSION:-v1.10.0}"
+# Use NEBULA_VERSION from environment if provided, otherwise default to v1.10.1
+NEBULA_VERSION="${NEBULA_VERSION:-v1.10.1}"
 NEBULA_URL="https://github.com/slackhq/nebula/releases/download/${NEBULA_VERSION}/nebula-darwin.zip"
 INSTALL_DIR="/usr/local/bin"
 
