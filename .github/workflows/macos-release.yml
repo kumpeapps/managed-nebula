@@ -130,7 +130,7 @@ jobs:
           
           ## What's Included
           - Native macOS menu bar application
-          - Nebula v1.10.0 binaries (PKG only)
+          - Nebula v1.10.1 binaries (PKG only)
           - Automatic configuration updates
           - Secure Keychain integration
           - LaunchDaemon for auto-start (PKG only)
