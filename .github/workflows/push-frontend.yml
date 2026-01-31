@@ -81,10 +81,19 @@ jobs:
             BRANCH_NAME="${GITHUB_REF#refs/heads/}"
             echo "Current branch: ${BRANCH_NAME}"
             
-            LATEST_RELEASE=$(curl -s https://api.github.com/repos/kumpeapps/managed-nebula/releases | \
-              jq -r --arg branch "$BRANCH_NAME" '[
+            # Fetch releases with error handling
+            RELEASES_JSON=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              https://api.github.com/repos/kumpeapps/managed-nebula/releases)
+            
+            # Check if we got valid JSON
+            if echo "$RELEASES_JSON" | jq -e . >/dev/null 2>&1; then
+              LATEST_RELEASE=$(echo "$RELEASES_JSON" | jq -r --arg branch "$BRANCH_NAME" '[
                 .[] | select(.target_commitish == $branch or .target_commitish == "main")
               ] | .[0].tag_name // "v1.0.0"')
+            else
+              echo "Warning: Failed to fetch releases from GitHub API, using default version"
+              LATEST_RELEASE="v1.0.0"
+            fi
             
             echo "Latest release version for ${BRANCH_NAME}: ${LATEST_RELEASE}"
           fi
