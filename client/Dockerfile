@@ -18,7 +18,7 @@ RUN set -eux; \
             armhf|armel|arm) neb_arch="arm" ;; \
             *) echo "Unsupported architecture: $arch"; exit 1 ;; \
         esac; \
-        NEBULA_VERSION="1.10.1"; \
+        NEBULA_VERSION="1.10.2"; \
         curl -fsSL -o /tmp/nebula.tar.gz \
             "https://github.com/slackhq/nebula/releases/download/v${NEBULA_VERSION}/nebula-linux-${neb_arch}.tar.gz"; \
         tar -C /usr/local/bin -xzvf /tmp/nebula.tar.gz nebula nebula-cert; \
