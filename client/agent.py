@@ -583,8 +583,8 @@ def restart_nebula_with_backoff() -> bool:
         print("[agent] Starting new Nebula process...")
         proc = subprocess.Popen(
             ["nebula", "-config", str(CONFIG_PATH)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
         )
         
         # Write new PID
@@ -617,23 +617,7 @@ def restart_nebula_with_backoff() -> bool:
             print(f"[agent] [{timestamp}] Nebula restarted successfully (PID: {proc.pid})")
             return True
         else:
-            # Restart failed - check if process exited with error
-            try:
-                exit_code = proc.poll()
-                if exit_code is not None:
-                    # Process already exited, try to get output
-                    try:
-                        stdout, stderr = proc.communicate(timeout=1)
-                        if stderr:
-                            print(f"[agent] Nebula stderr: {stderr.decode().strip()}")
-                        if stdout:
-                            print(f"[agent] Nebula stdout: {stdout.decode().strip()}")
-                    except:
-                        pass
-                    print(f"[agent] Nebula process exited with code {exit_code}")
-            except:
-                pass
-            
+            # Restart failed
             with metrics_lock:
                 metrics.consecutive_failures += 1
             print(f"[agent] Restart attempt {attempts} failed - Nebula did not start within {RESTART_INIT_TIMEOUT}s")
@@ -661,9 +645,7 @@ def restart_nebula():
 
 
 def run_once(restart_on_change: bool = False):
-    token = os.environ.get("CLIENT_TOKEN")
-    if not token:
-        raise ValueError("CLIENT_TOKEN environment variable is required")
+    token = os.environ["CLIENT_TOKEN"]
     server_url = os.environ.get("SERVER_URL", "http://localhost:8080")
     
     # Check for Nebula version updates first
@@ -815,13 +797,8 @@ def run_loop_with_monitoring():
     This is the enhanced mode with resilient recovery.
     """
     import threading
-    import sys
     
-    # Force flush to ensure we see output immediately
-    sys.stdout.flush()
-    sys.stderr.flush()
-    
-    print("[agent] Starting enhanced mode with process monitoring and resilient recovery", flush=True)
+    print("[agent] Starting enhanced mode with process monitoring and resilient recovery")
     print(f"[agent] Configuration:")
     print(f"  - Process check interval: {PROCESS_CHECK_INTERVAL}s")
     print(f"  - Health check interval: {HEALTH_CHECK_INTERVAL}s")
@@ -829,16 +806,6 @@ def run_loop_with_monitoring():
     print(f"  - Max restart attempts: {MAX_RESTART_ATTEMPTS}")
     print(f"  - Max fetch retries: {MAX_FETCH_RETRIES}")
     print(f"  - Post-restart wait: {POST_RESTART_WAIT}s")
-    
-    # Ensure Nebula is started initially before beginning monitoring
-    print("[agent] Performing initial startup check...")
-    if not is_nebula_running():
-        print("[agent] Nebula not running, performing initial startup...")
-        if not restart_nebula_with_backoff():
-            print("[agent] ERROR: Failed to start Nebula during initial startup")
-            print("[agent] Will retry via monitoring loop...")
-    else:
-        print("[agent] Nebula already running")
     
     # Start process monitoring in background thread
     monitor_thread = threading.Thread(target=monitor_nebula_process, daemon=True)
@@ -860,36 +827,18 @@ def run_loop_with_monitoring():
 
 
 if __name__ == "__main__":
-    import sys
-    # Ensure unbuffered output for immediate logging visibility
-    sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', buffering=1)
-    sys.stderr = os.fdopen(sys.stderr.fileno(), 'w', buffering=1)
-    
-    print(f"[agent] Python agent starting (PID: {os.getpid()})", flush=True)
-    
-    try:
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--once", action="store_true", help="Run once and exit")
-        parser.add_argument("--loop", action="store_true", help="Run in polling loop")
-        parser.add_argument("--monitor", action="store_true", help="Run in enhanced monitoring mode (recommended)")
-        parser.add_argument("--restart", action="store_true", help="Restart Nebula if config changes (only with --once)")
-        args = parser.parse_args()
-        
-        print(f"[agent] Parsed args: once={args.once}, monitor={args.monitor}, loop={args.loop}", flush=True)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--once", action="store_true", help="Run once and exit")
+    parser.add_argument("--loop", action="store_true", help="Run in polling loop")
+    parser.add_argument("--monitor", action="store_true", help="Run in enhanced monitoring mode (recommended)")
+    parser.add_argument("--restart", action="store_true", help="Restart Nebula if config changes (only with --once)")
+    args = parser.parse_args()
 
-        if args.once:
-            run_once(restart_on_change=args.restart)
-        elif args.monitor:
-            print("[agent] Entering monitor mode...", flush=True)
-            run_loop_with_monitoring()
-        elif args.loop:
-            run_loop()
-        else:
-            run_once()
-    except KeyboardInterrupt:
-        print("[agent] Received interrupt signal, exiting...", flush=True)
-    except Exception as e:
-        print(f"[agent] FATAL ERROR: {e}", flush=True)
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    if args.once:
+        run_once(restart_on_change=args.restart)
+    elif args.monitor:
+        run_loop_with_monitoring()
+    elif args.loop:
+        run_loop()
+    else:
+        run_once()
