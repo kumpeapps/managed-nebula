@@ -39,7 +39,7 @@
 
 ; Nebula version will be set by build script
 !ifndef NEBULA_VERSION
-  !define NEBULA_VERSION "1.10.1"
+  !define NEBULA_VERSION "1.10.0"
 !endif
 
 Name "${PRODUCT_NAME} ${VERSION}"
