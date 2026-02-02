@@ -1,4 +1,4 @@
 httpx==0.28.1
 PyYAML==6.0.3
-cryptography==46.0.3
+cryptography==46.0.4
 pre-commit==4.5.0
