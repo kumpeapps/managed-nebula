@@ -125,6 +125,7 @@ class PollingService {
             print("[PollingService] Configuration check completed successfully")
             
         } catch let error as APIError {
+            // Server returned an API error (401, 403, etc.)
             let message = error.localizedDescription
             onStatusChange?(.error(message))
             print("[PollingService] API error: \(message)")
@@ -133,8 +134,12 @@ class PollingService {
             onStatusChange?(.error(message))
             print("[PollingService] Nebula error: \(message)")
         } catch {
-            onStatusChange?(.error(error.localizedDescription))
-            print("[PollingService] Error: \(error.localizedDescription)")
+            // Network error or server unreachable - try to continue with cached config
+            let timestamp = ISO8601DateFormatter().string(from: Date())
+            print("[PollingService] [\(timestamp)] WARNING: Unable to reach management server: \(error.localizedDescription)")
+            print("[PollingService] Attempting to continue with cached configuration")
+            
+            handleServerUnreachable()
         }
     }
     
@@ -235,6 +240,74 @@ class PollingService {
 
     private func computeBackoff(attempt: Int, base: Int = 1, cap: Int = 60) -> Int {
         return min(base * (1 << attempt), cap)
+    }
+
+    // MARK: - Cached Config Fallback
+    
+    /// Handle server unreachable scenario by attempting to use cached or existing config
+    private func handleServerUnreachable() {
+        if let cachedResponse = nebulaManager.loadCachedConfig() {
+            handleCachedConfigFallback(cachedResponse)
+        } else {
+            handleExistingConfigFallback()
+        }
+    }
+    
+    /// Attempt to apply cached config response as fallback
+    private func handleCachedConfigFallback(_ cachedResponse: ClientConfigResponse) {
+        print("[PollingService] Using cached config as fallback")
+        
+        do {
+            // Write the cached config (this will be a no-op if config hasn't changed)
+            try nebulaManager.writeConfiguration(cachedResponse)
+            
+            // Check if Nebula is running with the existing config
+            if nebulaManager.isRunning() {
+                print("[PollingService] Nebula is running with existing configuration")
+                onStatusChange?(.connected)
+            } else if configuration.isAutoStartEnabled && !isManuallyDisconnected {
+                // Try to start Nebula with existing config
+                print("[PollingService] Attempting to start Nebula with cached configuration")
+                try nebulaManager.startNebula()
+                onStatusChange?(.connected)
+            } else {
+                onStatusChange?(.error("Server unreachable - using cached config"))
+            }
+        } catch {
+            print("[PollingService] Failed to apply cached config: \(error.localizedDescription)")
+            onStatusChange?(.error("Server unreachable and failed to apply cached config"))
+        }
+    }
+    
+    /// Attempt to continue with existing config files when no cached config is available
+    private func handleExistingConfigFallback() {
+        print("[PollingService] ERROR: No cached config available and server is unreachable")
+        
+        // Check if we at least have existing config files to continue with
+        guard FileManager.default.fileExists(atPath: FileManager.NebulaFiles.configFile.path) else {
+            print("[PollingService] ERROR: No existing config file found and server is unreachable")
+            print("[PollingService] Cannot start Nebula without configuration")
+            onStatusChange?(.error("Cannot reach server and no configuration available"))
+            return
+        }
+        
+        print("[PollingService] Existing config file found, continuing with current configuration")
+        
+        if nebulaManager.isRunning() {
+            print("[PollingService] Nebula is running with existing configuration")
+            onStatusChange?(.connected)
+        } else if configuration.isAutoStartEnabled && !isManuallyDisconnected {
+            print("[PollingService] Attempting to start Nebula with existing configuration")
+            do {
+                try nebulaManager.startNebula()
+                onStatusChange?(.connected)
+            } catch {
+                print("[PollingService] Failed to start Nebula: \(error.localizedDescription)")
+                onStatusChange?(.error("Server unreachable - cannot start Nebula"))
+            }
+        } else {
+            onStatusChange?(.error("Server unreachable - using existing config"))
+        }
     }
 }
 
