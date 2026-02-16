@@ -28,6 +28,10 @@ services:
     privileged: false
     # Host networking simplifies routing for VPN clients on Linux
     network_mode: host
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 1.1.1.1
     volumes:
       - nebula_etc:/etc/nebula
       - nebula_var:/var/lib/nebula

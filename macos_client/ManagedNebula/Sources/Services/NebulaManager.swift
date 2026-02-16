@@ -64,6 +64,9 @@ class NebulaManager {
         let debugEntry = "[writeConfiguration] Called at \(Date())\n"
         try? debugEntry.write(toFile: "/tmp/nebula-flow-debug.log", atomically: true, encoding: .utf8)
         
+        // Cache the config response for fallback
+        saveCachedConfig(response)
+        
         // Calculate hash of new configuration
         let newHash = calculateConfigHash(
             config: response.config,
@@ -99,6 +102,65 @@ class NebulaManager {
         try stageRootConfig(rawConfig: response.config, certPem: response.clientCertPem, caChain: caChain)
         
         return true
+    }
+
+    // MARK: - Config Caching
+    
+    /// Save config response to cache file for fallback
+    private func saveCachedConfig(_ response: ClientConfigResponse) {
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .prettyPrinted
+            let data = try encoder.encode(response)
+
+            let cacheFileURL = FileManager.NebulaFiles.cachedConfigFile
+            let cacheDirectoryURL = cacheFileURL.deletingLastPathComponent()
+
+            // Ensure cache directory exists before writing
+            if !fileManager.fileExists(atPath: cacheDirectoryURL.path) {
+                try fileManager.createDirectory(at: cacheDirectoryURL, withIntermediateDirectories: true, attributes: nil)
+            }
+
+            // Write atomically to avoid partial writes of sensitive config
+            try data.write(to: cacheFileURL, options: .atomic)
+
+            // Harden permissions on directory and file to limit exposure
+            do {
+                // Restrict directory to user-only access (rwx------)
+                try fileManager.setAttributes(
+                    [.posixPermissions: NSNumber(value: Int16(0o700))],
+                    ofItemAtPath: cacheDirectoryURL.path
+                )
+
+                // Restrict file to user-only access (rw-------)
+                try fileManager.setAttributes(
+                    [.posixPermissions: NSNumber(value: Int16(0o600))],
+                    ofItemAtPath: cacheFileURL.path
+                )
+            } catch {
+                // Don't fail caching if permission tightening fails, but log a warning
+                print("[NebulaManager] Warning: Cached config written but failed to harden permissions: \(error)")
+            }
+
+            print("[NebulaManager] Config cached successfully")
+        } catch {
+            print("[NebulaManager] Warning: Failed to cache config: \(error)")
+        }
+    }
+    
+    /// Load cached config response as fallback
+    func loadCachedConfig() -> ClientConfigResponse? {
+        do {
+            guard fileManager.fileExists(atPath: FileManager.NebulaFiles.cachedConfigFile.path) else {
+                return nil
+            }
+            let data = try Data(contentsOf: FileManager.NebulaFiles.cachedConfigFile)
+            let decoder = JSONDecoder()
+            return try decoder.decode(ClientConfigResponse.self, from: data)
+        } catch {
+            print("[NebulaManager] Warning: Failed to load cached config: \(error)")
+            return nil
+        }
     }
 
     // MARK: - File writing helpers
