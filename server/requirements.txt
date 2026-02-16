@@ -1,5 +1,5 @@
 aiomysql==0.3.2
-aiosqlite==0.21.0
+aiosqlite==0.22.1
 alembic==1.17.2
 annotated-doc==0.0.4
 annotated-types==0.7.0
