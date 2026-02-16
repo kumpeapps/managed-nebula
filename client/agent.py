@@ -734,29 +734,12 @@ def run_once(restart_on_change: bool = False):
     token = os.environ["CLIENT_TOKEN"]
     server_url = os.environ.get("SERVER_URL", "http://localhost:8080")
     
-<<<<<<< Updated upstream
-    # If existing config exists and Nebula is not running, start it first
-    # This ensures VPN connectivity even if server is temporarily unreachable
-    if CONFIG_PATH.exists() and not is_nebula_running():
-        timestamp = datetime.now().isoformat()
-        print(f"[agent] [{timestamp}] Existing config found, starting Nebula before fetching updates...")
-        
-        # Validate existing config before starting
-        if validate_config():
-            if restart_nebula_with_backoff():
-                print("[agent] Successfully started Nebula with existing config")
-            else:
-                print("[agent] Warning: Failed to start Nebula with existing config")
-        else:
-            print("[agent] Warning: Existing config validation failed, will wait for server update")
-=======
     # Check if Nebula is already running with existing config
     nebula_already_running = is_nebula_running()
     has_existing_config = CONFIG_PATH.exists()
     
     if nebula_already_running and has_existing_config:
         print("[agent] Nebula already running with existing config")
->>>>>>> Stashed changes
     
     # Check for Nebula version updates first
     nebula_updated = False
@@ -771,19 +754,6 @@ def run_once(restart_on_change: bool = False):
     # Fetch config with graceful fallback if server is unreachable
     _priv, pub = ensure_keypair()
     
-<<<<<<< Updated upstream
-    # Try to fetch and apply config from server
-    try:
-        config_changed = fetch_and_apply_config(token, server_url, pub)
-        
-        # Restart Nebula if config changed or if binary was updated
-        if restart_on_change and (config_changed or nebula_updated):
-            handle_restart_and_fresh_config(token, server_url, pub)
-            
-    except Exception as e:
-        # Server is unreachable - try to continue with existing config
-        handle_unreachable_server(restart_on_change)
-=======
     try:
         data = fetch_config(token, server_url, pub)
         cfg = data["config"]
@@ -842,7 +812,6 @@ def run_once(restart_on_change: bool = False):
         # No existing config and can't fetch from server - this is a critical error
         print(f"[agent] [{timestamp}] ERROR: No existing config and server unreachable - cannot start")
         raise
->>>>>>> Stashed changes
 
 
 def check_nebula_health() -> bool:
