@@ -24,9 +24,9 @@ CACHED_CONFIG_FILE = STATE_DIR / "cached_config.json"
 # Configuration with environment variable defaults
 PROCESS_CHECK_INTERVAL = int(os.getenv("PROCESS_CHECK_INTERVAL", "10"))  # seconds
 HEALTH_CHECK_INTERVAL = int(os.getenv("HEALTH_CHECK_INTERVAL", "60"))  # seconds
-CONFIG_FETCH_TIMEOUT = int(os.getenv("CONFIG_FETCH_TIMEOUT", "30"))  # seconds
+CONFIG_FETCH_TIMEOUT = int(os.getenv("CONFIG_FETCH_TIMEOUT", "10"))  # seconds - reduced from 30
 MAX_RESTART_ATTEMPTS = int(os.getenv("MAX_RESTART_ATTEMPTS", "5"))
-MAX_FETCH_RETRIES = int(os.getenv("MAX_FETCH_RETRIES", "5"))
+MAX_FETCH_RETRIES = int(os.getenv("MAX_FETCH_RETRIES", "3"))  # reduced from 5
 POST_RESTART_WAIT = int(os.getenv("POST_RESTART_WAIT", "10"))  # seconds
 RESTART_INIT_TIMEOUT = int(os.getenv("RESTART_INIT_TIMEOUT", "30"))  # seconds
 
@@ -383,9 +383,9 @@ def fetch_config_with_retry(token: str, server_url: str, public_key: str) -> Opt
                 metrics.config_fetch_failures += 1
             print(f"[agent] Error fetching config: {e} (attempt {attempt + 1}/{MAX_FETCH_RETRIES})")
         
-        # Exponential backoff: 1s, 2s, 4s, 8s, max 60s
+        # Exponential backoff: 1s, 2s, max 4s (faster recovery when server is down)
         if attempt < MAX_FETCH_RETRIES - 1:
-            wait_time = min(2 ** attempt, 60)
+            wait_time = min(2 ** attempt, 4)
             print(f"[agent] Retrying in {wait_time} seconds...")
             time.sleep(wait_time)
     
@@ -644,9 +644,119 @@ def restart_nebula():
     restart_nebula_with_backoff()
 
 
+def fetch_and_apply_config(token: str, server_url: str, pub: bytes) -> bool:
+    """
+    Fetch configuration from server and apply it.
+    Returns True if config changed, False otherwise.
+    Raises exceptions if fetch or write fails (caller should handle).
+    """
+    data = fetch_config(token, server_url, pub)
+    cfg = data["config"]
+    client_cert_pem = data.get("client_cert_pem", "")
+    ca_chain_pems = data.get("ca_chain_pems", [])
+    
+    config_changed = write_config_and_pki(cfg, client_cert_pem, ca_chain_pems)
+    return config_changed
+
+
+def handle_restart_and_fresh_config(token: str, server_url: str, pub: bytes) -> None:
+    """
+    Restart Nebula and fetch fresh config after restart.
+    Handles post-restart config fetch and potential second restart if config differs.
+    """
+    timestamp = datetime.now().isoformat()
+    print(f"[agent] [{timestamp}] Coordinated recovery: restarting Nebula")
+    
+    if not restart_nebula_with_backoff():
+        print("[agent] Failed to restart Nebula")
+        return
+    
+    # Wait after restart, then fetch fresh config
+    print(f"[agent] Waiting {POST_RESTART_WAIT}s before fetching fresh config...")
+    time.sleep(POST_RESTART_WAIT)
+    
+    try:
+        print("[agent] Fetching fresh config after restart...")
+        fresh_data = fetch_config(token, server_url, pub)
+        fresh_cfg = fresh_data["config"]
+        fresh_cert_pem = fresh_data.get("client_cert_pem", "")
+        fresh_ca_pems = fresh_data.get("ca_chain_pems", [])
+        
+        # Check if fresh config differs from what we just wrote
+        fresh_changed = write_config_and_pki(fresh_cfg, fresh_cert_pem, fresh_ca_pems)
+        if fresh_changed:
+            print("[agent] Fresh config differs, restarting again...")
+            restart_nebula_with_backoff()
+    except Exception as e:
+        print(f"[agent] Failed to fetch fresh config after restart: {e}")
+        print("[agent] Continuing with existing config")
+
+
+def handle_unreachable_server(restart_on_change: bool) -> None:
+    """
+    Handle server unreachable scenario by using existing configuration.
+    At this point, Nebula should already be running with existing config (started at the beginning of run_once).
+    This function ensures Nebula is running and provides clear status messages.
+    Raises exception if no existing config is available.
+    """
+    timestamp = datetime.now().isoformat()
+    print(f"[agent] [{timestamp}] WARNING: Unable to reach management server")
+    print("[agent] Continuing with existing configuration")
+    
+    # Check if we have a valid config to use
+    if not CONFIG_PATH.exists():
+        print("[agent] ERROR: No existing config file found and server is unreachable")
+        print("[agent] Cannot operate Nebula without configuration")
+        raise RuntimeError("No config and server unreachable")
+    
+    print(f"[agent] Using existing config file: {CONFIG_PATH}")
+    
+    # Check if Nebula is running (it should be, since we start it at the beginning of run_once)
+    if is_nebula_running():
+        print("[agent] ✓ Nebula is running with existing configuration")
+        return
+    
+    # If not running and restart_on_change is False, just log status
+    if not restart_on_change:
+        print("[agent] Nebula is not running, but restart not requested")
+        return
+    
+    # Attempt to start Nebula with existing configuration
+    print("[agent] Nebula not running, attempting to start with existing configuration")
+    if restart_nebula_with_backoff():
+        print("[agent] ✓ Successfully started Nebula with existing configuration")
+    else:
+        print("[agent] ERROR: Failed to start Nebula with existing configuration")
+        print("[agent] Administrator intervention may be required")
+
+
 def run_once(restart_on_change: bool = False):
     token = os.environ["CLIENT_TOKEN"]
     server_url = os.environ.get("SERVER_URL", "http://localhost:8080")
+    
+<<<<<<< Updated upstream
+    # If existing config exists and Nebula is not running, start it first
+    # This ensures VPN connectivity even if server is temporarily unreachable
+    if CONFIG_PATH.exists() and not is_nebula_running():
+        timestamp = datetime.now().isoformat()
+        print(f"[agent] [{timestamp}] Existing config found, starting Nebula before fetching updates...")
+        
+        # Validate existing config before starting
+        if validate_config():
+            if restart_nebula_with_backoff():
+                print("[agent] Successfully started Nebula with existing config")
+            else:
+                print("[agent] Warning: Failed to start Nebula with existing config")
+        else:
+            print("[agent] Warning: Existing config validation failed, will wait for server update")
+=======
+    # Check if Nebula is already running with existing config
+    nebula_already_running = is_nebula_running()
+    has_existing_config = CONFIG_PATH.exists()
+    
+    if nebula_already_running and has_existing_config:
+        print("[agent] Nebula already running with existing config")
+>>>>>>> Stashed changes
     
     # Check for Nebula version updates first
     nebula_updated = False
@@ -658,41 +768,81 @@ def run_once(restart_on_change: bool = False):
     except Exception as e:
         print(f"[agent] Nebula update check failed: {e}")
     
+    # Fetch config with graceful fallback if server is unreachable
     _priv, pub = ensure_keypair()
-    data = fetch_config(token, server_url, pub)
-    cfg = data["config"]
-    client_cert_pem = data.get("client_cert_pem", "")
-    ca_chain_pems = data.get("ca_chain_pems", [])
     
-    config_changed = write_config_and_pki(cfg, client_cert_pem, ca_chain_pems)
-    
-    # Restart Nebula if config changed or if binary was updated
-    if restart_on_change and (config_changed or nebula_updated):
-        timestamp = datetime.now().isoformat()
-        print(f"[agent] [{timestamp}] Coordinated recovery: restarting Nebula")
+<<<<<<< Updated upstream
+    # Try to fetch and apply config from server
+    try:
+        config_changed = fetch_and_apply_config(token, server_url, pub)
         
-        if restart_nebula_with_backoff():
-            # Wait after restart, then fetch fresh config
-            print(f"[agent] Waiting {POST_RESTART_WAIT}s before fetching fresh config...")
-            time.sleep(POST_RESTART_WAIT)
+        # Restart Nebula if config changed or if binary was updated
+        if restart_on_change and (config_changed or nebula_updated):
+            handle_restart_and_fresh_config(token, server_url, pub)
             
-            try:
-                print("[agent] Fetching fresh config after restart...")
-                fresh_data = fetch_config(token, server_url, pub)
-                fresh_cfg = fresh_data["config"]
-                fresh_cert_pem = fresh_data.get("client_cert_pem", "")
-                fresh_ca_pems = fresh_data.get("ca_chain_pems", [])
+    except Exception as e:
+        # Server is unreachable - try to continue with existing config
+        handle_unreachable_server(restart_on_change)
+=======
+    try:
+        data = fetch_config(token, server_url, pub)
+        cfg = data["config"]
+        client_cert_pem = data.get("client_cert_pem", "")
+        ca_chain_pems = data.get("ca_chain_pems", [])
+        
+        config_changed = write_config_and_pki(cfg, client_cert_pem, ca_chain_pems)
+        
+        # Restart Nebula if config changed or if binary was updated
+        if restart_on_change and (config_changed or nebula_updated):
+            timestamp = datetime.now().isoformat()
+            print(f"[agent] [{timestamp}] Coordinated recovery: restarting Nebula")
+            
+            if restart_nebula_with_backoff():
+                # Wait after restart, then fetch fresh config
+                print(f"[agent] Waiting {POST_RESTART_WAIT}s before fetching fresh config...")
+                time.sleep(POST_RESTART_WAIT)
                 
-                # Check if fresh config differs from what we just wrote
-                fresh_changed = write_config_and_pki(fresh_cfg, fresh_cert_pem, fresh_ca_pems)
-                if fresh_changed:
-                    print("[agent] Fresh config differs, restarting again...")
-                    restart_nebula_with_backoff()
-            except Exception as e:
-                print(f"[agent] Failed to fetch fresh config after restart: {e}")
-                print("[agent] Continuing with existing config")
-        else:
-            print("[agent] Failed to restart Nebula")
+                try:
+                    print("[agent] Fetching fresh config after restart...")
+                    fresh_data = fetch_config(token, server_url, pub)
+                    fresh_cfg = fresh_data["config"]
+                    fresh_cert_pem = fresh_data.get("client_cert_pem", "")
+                    fresh_ca_pems = fresh_data.get("ca_chain_pems", [])
+                    
+                    # Check if fresh config differs from what we just wrote
+                    fresh_changed = write_config_and_pki(fresh_cfg, fresh_cert_pem, fresh_ca_pems)
+                    if fresh_changed:
+                        print("[agent] Fresh config differs, restarting again...")
+                        restart_nebula_with_backoff()
+                except Exception as e:
+                    print(f"[agent] Failed to fetch fresh config after restart: {e}")
+                    print("[agent] Continuing with existing config")
+            else:
+                print("[agent] Failed to restart Nebula")
+                
+    except Exception as e:
+        # Server is unreachable or config fetch failed
+        timestamp = datetime.now().isoformat()
+        print(f"[agent] [{timestamp}] Failed to fetch config from server: {e}")
+        
+        # If Nebula is already running with existing config, continue gracefully
+        if nebula_already_running and has_existing_config:
+            print(f"[agent] [{timestamp}] ✓ Server unreachable, but Nebula is running with existing config - continuing in offline mode")
+            return
+        
+        # If Nebula is not running but we have an existing config, try to start it
+        if not nebula_already_running and has_existing_config:
+            print(f"[agent] [{timestamp}] Server unreachable, attempting to start Nebula with existing config")
+            if not restart_nebula_with_backoff():
+                print(f"[agent] [{timestamp}] ERROR: Failed to start Nebula with existing config")
+                raise
+            print(f"[agent] [{timestamp}] ✓ Nebula started with existing config - operating in offline mode")
+            return
+        
+        # No existing config and can't fetch from server - this is a critical error
+        print(f"[agent] [{timestamp}] ERROR: No existing config and server unreachable - cannot start")
+        raise
+>>>>>>> Stashed changes
 
 
 def check_nebula_health() -> bool:
@@ -795,6 +945,12 @@ def run_loop_with_monitoring():
     """
     Run in continuous polling loop with process monitoring.
     This is the enhanced mode with resilient recovery.
+    
+    Behavior:
+    - On first run, starts Nebula with existing config if available (before fetching from server)
+    - Continuously polls server for config updates
+    - Monitors Nebula process health and restarts on crashes
+    - Continues running with existing config if server becomes unreachable
     """
     import threading
     
@@ -819,7 +975,9 @@ def run_loop_with_monitoring():
             # In loop mode, always restart on config changes
             run_once(restart_on_change=True)
         except Exception as e:
-            print(f"[agent] Config refresh failed: {e}")
+            timestamp = datetime.now().isoformat()
+            print(f"[agent] [{timestamp}] Config refresh failed: {e}")
+            print("[agent] Will retry on next polling interval")
             # Don't crash the loop, just log and continue
         
         # Sleep for the poll interval

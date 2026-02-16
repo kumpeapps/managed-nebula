@@ -1126,6 +1126,92 @@ def monitor_nebula_process():
         time.sleep(PROCESS_CHECK_INTERVAL)
 
 
+def fetch_and_apply_config(token: str, server_url: str, pub: bytes, config: dict) -> bool:
+    """
+    Fetch configuration from server and apply it.
+    Returns True if config changed, False otherwise.
+    Raises exceptions if fetch or write fails (caller should handle).
+    """
+    data = fetch_config(token, server_url, pub, config=config)
+    
+    config_yaml = data["config"]
+    client_cert_pem = data.get("client_cert_pem", "")
+    ca_chain_pems = data.get("ca_chain_pems", [])
+    
+    config_changed = write_config_and_pki(config_yaml, client_cert_pem, ca_chain_pems)
+    return config_changed
+
+
+def handle_restart_and_fresh_config(token: str, server_url: str, pub: bytes, config: dict, nebula_updated: bool, config_changed: bool) -> None:
+    """
+    Restart Nebula and fetch fresh config after restart.
+    Handles post-restart config fetch and potential second restart if config differs.
+    """
+    timestamp = datetime.now().isoformat()
+    logger.info("[%s] Coordinated recovery: restarting Nebula", timestamp)
+    
+    if nebula_updated and not config_changed:
+        logger.info("Restarting Nebula to use updated binary")
+    
+    if not restart_nebula_with_backoff():
+        logger.error("Failed to restart Nebula")
+        return
+    
+    # Wait after restart, then fetch fresh config
+    logger.info("Waiting %ds before fetching fresh config...", POST_RESTART_WAIT)
+    time.sleep(POST_RESTART_WAIT)
+    
+    try:
+        logger.info("Fetching fresh config after restart...")
+        fresh_data = fetch_config(token, server_url, pub, config=config)
+        fresh_cfg = fresh_data["config"]
+        fresh_cert_pem = fresh_data.get("client_cert_pem", "")
+        fresh_ca_pems = fresh_data.get("ca_chain_pems", [])
+        
+        # Check if fresh config differs from what we just wrote
+        fresh_changed = write_config_and_pki(fresh_cfg, fresh_cert_pem, fresh_ca_pems)
+        if fresh_changed:
+            logger.info("Fresh config differs, restarting again...")
+            restart_nebula_with_backoff()
+    except Exception as e:
+        logger.error("Failed to fetch fresh config after restart: %s", e)
+        logger.info("Continuing with existing config")
+
+
+def handle_unreachable_server(restart_on_change: bool) -> bool:
+    """
+    Handle server unreachable scenario by using existing configuration.
+    Attempts to start Nebula if restart_on_change is True and it's not running.
+    Returns True if handled successfully, False otherwise.
+    """
+    timestamp = datetime.now().isoformat()
+    logger.warning("[%s] WARNING: Unable to reach management server", timestamp)
+    logger.info("Continuing with existing configuration")
+    
+    # Check if we have a valid config to use
+    if not CONFIG_PATH.exists():
+        logger.error("ERROR: No existing config file found and server is unreachable")
+        logger.error("Cannot start Nebula without configuration")
+        return False
+    
+    logger.info("Using existing config file: %s", CONFIG_PATH)
+    
+    if not restart_on_change:
+        return True
+    
+    if is_nebula_running():
+        logger.info("Nebula is running with existing configuration")
+        return True
+    
+    logger.info("Attempting to start Nebula with existing configuration")
+    if restart_nebula_with_backoff():
+        logger.info("Successfully started Nebula with existing configuration")
+        return True
+    else:
+        logger.error("Failed to start Nebula with existing configuration")
+        return False
+
+
 def run_once(restart_on_change: bool = False) -> bool:
     """Run single configuration fetch and update cycle"""
     # Load full config
@@ -1151,60 +1237,33 @@ def run_once(restart_on_change: bool = False) -> bool:
         if nebula_updated:
             logger.info("Nebula was updated - configuration fetch will use new version")
             restart_on_change = True  # Force restart after upgrade
-        
-        # Always ensure wintun.dll is present (required for Nebula to work on Windows)
-        wintun_ok = ensure_wintun_dll()
-        if not wintun_ok:
-            logger.error(
-                "Failed to ensure wintun.dll is present; Nebula cannot be started on Windows. "
-                "Aborting this run and leaving existing state unchanged."
-            )
-            return False
-        
-        _priv, pub = ensure_keypair()
-        data = fetch_config(token, server_url, pub, config=cfg)
-        
-        config_yaml = data["config"]
-        client_cert_pem = data.get("client_cert_pem", "")
-        ca_chain_pems = data.get("ca_chain_pems", [])
-        
-        config_changed = write_config_and_pki(config_yaml, client_cert_pem, ca_chain_pems)
+    except Exception as e:
+        logger.warning("Nebula update check failed: %s", e)
+    
+    # Always ensure wintun.dll is present (required for Nebula to work on Windows)
+    wintun_ok = ensure_wintun_dll()
+    if not wintun_ok:
+        logger.error(
+            "Failed to ensure wintun.dll is present; Nebula cannot be started on Windows. "
+            "Aborting this run and leaving existing state unchanged."
+        )
+        return False
+    
+    _priv, pub = ensure_keypair()
+    
+    # Try to fetch and apply config from server
+    try:
+        config_changed = fetch_and_apply_config(token, server_url, pub, config=cfg)
         
         # Restart Nebula if config changed or if binary was updated
         if restart_on_change and (config_changed or nebula_updated):
-            timestamp = datetime.now().isoformat()
-            logger.info("[%s] Coordinated recovery: restarting Nebula", timestamp)
-            
-            if nebula_updated and not config_changed:
-                logger.info("Restarting Nebula to use updated binary")
-            
-            if restart_nebula_with_backoff():
-                # Wait after restart, then fetch fresh config
-                logger.info("Waiting %ds before fetching fresh config...", POST_RESTART_WAIT)
-                time.sleep(POST_RESTART_WAIT)
-                
-                try:
-                    logger.info("Fetching fresh config after restart...")
-                    fresh_data = fetch_config(token, server_url, pub, config=cfg)
-                    fresh_cfg = fresh_data["config"]
-                    fresh_cert_pem = fresh_data.get("client_cert_pem", "")
-                    fresh_ca_pems = fresh_data.get("ca_chain_pems", [])
-                    
-                    # Check if fresh config differs from what we just wrote
-                    fresh_changed = write_config_and_pki(fresh_cfg, fresh_cert_pem, fresh_ca_pems)
-                    if fresh_changed:
-                        logger.info("Fresh config differs, restarting again...")
-                        restart_nebula_with_backoff()
-                except Exception as e:
-                    logger.error("Failed to fetch fresh config after restart: %s", e)
-                    logger.info("Continuing with existing config")
-            else:
-                logger.error("Failed to restart Nebula")
+            handle_restart_and_fresh_config(token, server_url, pub, cfg, nebula_updated, config_changed)
         
         return True
+        
     except Exception as e:
-        logger.error("Configuration fetch failed: %s", e)
-        return False
+        # Server is unreachable - try to continue with existing config
+        return handle_unreachable_server(restart_on_change)
 
 
 def run_loop() -> None:
@@ -1248,7 +1307,9 @@ def run_loop_with_monitoring() -> None:
             # In loop mode, always restart on config changes
             run_once(restart_on_change=True)
         except Exception as e:
-            logger.error("Config refresh failed: %s", e)
+            timestamp = datetime.now().isoformat()
+            logger.error("[%s] Config refresh failed: %s", timestamp, e)
+            logger.info("Will retry on next polling interval")
             # Don't crash the loop, just log and continue
         
         # Sleep for the poll interval

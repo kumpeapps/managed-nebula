@@ -32,6 +32,7 @@ extension FileManager {
         static let certificate = FileManager.managedNebulaDirectory.appendingPathComponent("host.crt")
         static let caCertificate = FileManager.managedNebulaDirectory.appendingPathComponent("ca.crt")
         static let logFile = FileManager.managedNebulaLogsDirectory.appendingPathComponent("nebula.log")
+        static let cachedConfigFile = FileManager.managedNebulaDirectory.appendingPathComponent("cached_config.json")
     }
 }
 
