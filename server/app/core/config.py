@@ -28,4 +28,7 @@ class Settings(BaseModel):
     github_token: str = os.getenv("GITHUB_TOKEN", "")
 
 
+# Default Nebula version used across the application
+DEFAULT_NEBULA_VERSION = "1.10.3"
+
 settings = Settings()

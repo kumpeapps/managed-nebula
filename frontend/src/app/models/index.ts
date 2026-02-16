@@ -256,6 +256,20 @@ export interface NebulaVersionsResponse {
   versions: NebulaVersionInfo[];  // Alias for available_versions
 }
 
+export interface NebulaInstallationStatus {
+  installed_version: string | null;
+  configured_version: string;
+  is_up_to_date: boolean;
+  message: string;
+}
+
+export interface NebulaInstallationResponse {
+  success: boolean;
+  message: string;
+  installed_version: string | null;
+  previous_version: string | null;
+}
+
 export interface DockerComposeTemplate {
   template: string;
 }

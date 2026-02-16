@@ -14,8 +14,8 @@ PKG_VERSION="${VERSION%%-*}"
 BUNDLE_ID="com.managednebula.client"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 DIST_DIR="${SCRIPT_DIR}/dist"
-# Use NEBULA_VERSION from environment if provided, otherwise default to v1.10.0
-NEBULA_VERSION="${NEBULA_VERSION:-v1.10.0}"
+# Use NEBULA_VERSION from environment if provided, otherwise default to v1.10.3
+NEBULA_VERSION="${NEBULA_VERSION:-v1.10.3}"
 
 echo "=== ManagedNebula Installer Creator ==="
 echo "VERSION: ${VERSION}"
