@@ -11,7 +11,7 @@ PyYAML==6.0.3
 pywin32==311
 
 # For building standalone executable
-pyinstaller==6.17.0
+pyinstaller==6.19.0
 
 # Cryptography (for certificate handling)
 cryptography>=42.0.0
