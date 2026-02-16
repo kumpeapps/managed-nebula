@@ -3,7 +3,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { delay } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
-import { Client, Group, FirewallRuleset, IPPool, IPGroup, AvailableIP, CACertificate, User, ClientUpdateRequest, ClientCreateRequest, ClientCertificate, ClientConfigDownload, Settings, SettingsUpdate, DockerComposeTemplate, PlaceholdersResponse, Permission, VersionResponse, VersionStatusResponse, NebulaVersionsResponse } from '../models';
+import { Client, Group, FirewallRuleset, IPPool, IPGroup, AvailableIP, CACertificate, User, ClientUpdateRequest, ClientCreateRequest, ClientCertificate, ClientConfigDownload, Settings, SettingsUpdate, DockerComposeTemplate, PlaceholdersResponse, Permission, VersionResponse, VersionStatusResponse, NebulaVersionsResponse, NebulaInstallationStatus, NebulaInstallationResponse } from '../models';
 
 @Injectable({
   providedIn: 'root'
@@ -322,6 +322,14 @@ export class ApiService {
   // Nebula version management endpoints
   getNebulaVersions(): Observable<NebulaVersionsResponse> {
     return this.applyDelay(this.http.get<NebulaVersionsResponse>(`${this.apiUrl}/nebula/versions`, { withCredentials: true }));
+  }
+
+  getNebulaInstallationStatus(): Observable<NebulaInstallationStatus> {
+    return this.applyDelay(this.http.get<NebulaInstallationStatus>(`${this.apiUrl}/nebula/installation-status`, { withCredentials: true }));
+  }
+
+  installNebulaVersion(): Observable<NebulaInstallationResponse> {
+    return this.applyDelay(this.http.post<NebulaInstallationResponse>(`${this.apiUrl}/nebula/install`, {}, { withCredentials: true }));
   }
 
   getVersionCacheStatus(): Observable<any> {

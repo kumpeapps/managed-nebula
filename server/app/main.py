@@ -13,6 +13,7 @@ from .services.schema_sync import sync_schema
 from .db import engine, Base
 from .db import AsyncSessionLocal
 from .models import GlobalSettings, IPAssignment, IPPool
+from .core.config import DEFAULT_NEBULA_VERSION
 from sqlalchemy import select
 
 
@@ -47,6 +48,9 @@ async def lifespan(app: FastAPI):
     
     # Bootstrap defaults
     await bootstrap_defaults()
+    
+    # Ensure correct Nebula version is installed
+    await ensure_nebula_version()
     
     # Start scheduler (must be done after event loop is running)
     from .core.scheduler import start_scheduler
@@ -187,6 +191,37 @@ async def bootstrap_defaults():
         traceback.print_exc()
         print("[bootstrap] You can manually create an admin using:")
         print("[bootstrap]   docker exec <container> python manage.py create-admin <email>")
+
+
+async def ensure_nebula_version():
+    """Ensure the configured Nebula version is installed on server startup."""
+    try:
+        async with AsyncSessionLocal() as session:
+            from .services.nebula_installer import NebulaInstaller
+            
+            # Get configured version from settings
+            settings_row = (await session.execute(select(GlobalSettings))).scalars().first()
+            if not settings_row:
+                print("[nebula-check] No settings found, skipping version check")
+                return
+            
+            configured_version = getattr(settings_row, 'nebula_version', DEFAULT_NEBULA_VERSION).lstrip('v')
+            
+            # Use the service's ensure_version_installed method to avoid duplicating logic
+            installer = NebulaInstaller()
+            print(f"[nebula-check] Checking Nebula installation (configured version: {configured_version})...")
+            success, message = await installer.ensure_version_installed(configured_version)
+            
+            if success:
+                print(f"[nebula-check] ✅ {message}")
+            else:
+                print(f"[nebula-check] ⚠️  {message}")
+                
+    except Exception as e:
+        print(f"[nebula-check] ⚠️  Failed to check/install Nebula version: {e}")
+        import traceback
+        traceback.print_exc()
+        print("[nebula-check] Server will continue, but nebula-cert commands may fail")
 
 
 def create_app() -> FastAPI:

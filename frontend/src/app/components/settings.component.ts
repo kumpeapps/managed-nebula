@@ -4,6 +4,7 @@ import { ApiService } from '../services/api.service';
 import { NotificationService } from '../services/notification.service';
 import { Settings, VersionResponse } from '../models';
 import { environment } from '../../environments/environment';
+import { NebulaInstallationStatus, NebulaInstallationResponse } from '../models';
 
 @Component({
     selector: 'app-settings',
@@ -121,6 +122,46 @@ import { environment } from '../../environments/environment';
                   </option>
                 </select>
               </label>
+            </div>
+            
+            <!-- Nebula Installation Status -->
+            <div class="setting-item" *ngIf="nebulaInstallationStatus">
+              <div class="installation-status-box" [ngClass]="{
+                'status-success': nebulaInstallationStatus.is_up_to_date,
+                'status-warning': !nebulaInstallationStatus.is_up_to_date
+              }">
+                <div class="status-header">
+                  <strong>Server Installation Status</strong>
+                </div>
+                <div class="status-details">
+                  <div class="status-row">
+                    <span class="status-label">Installed Version:</span>
+                    <span class="status-value">{{ nebulaInstallationStatus.installed_version || 'Not installed' }}</span>
+                  </div>
+                  <div class="status-row">
+                    <span class="status-label">Configured Version:</span>
+                    <span class="status-value">{{ nebulaInstallationStatus.configured_version }}</span>
+                  </div>
+                  <div class="status-row">
+                    <span class="status-label">Status:</span>
+                    <span class="status-value">
+                      <span *ngIf="nebulaInstallationStatus.is_up_to_date" style="color: green;">✓ Up to date</span>
+                      <span *ngIf="!nebulaInstallationStatus.is_up_to_date" style="color: orange;">⚠ Version mismatch</span>
+                    </span>
+                  </div>
+                </div>
+                <button 
+                  *ngIf="!nebulaInstallationStatus.is_up_to_date"
+                  class="install-nebula-btn"
+                  (click)="installNebulaVersion()"
+                  [disabled]="isInstallingNebula">
+                  {{ isInstallingNebula ? '⏳ Installing...' : '🔧 Install/Update Now' }}
+                </button>
+                <div class="info-text info-text-padded">
+                  <strong>Note:</strong> The server automatically installs the configured version on startup and when the version setting is changed.
+                  Use this button only if you need to manually trigger installation.
+                </div>
+              </div>
             </div>
             
             <div class="setting-item">
@@ -716,6 +757,100 @@ import { environment } from '../../environments/environment';
       background: #ccc;
       cursor: not-allowed;
     }
+    
+    /* Nebula Installation Status Styles */
+    .installation-status-box {
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 1.25rem;
+      border: 2px solid #e0e0e0;
+      margin-top: 1rem;
+    }
+    
+    .installation-status-box.status-success {
+      border-color: #4CAF50;
+      background: #f1f8f4;
+    }
+    
+    .installation-status-box.status-warning {
+      border-color: #ff9800;
+      background: #fff8f0;
+    }
+    
+    .status-header {
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid #ddd;
+    }
+    
+    .status-header strong {
+      font-size: 1rem;
+      color: #333;
+    }
+    
+    .status-details {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .status-label {
+      font-weight: 600;
+      color: #666;
+      font-size: 0.9rem;
+    }
+    
+    .status-value {
+      font-family: 'Courier New', monospace;
+      font-weight: 600;
+      color: #333;
+      font-size: 0.95rem;
+    }
+    
+    .install-nebula-btn {
+      background: #ff9800;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    
+    .install-nebula-btn:hover:not(:disabled) {
+      background: #f57c00;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    
+    .install-nebula-btn:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    
+    .info-text {
+      font-size: 0.85em;
+      color: #666;
+      line-height: 1.4;
+    }
+    
+    .info-text-padded {
+      margin-top: 8px;
+    }
   `],
     standalone: false
 })
@@ -727,7 +862,7 @@ export class SettingsComponent implements OnInit {
     docker_compose_template: '',
     externally_managed_users: false,
     cert_version: 'v1',
-    nebula_version: '1.9.7',
+    nebula_version: '1.10.3',
     v2_support_available: false
   };
   isAdmin = this.authService.isAdmin();
@@ -741,6 +876,8 @@ export class SettingsComponent implements OnInit {
   latestStableVersion: string = '';
   versionCacheStatus: any = null;
   isRefreshingCache: boolean = false;
+  nebulaInstallationStatus: NebulaInstallationStatus | null = null;
+  isInstallingNebula: boolean = false;
 
   constructor(
     private authService: AuthService,
@@ -758,6 +895,7 @@ export class SettingsComponent implements OnInit {
     this.loadVersions();
     this.loadNebulaVersions();
     this.loadVersionCacheStatus();
+    this.loadNebulaInstallationStatus();
   }
   
   loadVersionCacheStatus(): void {
@@ -846,6 +984,8 @@ export class SettingsComponent implements OnInit {
         this.templateOriginal = updated.docker_compose_template;
         this.notificationService.notify('Settings saved successfully', 'success');
         this.updatePreview();
+        // Reload installation status after save completes
+        this.loadNebulaInstallationStatus();
       },
       error: (err: any) => {
         console.error('Failed to save settings:', err);
@@ -925,9 +1065,52 @@ export class SettingsComponent implements OnInit {
 
   onNebulaVersionChange(): void {
     // Save will update v2_support_available from server response
+    // Installation status will be reloaded automatically in saveSettings() success callback
   }
 
   onCertVersionChange(): void {
     // Save will validate and update v2_support_available from server response
+  }
+
+  loadNebulaInstallationStatus(): void {
+    this.apiService.getNebulaInstallationStatus().subscribe({
+      next: (status: NebulaInstallationStatus) => {
+        this.nebulaInstallationStatus = status;
+      },
+      error: (err: any) => {
+        console.error('Failed to load Nebula installation status:', err);
+        // Don't show error notification, as this is a non-critical check
+      }
+    });
+  }
+
+  installNebulaVersion(): void {
+    if (this.isInstallingNebula) {
+      return;
+    }
+
+    // Use the configured version from the installation status, not unsaved local changes
+    const versionToInstall = this.nebulaInstallationStatus?.configured_version || this.settings.nebula_version;
+    const confirmMsg = `This will install/update Nebula binaries on the server to the currently configured version (${versionToInstall}). Continue?`;
+    if (!confirm(confirmMsg)) {
+      return;
+    }
+
+    this.isInstallingNebula = true;
+    this.notificationService.notify(`Installing Nebula ${versionToInstall}...`, 'info');
+
+    this.apiService.installNebulaVersion().subscribe({
+      next: (response: NebulaInstallationResponse) => {
+        this.isInstallingNebula = false;
+        this.notificationService.notify(response.message, 'success');
+        this.loadNebulaInstallationStatus();
+      },
+      error: (err: any) => {
+        this.isInstallingNebula = false;
+        const errorMsg = err.error?.detail || 'Failed to install Nebula version';
+        console.error('Nebula installation failed:', err);
+        this.notificationService.notify(errorMsg, 'error');
+      }
+    });
   }
 }
