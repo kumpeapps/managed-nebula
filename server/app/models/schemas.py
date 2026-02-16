@@ -399,6 +399,22 @@ class VersionCacheResponse(BaseModel):
     cache_age_hours: Optional[float] = None
 
 
+class NebulaInstallationStatusResponse(BaseModel):
+    """Response model for Nebula installation status."""
+    installed_version: Optional[str] = None
+    configured_version: str
+    is_up_to_date: bool
+    message: str
+
+
+class NebulaInstallationResponse(BaseModel):
+    """Response model for Nebula installation operation."""
+    success: bool
+    message: str
+    installed_version: Optional[str] = None
+    previous_version: Optional[str] = None
+
+
 # ============ User Schemas ============
 
 class UserCreate(BaseModel):
@@ -473,7 +489,7 @@ class SettingsResponse(BaseModel):
     docker_compose_template: str
     externally_managed_users: bool
     cert_version: str = "v1"  # v1, v2, or hybrid
-    nebula_version: str = "1.9.7"  # Nebula binary version
+    nebula_version: str = "1.10.3"  # Nebula binary version
     v2_support_available: bool = False  # Computed: True if nebula_version >= 1.10.0
 
 class SettingsUpdate(BaseModel):
@@ -483,6 +499,7 @@ class SettingsUpdate(BaseModel):
     docker_compose_template: Optional[str] = None
     cert_version: Optional[str] = None  # v1, v2, or hybrid
     nebula_version: Optional[str] = None  # Nebula binary version
+    auto_install_nebula: Optional[bool] = True  # Auto-install Nebula when version changes
 
 
 class DockerComposeTemplateResponse(BaseModel):

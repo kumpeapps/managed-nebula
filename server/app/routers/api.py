@@ -66,6 +66,8 @@ from ..models.schemas import (
     NebulaVersionInfoResponse,
     NebulaVersionsResponse,
     VersionCacheResponse,
+    NebulaInstallationStatusResponse,
+    NebulaInstallationResponse,
     ClientCreate,
     ClientPermissionGrant,
     ClientPermissionResponse,
@@ -87,7 +89,7 @@ from ..services.config_builder import build_nebula_config
 from ..services.ip_allocator import ensure_default_pool, allocate_ip_from_pool
 from ..services.token_manager import generate_client_token, get_token_prefix, get_token_preview
 from ..core.auth import require_permission, get_current_user
-from ..core.config import settings
+from ..core.config import settings, DEFAULT_NEBULA_VERSION
 from ..core.github_verification import verify_github_signature
 from ..models.user import User
 from ..models.client import Group, FirewallRule, IPGroup, client_groups, client_firewall_rulesets
@@ -436,7 +438,7 @@ async def get_settings(session: AsyncSession = Depends(get_session), user: User 
         await session.refresh(row)
     
     # Check if v2 support is available based on nebula_version
-    nebula_ver = getattr(row, 'nebula_version', '1.9.7')
+    nebula_ver = getattr(row, 'nebula_version', DEFAULT_NEBULA_VERSION)
     v2_available = _is_v2_compatible(nebula_ver)
     
     return SettingsResponse(
@@ -487,14 +489,20 @@ async def update_settings(body: SettingsUpdate, session: AsyncSession = Depends(
         row.docker_compose_template = body.docker_compose_template
     
     # Update nebula_version if provided
+    nebula_version_changed = False
+    old_nebula_version = getattr(row, 'nebula_version', DEFAULT_NEBULA_VERSION)
     if body.nebula_version is not None:
+        new_version = body.nebula_version.lstrip('v')
+        old_version = old_nebula_version.lstrip('v')
+        if new_version != old_version:
+            nebula_version_changed = True
         row.nebula_version = body.nebula_version
     
     # Update cert_version if provided, with validation
     if body.cert_version is not None:
         # Validate that v2/hybrid requires compatible Nebula version on server
         if body.cert_version in ['v2', 'hybrid']:
-            current_nebula_version = body.nebula_version if body.nebula_version is not None else getattr(row, 'nebula_version', '1.9.7')
+            current_nebula_version = body.nebula_version if body.nebula_version is not None else getattr(row, 'nebula_version', DEFAULT_NEBULA_VERSION)
             if not _is_v2_compatible(current_nebula_version):
                 raise HTTPException(
                     status_code=400,
@@ -525,8 +533,30 @@ async def update_settings(body: SettingsUpdate, session: AsyncSession = Depends(
     await session.commit()
     await session.refresh(row)
     
+    # Auto-install Nebula if version changed and auto_install_nebula is True
+    if nebula_version_changed and body.auto_install_nebula is not False:
+        from ..services.nebula_installer import NebulaInstaller
+        
+        new_version = getattr(row, 'nebula_version', DEFAULT_NEBULA_VERSION).lstrip('v')
+        logger.info(
+            f"Nebula version changed from {old_nebula_version} to {new_version}, "
+            f"triggering automatic installation (requested by user {user.username})"
+        )
+        
+        installer = NebulaInstaller()
+        try:
+            success, message = await installer.download_and_install(new_version, force=True)
+            if success:
+                logger.info(f"Successfully auto-installed Nebula {new_version}: {message}")
+            else:
+                logger.warning(f"Auto-install failed (non-fatal): {message}")
+                # Don't fail the settings update if installation fails
+        except Exception as e:
+            logger.error(f"Auto-install failed with exception (non-fatal): {e}", exc_info=True)
+            # Don't fail the settings update if installation fails
+    
     # Compute v2 support availability
-    nebula_ver = getattr(row, 'nebula_version', '1.9.7')
+    nebula_ver = getattr(row, 'nebula_version', DEFAULT_NEBULA_VERSION)
     v2_available = _is_v2_compatible(nebula_ver)
     
     return SettingsResponse(
@@ -723,7 +753,7 @@ async def get_nebula_versions(
     
     # Get current version from settings
     row = (await session.execute(select(GlobalSettings))).scalars().first()
-    current_version = getattr(row, 'nebula_version', '1.9.7') if row else '1.9.7'
+    current_version = getattr(row, 'nebula_version', DEFAULT_NEBULA_VERSION) if row else DEFAULT_NEBULA_VERSION
     
     # Fetch available versions from GitHub
     version_service = NebulaVersionService(github_token=settings.github_token)
@@ -758,6 +788,101 @@ async def get_nebula_versions(
         latest_stable=latest_stable,
         versions=version_responses  # Alias for frontend
     )
+
+
+@router.get("/nebula/installation-status", response_model=NebulaInstallationStatusResponse)
+async def get_nebula_installation_status(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user)
+):
+    """
+    Get the current Nebula installation status on the server.
+    
+    Returns information about the installed version vs configured version.
+    """
+    from ..services.nebula_installer import NebulaInstaller
+    
+    # Get configured version from settings
+    row = (await session.execute(select(GlobalSettings))).scalars().first()
+    configured_version = getattr(row, 'nebula_version', DEFAULT_NEBULA_VERSION) if row else DEFAULT_NEBULA_VERSION
+    configured_version = configured_version.lstrip('v')
+    
+    # Get installed version
+    installer = NebulaInstaller()
+    installed_version = installer.get_installed_version()
+    
+    # Check if up to date
+    is_up_to_date = installed_version == configured_version if installed_version else False
+    
+    if installed_version is None:
+        message = "Nebula is not installed on this server"
+    elif is_up_to_date:
+        message = f"Nebula {installed_version} is installed and up to date"
+    else:
+        message = f"Nebula version mismatch: installed={installed_version}, configured={configured_version}"
+    
+    return NebulaInstallationStatusResponse(
+        installed_version=installed_version,
+        configured_version=configured_version,
+        is_up_to_date=is_up_to_date,
+        message=message
+    )
+
+
+@router.post("/nebula/install", response_model=NebulaInstallationResponse)
+async def install_nebula_version(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_permission("settings", "update"))
+):
+    """
+    Install or update Nebula binaries to match the configured version.
+    
+    This endpoint downloads and installs the Nebula version specified in 
+    GlobalSettings.nebula_version. Requires admin permissions.
+    
+    The installation process:
+    1. Downloads the specified version from GitHub releases
+    2. Verifies the downloaded binary
+    3. Backs up existing binaries (if any)
+    4. Installs new binaries to /usr/local/bin
+    5. Sets appropriate permissions
+    """
+    from ..services.nebula_installer import NebulaInstaller
+    
+    # Get configured version from settings
+    row = (await session.execute(select(GlobalSettings))).scalars().first()
+    if not row:
+        raise HTTPException(
+            status_code=503,
+            detail="Settings not initialized"
+        )
+    
+    configured_version = getattr(row, 'nebula_version', DEFAULT_NEBULA_VERSION)
+    configured_version = configured_version.lstrip('v')
+    
+    # Get current installed version
+    installer = NebulaInstaller()
+    previous_version = installer.get_installed_version()
+    
+    # Perform installation
+    logger.info(f"Admin user {user.username} initiated Nebula installation: {configured_version}")
+    success, message = await installer.download_and_install(configured_version, force=True)
+    
+    if success:
+        # Verify installation
+        new_version = installer.get_installed_version()
+        return NebulaInstallationResponse(
+            success=True,
+            message=message,
+            installed_version=new_version,
+            previous_version=previous_version
+        )
+    else:
+        logger.error(f"Nebula installation failed: {message}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Installation failed: {message}"
+        )
 
 
 @router.post("/client/config")
