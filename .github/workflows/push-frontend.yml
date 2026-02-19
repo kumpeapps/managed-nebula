@@ -25,8 +25,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-push-frontend:
-    # On releases: run if title has "frontend" (any case) or no platform keywords specified
+  build-frontend:
+    # Build on GitHub's hosted runners (better ARM64 emulation)
     if: >
       github.event_name != 'release' || (
         contains(github.event.release.name, 'frontend') || contains(github.event.release.name, 'Frontend') || (
@@ -37,8 +37,78 @@ jobs:
           !contains(github.event.release.name, 'client') && !contains(github.event.release.name, 'Client')
         )
       )
-    timeout-minutes: 120
-    runs-on: vm-prod-github-runner-cpu8
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      version: ${{ steps.get_version.outputs.latest_version }}
+      branch: ${{ steps.get_version.outputs.branch_name }}
+      tag_name: ${{ steps.get_version.outputs.tag_name }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Set up QEMU (multi-arch emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Get Latest Release Version
+        id: get_version
+        run: |
+          # Handle both branches and tags
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            # For tags, use the tag as version
+            LATEST_RELEASE="${GITHUB_REF#refs/tags/}"
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+            BRANCH_NAME=""
+            echo "Triggered by tag: ${LATEST_RELEASE}"
+          else
+            # For branches, find latest release
+            BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+            TAG_NAME=""
+            echo "Current branch: ${BRANCH_NAME}"
+            
+            LATEST_RELEASE=$(curl -s https://api.github.com/repos/kumpeapps/managed-nebula/releases | \
+              jq -r --arg branch "$BRANCH_NAME" '[
+                .[] | select(.target_commitish == $branch or .target_commitish == "main")
+              ] | .[0].tag_name // "v1.0.0"')
+            
+            echo "Latest release version for ${BRANCH_NAME}: ${LATEST_RELEASE}"
+          fi
+          
+          echo "latest_version=${LATEST_RELEASE}" >> $GITHUB_OUTPUT
+          echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Build Multi-arch Images (with GitHub cache)
+        run: |
+          echo "Building for platforms: $BUILD_PLATFORMS on GitHub hosted runner"
+          echo "Images will be cached and pushed from self-hosted runner with Harbor access"
+          
+          # Determine cache scope based on ref
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            CACHE_SCOPE="frontend-tag"
+          elif [[ "${GITHUB_REF}" == refs/heads/main ]]; then
+            CACHE_SCOPE="frontend-main"
+          else
+            CACHE_SCOPE="frontend-dev"
+          fi
+          
+          docker buildx build \
+            --build-arg VERSION=${{ steps.get_version.outputs.latest_version }} \
+            --cache-from type=gha,scope=${CACHE_SCOPE} \
+            --cache-to type=gha,mode=max,scope=${CACHE_SCOPE} \
+            --platform $BUILD_PLATFORMS \
+            ./frontend
+          
+          echo "✅ Build completed and cached. Self-hosted runner will push to Harbor."
+
+  push-to-harbor:
+    # Push on self-hosted runner (has Harbor network access)
+    needs: build-frontend
+    runs-on: vm-prod-github-runner
+    timeout-minutes: 30
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
@@ -70,59 +140,34 @@ jobs:
           echo "Failed to login to Harbor after 3 attempts" >&2
           exit 1
 
-      - name: Get Latest Release Version
-        id: get_version
+      - name: Push Image (dev-latest)
+        if: needs.build-frontend.outputs.branch == 'dev'
         run: |
-          # Handle both branches and tags
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            # For tags, use the tag as version
-            LATEST_RELEASE="${GITHUB_REF#refs/tags/}"
-            echo "Triggered by tag: ${LATEST_RELEASE}"
-          else
-            # For branches, find latest release
-            BRANCH_NAME="${GITHUB_REF#refs/heads/}"
-            echo "Current branch: ${BRANCH_NAME}"
-            
-            LATEST_RELEASE=$(curl -s https://api.github.com/repos/kumpeapps/managed-nebula/releases | \
-              jq -r --arg branch "$BRANCH_NAME" '[
-                .[] | select(.target_commitish == $branch or .target_commitish == "main")
-              ] | .[0].tag_name // "v1.0.0"')
-            
-            echo "Latest release version for ${BRANCH_NAME}: ${LATEST_RELEASE}"
-          fi
-          
-          echo "latest_version=${LATEST_RELEASE}" >> $GITHUB_OUTPUT
-
-      - name: Build and Push Image (dev-latest)
-        if: github.ref == 'refs/heads/dev'
-        run: |
-          echo "Building for platforms: $BUILD_PLATFORMS"
+          echo "Pushing dev-latest to Harbor using cached build from GitHub runner"
           docker buildx build --push \
-            --build-arg VERSION=${{ steps.get_version.outputs.latest_version }} \
+            --build-arg VERSION=${{ needs.build-frontend.outputs.version }} \
             --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:dev-latest \
             --cache-from type=gha,scope=frontend-dev \
-            --cache-to type=gha,mode=max,scope=frontend-dev \
             --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:dev-latest \
             --provenance=false \
             --platform $BUILD_PLATFORMS ./frontend
 
-      - name: Build and Push Image (latest)
-        if: github.ref == 'refs/heads/main'
+      - name: Push Image (latest)
+        if: needs.build-frontend.outputs.branch == 'main'
         run: |
-          echo "Building for platforms: $BUILD_PLATFORMS"
+          echo "Pushing latest to Harbor using cached build from GitHub runner"
           docker buildx build --push \
-            --build-arg VERSION=${{ steps.get_version.outputs.latest_version }} \
+            --build-arg VERSION=${{ needs.build-frontend.outputs.version }} \
             --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
             --cache-from type=gha,scope=frontend-main \
-            --cache-to type=gha,mode=max,scope=frontend-main \
             --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
             --provenance=false \
             --platform $BUILD_PLATFORMS ./frontend
 
-      - name: Build and Push Image (tag)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Push Image (tag)
+        if: needs.build-frontend.outputs.tag_name != ''
         run: |
-          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          TAG_NAME="${{ needs.build-frontend.outputs.tag_name }}"
           
           # Check if this is a pre-release tag (contains alpha, beta, or rc)
           if [[ "$TAG_NAME" =~ (alpha|beta|rc) ]]; then
@@ -136,26 +181,24 @@ jobs:
             PUSH_LATEST=true
           fi
           
+          echo "Pushing tagged image to Harbor using cached build from GitHub runner"
           # Build tags based on release type
-          echo "Building for platforms: $BUILD_PLATFORMS"
           if [ "$PUSH_LATEST" = true ]; then
-            echo "Building and pushing tags: $TAG_NAME and latest"
+            echo "Pushing tags: $TAG_NAME and latest"
             docker buildx build --push \
               --build-arg VERSION="$TAG_NAME" \
               --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:"$TAG_NAME" \
               --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
-              --cache-from type=gha,scope=frontend-main \
-              --cache-to type=gha,mode=max,scope=frontend-tag \
+              --cache-from type=gha,scope=frontend-tag \
               --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
               --provenance=false \
               --platform $BUILD_PLATFORMS ./frontend
           else
-            echo "Building and pushing version tag only: $TAG_NAME"
+            echo "Pushing version tag only: $TAG_NAME"
             docker buildx build --push \
               --build-arg VERSION="$TAG_NAME" \
               --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:"$TAG_NAME" \
-              --cache-from type=gha,scope=frontend-main \
-              --cache-to type=gha,mode=max,scope=frontend-tag \
+              --cache-from type=gha,scope=frontend-tag \
               --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
               --provenance=false \
               --platform $BUILD_PLATFORMS ./frontend
