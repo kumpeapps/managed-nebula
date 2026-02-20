@@ -17,8 +17,10 @@ on:
 env:
   DOCKER_CLIENT_TIMEOUT: 300
   COMPOSE_HTTP_TIMEOUT: 300
-  # Multi-arch build - ARM64 builds take 15-20 minutes in QEMU emulation
-  BUILD_PLATFORMS: "linux/amd64,linux/arm64"
+  # Multi-arch: For dev/main branches, build AMD64 only (fast). For tags/releases, build both architectures.
+  # ARM64 emulation on self-hosted runner has network timeouts during npm ci (~19 min vs 40s for AMD64)
+  BUILD_PLATFORMS_DEV: "linux/amd64"
+  BUILD_PLATFORMS_RELEASE: "linux/amd64,linux/arm64"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -83,23 +85,28 @@ jobs:
 
       - name: Build Multi-arch Images (with GitHub cache)
         run: |
-          echo "Building for platforms: $BUILD_PLATFORMS on GitHub hosted runner"
-          echo "Images will be cached and pushed from self-hosted runner with Harbor access"
-          
-          # Determine cache scope based on ref
+          # Determine platforms and cache scope based on ref
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            PLATFORMS="$BUILD_PLATFORMS_RELEASE"
             CACHE_SCOPE="frontend-tag"
+            echo "Building RELEASE multi-arch for platforms: $PLATFORMS"
           elif [[ "${GITHUB_REF}" == refs/heads/main ]]; then
+            PLATFORMS="$BUILD_PLATFORMS_DEV"
             CACHE_SCOPE="frontend-main"
+            echo "Building MAIN (AMD64 only) for platforms: $PLATFORMS"
           else
+            PLATFORMS="$BUILD_PLATFORMS_DEV"
             CACHE_SCOPE="frontend-dev"
+            echo "Building DEV (AMD64 only) for platforms: $PLATFORMS"
           fi
+          
+          echo "Images will be cached and pushed from self-hosted runner with Harbor access"
           
           docker buildx build \
             --build-arg VERSION=${{ steps.get_version.outputs.latest_version }} \
             --cache-from type=gha,scope=${CACHE_SCOPE} \
             --cache-to type=gha,mode=max,scope=${CACHE_SCOPE} \
-            --platform $BUILD_PLATFORMS \
+            --platform $PLATFORMS \
             ./frontend
           
           echo "✅ Build completed and cached. Self-hosted runner will push to Harbor."
@@ -143,26 +150,26 @@ jobs:
       - name: Push Image (dev-latest)
         if: needs.build-frontend.outputs.branch == 'dev'
         run: |
-          echo "Pushing dev-latest to Harbor using cached build from GitHub runner"
+          echo "Pushing dev-latest (AMD64 only) to Harbor using cached build from GitHub runner"
           docker buildx build --push \
             --build-arg VERSION=${{ needs.build-frontend.outputs.version }} \
             --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:dev-latest \
             --cache-from type=gha,scope=frontend-dev \
             --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:dev-latest \
             --provenance=false \
-            --platform $BUILD_PLATFORMS ./frontend
+            --platform $BUILD_PLATFORMS_DEV ./frontend
 
       - name: Push Image (latest)
         if: needs.build-frontend.outputs.branch == 'main'
         run: |
-          echo "Pushing latest to Harbor using cached build from GitHub runner"
+          echo "Pushing latest (AMD64 only) to Harbor using cached build from GitHub runner"
           docker buildx build --push \
             --build-arg VERSION=${{ needs.build-frontend.outputs.version }} \
             --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
             --cache-from type=gha,scope=frontend-main \
             --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
             --provenance=false \
-            --platform $BUILD_PLATFORMS ./frontend
+            --platform $BUILD_PLATFORMS_DEV ./frontend
 
       - name: Push Image (tag)
         if: needs.build-frontend.outputs.tag_name != ''
@@ -181,10 +188,10 @@ jobs:
             PUSH_LATEST=true
           fi
           
-          echo "Pushing tagged image to Harbor using cached build from GitHub runner"
+          echo "Pushing tagged image (MULTI-ARCH) to Harbor using cached build from GitHub runner"
           # Build tags based on release type
           if [ "$PUSH_LATEST" = true ]; then
-            echo "Pushing tags: $TAG_NAME and latest"
+            echo "Pushing tags: $TAG_NAME and latest (AMD64 + ARM64)"
             docker buildx build --push \
               --build-arg VERSION="$TAG_NAME" \
               --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:"$TAG_NAME" \
@@ -192,14 +199,14 @@ jobs:
               --cache-from type=gha,scope=frontend-tag \
               --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
               --provenance=false \
-              --platform $BUILD_PLATFORMS ./frontend
+              --platform $BUILD_PLATFORMS_RELEASE ./frontend
           else
-            echo "Pushing version tag only: $TAG_NAME"
+            echo "Pushing version tag only: $TAG_NAME (AMD64 + ARM64)"
             docker buildx build --push \
               --build-arg VERSION="$TAG_NAME" \
               --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:"$TAG_NAME" \
               --cache-from type=gha,scope=frontend-tag \
               --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
               --provenance=false \
-              --platform $BUILD_PLATFORMS ./frontend
+              --platform $BUILD_PLATFORMS_RELEASE ./frontend
           fi
