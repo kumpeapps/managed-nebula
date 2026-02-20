@@ -1,6 +1,7 @@
-name: Push Frontend Image to Harbor
+name: Push Frontend Image to GHCR
 permissions:
   contents: read
+  packages: write
 
 on:
   push:
@@ -15,20 +16,18 @@ on:
   workflow_dispatch:
 
 env:
-  DOCKER_CLIENT_TIMEOUT: 300
-  COMPOSE_HTTP_TIMEOUT: 300
-  # Multi-arch: For dev/main branches, build AMD64 only (fast). For tags/releases, build both architectures.
-  # ARM64 emulation on self-hosted runner has network timeouts during npm ci (~19 min vs 40s for AMD64)
-  BUILD_PLATFORMS_DEV: "linux/amd64"
-  BUILD_PLATFORMS_RELEASE: "linux/amd64,linux/arm64"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/frontend
+  # Multi-arch build - GitHub runners have optimized QEMU for ARM64
+  BUILD_PLATFORMS: "linux/amd64,linux/arm64"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-frontend:
-    # Build on GitHub's hosted runners (better ARM64 emulation)
+  build-and-push:
+    # Build and push on GitHub hosted runners (fast network, optimized QEMU)
     if: >
       github.event_name != 'release' || (
         contains(github.event.release.name, 'frontend') || contains(github.event.release.name, 'Frontend') || (
@@ -41,19 +40,9 @@ jobs:
       )
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    outputs:
-      version: ${{ steps.get_version.outputs.latest_version }}
-      branch: ${{ steps.get_version.outputs.branch_name }}
-      tag_name: ${{ steps.get_version.outputs.tag_name }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
-
-      - name: Set up QEMU (multi-arch emulation)
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
 
       - name: Get Latest Release Version
         id: get_version
@@ -83,130 +72,94 @@ jobs:
           echo "branch_name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
           echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
 
-      - name: Build Multi-arch Images (with GitHub cache)
-        run: |
-          # Determine platforms and cache scope based on ref
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            PLATFORMS="$BUILD_PLATFORMS_RELEASE"
-            CACHE_SCOPE="frontend-tag"
-            echo "Building RELEASE multi-arch for platforms: $PLATFORMS"
-          elif [[ "${GITHUB_REF}" == refs/heads/main ]]; then
-            PLATFORMS="$BUILD_PLATFORMS_DEV"
-            CACHE_SCOPE="frontend-main"
-            echo "Building MAIN (AMD64 only) for platforms: $PLATFORMS"
-          else
-            PLATFORMS="$BUILD_PLATFORMS_DEV"
-            CACHE_SCOPE="frontend-dev"
-            echo "Building DEV (AMD64 only) for platforms: $PLATFORMS"
-          fi
-          
-          echo "Images will be cached and pushed from self-hosted runner with Harbor access"
-          
-          docker buildx build \
-            --build-arg VERSION=${{ steps.get_version.outputs.latest_version }} \
-            --cache-from type=gha,scope=${CACHE_SCOPE} \
-            --cache-to type=gha,mode=max,scope=${CACHE_SCOPE} \
-            --platform $PLATFORMS \
-            ./frontend
-          
-          echo "✅ Build completed and cached. Self-hosted runner will push to Harbor."
-
-  push-to-harbor:
-    # Push on self-hosted runner (has Harbor network access)
-    needs: build-frontend
-    runs-on: vm-prod-github-runner
-    timeout-minutes: 30
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v6
-
-      - name: Preflight - Harbor DNS and TLS reachability
-        run: |
-          set -x
-          getent hosts harbor.vm.kumpeapps.com || true
-          nslookup harbor.vm.kumpeapps.com || true
-          curl -vkI --max-time 15 https://harbor.vm.kumpeapps.com/v2/ || true
-
       - name: Set up QEMU (multi-arch emulation)
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          driver-opts: |
-            image=moby/buildkit:latest
-            network=host
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Login to Harbor (with retry)
-        run: |
-          for i in 1 2 3; do
-            echo "${{ secrets.HARBOR_SECRET }}" | docker login harbor.vm.kumpeapps.com -u "robot_github" --password-stdin && exit 0
-            echo "Login failed (attempt $i), retrying in 5s...";
-            sleep 5;
-          done
-          echo "Failed to login to Harbor after 3 attempts" >&2
-          exit 1
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=dev-latest,enable=${{ github.ref == 'refs/heads/dev' }}
 
-      - name: Push Image (dev-latest)
-        if: needs.build-frontend.outputs.branch == 'dev'
-        run: |
-          echo "Pushing dev-latest (AMD64 only) to Harbor using cached build from GitHub runner"
-          docker buildx build --push \
-            --build-arg VERSION=${{ needs.build-frontend.outputs.version }} \
-            --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:dev-latest \
-            --cache-from type=gha,scope=frontend-dev \
-            --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:dev-latest \
-            --provenance=false \
-            --platform $BUILD_PLATFORMS_DEV ./frontend
+      - name: Build and Push Image (dev-latest)
+        if: steps.get_version.outputs.branch_name == 'dev'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          platforms: ${{ env.BUILD_PLATFORMS }}
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-latest
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.get_version.outputs.latest_version }}
+          cache-from: type=gha,scope=frontend-dev
+          cache-to: type=gha,mode=max,scope=frontend-dev
+          provenance: false
 
-      - name: Push Image (latest)
-        if: needs.build-frontend.outputs.branch == 'main'
-        run: |
-          echo "Pushing latest (AMD64 only) to Harbor using cached build from GitHub runner"
-          docker buildx build --push \
-            --build-arg VERSION=${{ needs.build-frontend.outputs.version }} \
-            --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
-            --cache-from type=gha,scope=frontend-main \
-            --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
-            --provenance=false \
-            --platform $BUILD_PLATFORMS_DEV ./frontend
+      - name: Build and Push Image (latest)
+        if: steps.get_version.outputs.branch_name == 'main'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          platforms: ${{ env.BUILD_PLATFORMS }}
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.get_version.outputs.latest_version }}
+          cache-from: type=gha,scope=frontend-main
+          cache-to: type=gha,mode=max,scope=frontend-main
+          provenance: false
 
-      - name: Push Image (tag)
-        if: needs.build-frontend.outputs.tag_name != ''
+      - name: Build and Push Image (tag)
+        if: steps.get_version.outputs.tag_name != ''
         run: |
-          TAG_NAME="${{ needs.build-frontend.outputs.tag_name }}"
+          TAG_NAME="${{ steps.get_version.outputs.tag_name }}"
           
           # Check if this is a pre-release tag (contains alpha, beta, or rc)
           if [[ "$TAG_NAME" =~ (alpha|beta|rc) ]]; then
             echo "::notice::Pre-release tag detected ($TAG_NAME) - pushing version tag only"
-            PUSH_LATEST=false
+            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG_NAME"
           elif [[ "${{ github.event_name }}" == "release" ]] && [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
             echo "::notice::Pre-release detected via GitHub release - pushing version tag only"
-            PUSH_LATEST=false
+            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG_NAME"
           else
             echo "::notice::Stable release tag detected ($TAG_NAME) - pushing version and :latest tags"
-            PUSH_LATEST=true
+            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG_NAME,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
           fi
           
-          echo "Pushing tagged image (MULTI-ARCH) to Harbor using cached build from GitHub runner"
-          # Build tags based on release type
-          if [ "$PUSH_LATEST" = true ]; then
-            echo "Pushing tags: $TAG_NAME and latest (AMD64 + ARM64)"
-            docker buildx build --push \
-              --build-arg VERSION="$TAG_NAME" \
-              --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:"$TAG_NAME" \
-              --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
-              --cache-from type=gha,scope=frontend-tag \
-              --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
-              --provenance=false \
-              --platform $BUILD_PLATFORMS_RELEASE ./frontend
-          else
-            echo "Pushing version tag only: $TAG_NAME (AMD64 + ARM64)"
-            docker buildx build --push \
-              --build-arg VERSION="$TAG_NAME" \
-              --tag harbor.vm.kumpeapps.com/managed-nebula/frontend:"$TAG_NAME" \
-              --cache-from type=gha,scope=frontend-tag \
-              --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/frontend:latest \
-              --provenance=false \
-              --platform $BUILD_PLATFORMS_RELEASE ./frontend
-          fi
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+        id: tag_logic
+
+      - name: Build and Push Tagged Image
+        if: steps.get_version.outputs.tag_name != ''
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          platforms: ${{ env.BUILD_PLATFORMS }}
+          push: true
+          tags: ${{ steps.tag_logic.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.get_version.outputs.tag_name }}
+          cache-from: type=gha,scope=frontend-tag
+          cache-to: type=gha,mode=max,scope=frontend-tag
+          provenance: false

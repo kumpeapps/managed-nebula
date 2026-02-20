@@ -1,6 +1,7 @@
-name: Push Client Image to Harbor
+name: Push Client Image to GHCR
 permissions:
   contents: read
+  packages: write
 
 on:
   push:
@@ -15,8 +16,10 @@ on:
   workflow_dispatch:
 
 env:
-  DOCKER_CLIENT_TIMEOUT: 300
-  COMPOSE_HTTP_TIMEOUT: 300
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/client
+  # Multi-arch build - GitHub runners have optimized QEMU for ARM64
+  BUILD_PLATFORMS: "linux/amd64,linux/arm64"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -24,6 +27,7 @@ concurrency:
 
 jobs:
   build-and-push-client:
+    # Build and push on GitHub hosted runners (fast network, optimized QEMU)
     # On releases: run if title has "client" (any case) or no platform keywords specified
     if: >
       github.event_name != 'release' || (
@@ -36,37 +40,23 @@ jobs:
         )
       )
     timeout-minutes: 120
-    runs-on: vm-prod-github-runner
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
-
-      - name: Preflight - Harbor DNS and TLS reachability
-        run: |
-          set -x
-          getent hosts harbor.vm.kumpeapps.com || true
-          nslookup harbor.vm.kumpeapps.com || true
-          curl -vkI --max-time 15 https://harbor.vm.kumpeapps.com/v2/ || true
 
       - name: Set up QEMU (multi-arch emulation)
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            image=moby/buildkit:latest
-            network=host
 
-      - name: Login to Harbor (with retry)
-        run: |
-          for i in 1 2 3; do
-            echo "${{ secrets.HARBOR_SECRET }}" | docker login harbor.vm.kumpeapps.com -u "robot_github" --password-stdin && exit 0
-            echo "Login failed (attempt $i), retrying in 5s...";
-            sleep 5;
-          done
-          echo "Failed to login to Harbor after 3 attempts" >&2
-          exit 1
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get Latest Release Version
         id: get_version
@@ -93,27 +83,31 @@ jobs:
 
       - name: Build and Push Image (dev-latest)
         if: github.ref == 'refs/heads/dev'
-        run: |
-          docker buildx build --push \
-            --build-arg VERSION=${{ steps.get_version.outputs.latest_version }} \
-            --tag harbor.vm.kumpeapps.com/managed-nebula/client:dev-latest \
-            --cache-from type=gha,scope=client-dev \
-            --cache-to type=gha,mode=max,scope=client-dev \
-            --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/client:dev-latest \
-            --provenance=false \
-            --platform linux/amd64,linux/arm64 ./client
+        uses: docker/build-push-action@v5
+        with:
+          context: ./client
+          platforms: ${{ env.BUILD_PLATFORMS }}
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev-latest
+          build-args: |
+            VERSION=${{ steps.get_version.outputs.latest_version }}
+          cache-from: type=gha,scope=client-dev
+          cache-to: type=gha,mode=max,scope=client-dev
+          provenance: false
 
       - name: Build and Push Image (latest)
         if: github.ref == 'refs/heads/main'
-        run: |
-          docker buildx build --push \
-            --build-arg VERSION=${{ steps.get_version.outputs.latest_version }} \
-            --tag harbor.vm.kumpeapps.com/managed-nebula/client:latest \
-            --cache-from type=gha,scope=client-main \
-            --cache-to type=gha,mode=max,scope=client-main \
-            --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/client:latest \
-            --provenance=false \
-            --platform linux/amd64,linux/arm64 ./client
+        uses: docker/build-push-action@v5
+        with:
+          context: ./client
+          platforms: ${{ env.BUILD_PLATFORMS }}
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          build-args: |
+            VERSION=${{ steps.get_version.outputs.latest_version }}
+          cache-from: type=gha,scope=client-main
+          cache-to: type=gha,mode=max,scope=client-main
+          provenance: false
 
       - name: Build and Push Image (tag)
         if: startsWith(github.ref, 'refs/tags/')
@@ -123,35 +117,28 @@ jobs:
           # Check if this is a pre-release tag (contains alpha, beta, or rc)
           if [[ "$TAG_NAME" =~ (alpha|beta|rc) ]]; then
             echo "::notice::Pre-release tag detected ($TAG_NAME) - pushing version tag only"
-            PUSH_LATEST=false
+            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG_NAME"
           elif [[ "${{ github.event_name }}" == "release" ]] && [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
             echo "::notice::Pre-release detected via GitHub release - pushing version tag only"
-            PUSH_LATEST=false
+            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG_NAME"
           else
             echo "::notice::Stable release tag detected ($TAG_NAME) - pushing version and :latest tags"
-            PUSH_LATEST=true
+            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG_NAME,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
           fi
           
-          # Build tags based on release type
-          if [ "$PUSH_LATEST" = true ]; then
-            echo "Building and pushing tags: $TAG_NAME and latest"
-            docker buildx build --push \
-              --build-arg VERSION="$TAG_NAME" \
-              --tag harbor.vm.kumpeapps.com/managed-nebula/client:"$TAG_NAME" \
-              --tag harbor.vm.kumpeapps.com/managed-nebula/client:latest \
-              --cache-from type=gha,scope=client-main \
-              --cache-to type=gha,mode=max,scope=client-tag \
-              --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/client:latest \
-              --provenance=false \
-              --platform linux/amd64,linux/arm64 ./client
-          else
-            echo "Building and pushing version tag only: $TAG_NAME"
-            docker buildx build --push \
-              --build-arg VERSION="$TAG_NAME" \
-              --tag harbor.vm.kumpeapps.com/managed-nebula/client:"$TAG_NAME" \
-              --cache-from type=gha,scope=client-main \
-              --cache-to type=gha,mode=max,scope=client-tag \
-              --cache-from type=registry,ref=harbor.vm.kumpeapps.com/managed-nebula/client:latest \
-              --provenance=false \
-              --platform linux/amd64,linux/arm64 ./client
-          fi
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+        id: tag_logic
+
+      - name: Build and Push Tagged Image
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: docker/build-push-action@v5
+        with:
+          context: ./client
+          platforms: ${{ env.BUILD_PLATFORMS }}
+          push: true
+          tags: ${{ steps.tag_logic.outputs.tags }}
+          build-args: |
+            VERSION=${GITHUB_REF#refs/tags/}
+          cache-from: type=gha,scope=client-tag
+          cache-to: type=gha,mode=max,scope=client-tag
+          provenance: false
