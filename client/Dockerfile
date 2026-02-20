@@ -37,7 +37,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY . /app
 
 # Update version in agent.py
-RUN sed -i "s/__version__ = .*/__version__ = \"${VERSION}\"/" /app/agent.py
+RUN sed -i 's/__version__ = .*/__version__ = "'"${VERSION}"'"/' /app/agent.py
 
 RUN chmod +x /app/entrypoint.sh
 
