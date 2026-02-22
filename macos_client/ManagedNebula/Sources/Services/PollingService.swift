@@ -13,6 +13,8 @@ class PollingService {
     private let processCheckInterval: TimeInterval = 10
     private let restartInitTimeout: TimeInterval = 30
     private let maxRestartAttempts: Int = 5
+    private let nebulaLogPath: String = "/var/log/nebula.log"
+    private var lastNebulaLogOffset: UInt64 = 0
     
     var onStatusChange: ((ConnectionStatus) -> Void)?
     
@@ -177,6 +179,12 @@ class PollingService {
     // MARK: - Monitoring & Auto-Heal
     private func startMonitoring() {
         monitorTimer?.invalidate()
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: nebulaLogPath),
+           let size = attrs[.size] as? NSNumber {
+            lastNebulaLogOffset = size.uint64Value
+        } else {
+            lastNebulaLogOffset = 0
+        }
         monitorTimer = Timer.scheduledTimer(withTimeInterval: processCheckInterval, repeats: true) { [weak self] _ in
             Task { await self?.monitorNebula() }
         }
@@ -193,10 +201,19 @@ class PollingService {
     private func monitorNebula() async {
         guard !isManuallyDisconnected else { return }
         if restartInProgress { return }
+
+        let (newLogs, newOffset) = readNewNebulaLogs(fromOffset: lastNebulaLogOffset)
+        lastNebulaLogOffset = newOffset
+        let goodbyeDetected = newLogs.lowercased().contains("goodbye")
+
         if nebulaManager.isRunning() { return }
         restartInProgress = true
         onStatusChange?(.connecting)
-        print("[PollingService] Nebula process not running; attempting recovery")
+        if goodbyeDetected {
+            print("[PollingService] GOODBYE DETECTED: Nebula exited, attempting recovery")
+        } else {
+            print("[PollingService] Nebula process not running; attempting recovery")
+        }
         let recovered = await restartWithBackoff()
         if recovered {
             print("[PollingService] Recovery successful")
@@ -206,6 +223,27 @@ class PollingService {
             onStatusChange?(.error("Failed to restart Nebula"))
         }
         restartInProgress = false
+    }
+
+    private func readNewNebulaLogs(fromOffset offset: UInt64) -> (String, UInt64) {
+        guard let handle = FileHandle(forReadingAtPath: nebulaLogPath) else {
+            return ("", offset)
+        }
+        defer {
+            try? handle.close()
+        }
+
+        do {
+            let attrs = try FileManager.default.attributesOfItem(atPath: nebulaLogPath)
+            let currentSize = (attrs[.size] as? NSNumber)?.uint64Value ?? offset
+            let safeOffset = min(offset, currentSize)
+            try handle.seek(toOffset: safeOffset)
+            let data = handle.readDataToEndOfFile()
+            let text = String(data: data, encoding: .utf8) ?? ""
+            return (text, currentSize)
+        } catch {
+            return ("", offset)
+        }
     }
 
     private func restartWithBackoff() async -> Bool {
