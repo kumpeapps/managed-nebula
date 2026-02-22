@@ -53,11 +53,14 @@ jobs:
       shell: pwsh
       run: |
         if ("${{ github.event_name }}" -eq "release") {
-          $version = "${{ github.ref_name }}" -replace '^v', ''
+          $tagName = "${{ github.event.release.tag_name }}"
+          $version = $tagName -replace '^v', ''
         } else {
           $version = "${{ github.event.inputs.version }}"
+          $tagName = ""
         }
         echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        echo "TAG_NAME=$tagName" >> $env:GITHUB_OUTPUT
         echo "Building version: $version"
     
     - name: Install Python dependencies
@@ -252,6 +255,7 @@ jobs:
       if: github.event_name == 'release'
       uses: softprops/action-gh-release@v2
       with:
+        tag_name: ${{ steps.get_version.outputs.TAG_NAME }}
         files: |
           windows_client/dist/ManagedNebula-${{ steps.get_version.outputs.VERSION }}-Setup.exe
           windows_client/dist/NebulaAgent-windows-${{ steps.get_version.outputs.VERSION }}.zip
