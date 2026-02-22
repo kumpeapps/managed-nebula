@@ -13,93 +13,62 @@ if [[ -z "${SERVER_URL:-}" ]]; then
   exit 1
 fi
 
-<<<<<<< Updated upstream
 # Try to wait for server, but don't block forever if we have existing config
 SERVER_REACHABLE=false
+CURL_OPTS="-sfL"
+if [[ "${ALLOW_SELF_SIGNED_CERT:-false}" == "true" ]]; then
+  CURL_OPTS="-ksfL"
+fi
+
 if [[ -f /etc/nebula/config.yml ]]; then
   echo "Existing config found, will attempt quick server check..."
-=======
-# Wait for server to be reachable (only if no existing config)
-if [[ ! -f /etc/nebula/config.yml ]]; then
-  echo "No existing config found, waiting for server at ${SERVER_URL}..."
->>>>>>> Stashed changes
-  CURL_OPTS="-sfL"
-  if [[ "${ALLOW_SELF_SIGNED_CERT:-false}" == "true" ]]; then
-    CURL_OPTS="-ksfL"
-  fi
-<<<<<<< Updated upstream
-  # Only try a few times if we have existing config
   for i in {1..5}; do
     if curl $CURL_OPTS "${SERVER_URL%/}/v1/healthz" >/dev/null 2>&1; then
       SERVER_REACHABLE=true
-=======
-  for i in {1..60}; do
-    if curl $CURL_OPTS "${SERVER_URL%/}/v1/healthz" >/dev/null; then
->>>>>>> Stashed changes
       echo "Server is reachable"
       break
     fi
     sleep 2
   done
-<<<<<<< Updated upstream
-  
+
   if [[ "$SERVER_REACHABLE" == "false" ]]; then
     echo "Server unreachable, will use existing config and retry during polling"
   fi
 else
-  echo "No existing config, waiting for server at ${SERVER_URL}..."
-  CURL_OPTS="-sfL"
-  if [[ "${ALLOW_SELF_SIGNED_CERT:-false}" == "true" ]]; then
-    CURL_OPTS="-ksfL"
-  fi
-  # Wait longer if we don't have existing config
+  echo "No existing config found, waiting for server at ${SERVER_URL}..."
   for i in {1..60}; do
     if curl $CURL_OPTS "${SERVER_URL%/}/v1/healthz" >/dev/null 2>&1; then
       SERVER_REACHABLE=true
+      echo "Server is reachable"
       break
     fi
     sleep 2
   done
-  
+
   if [[ "$SERVER_REACHABLE" == "false" ]]; then
     echo "ERROR: Server unreachable and no existing config available" >&2
     exit 1
   fi
 fi
 
-# Only fetch initial config if server is reachable or we don't have config yet
+# Fetch or refresh config when possible; fall back to existing config when offline
 if [[ "$SERVER_REACHABLE" == "true" ]] || [[ ! -f /etc/nebula/config.yml ]]; then
   echo "Fetching initial config from server..."
-  python3 /app/agent.py --once
-  
-  if [[ ! -f /etc/nebula/config.yml ]]; then
-    echo "Config generation failed" >&2
-    exit 1
-  fi
+  python3 /app/agent.py --once || {
+    if [[ -f /etc/nebula/config.yml ]]; then
+      echo "Config fetch failed but existing config available, continuing with existing config"
+    else
+      echo "Config generation failed and no existing config available" >&2
+      exit 1
+    fi
+  }
 else
   echo "Using existing config, will fetch updates during polling loop"
-=======
-else
-  echo "Existing config found, will attempt to fetch updates but continue if server unreachable"
 fi
 
-# Fetch or refresh config before starting nebula
-# This will gracefully handle server unavailability if config exists
-python3 /app/agent.py --once || {
-  # If fetch failed, check if we have an existing config to fall back on
-  if [[ -f /etc/nebula/config.yml ]]; then
-    echo "Config fetch failed but existing config available, continuing with existing config"
-  else
-    echo "Config generation failed and no existing config available" >&2
-    exit 1
-  fi
-}
-
-# Verify config exists (should exist from above, but double check before starting)
 if [[ ! -f /etc/nebula/config.yml ]]; then
   echo "ERROR: Config file does not exist and could not be generated" >&2
   exit 1
->>>>>>> Stashed changes
 fi
 
 # If not explicitly starting Nebula, exit after generating config
