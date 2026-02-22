@@ -3,6 +3,14 @@ name: Build and Release macOS Client
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., 1.5.7 or v1.5.7)'
+        required: false
+      tag:
+        description: 'Release tag to upload assets to (e.g., v1.5.7). Required for manual release upload.'
+        required: false
 
 jobs:
   build:
@@ -79,9 +87,27 @@ jobs:
     - name: Get version from release tag
       id: get_version
       run: |
-        # Extract version from release tag (strip 'v' prefix, keep beta suffixes)
-        VERSION="${GITHUB_REF#refs/tags/v}"
+        if [[ "${{ github.event_name }}" == "release" ]]; then
+          TAG_NAME="${{ github.event.release.tag_name }}"
+          VERSION="${TAG_NAME#v}"
+        else
+          RAW_VERSION="${{ github.event.inputs.version }}"
+          RAW_TAG="${{ github.event.inputs.tag }}"
+
+          if [[ -n "$RAW_TAG" ]]; then
+            TAG_NAME="$RAW_TAG"
+            VERSION="${RAW_TAG#v}"
+          elif [[ -n "$RAW_VERSION" ]]; then
+            VERSION="${RAW_VERSION#v}"
+            TAG_NAME=""
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+            TAG_NAME=""
+          fi
+        fi
+
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
         echo "Building version: $VERSION"
     
     - name: Build and Sign with Fastlane
@@ -107,8 +133,10 @@ jobs:
         xcrun stapler validate dist/ManagedNebula-macos-${{ steps.get_version.outputs.VERSION }}-signed.pkg
     
     - name: Upload to Release
+      if: github.event_name == 'release' || steps.get_version.outputs.TAG_NAME != ''
       uses: softprops/action-gh-release@v2
       with:
+        tag_name: ${{ github.event_name == 'release' && github.event.release.tag_name || steps.get_version.outputs.TAG_NAME }}
         files: |
           macos_client/dist/*-signed.pkg
           macos_client/dist/*-signed.dmg
