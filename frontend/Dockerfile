@@ -19,9 +19,9 @@ RUN npm config set fetch-timeout 300000 && \
 # Copy source code and build
 COPY . .
 
-# Update version in environment files
-RUN sed -i "s/version: '.*'/version: '${VERSION}'/" src/environments/environment.ts && \
-    sed -i "s/version: '.*'/version: '${VERSION}'/" src/environments/environment.prod.ts
+# Update version in environment files (use | delimiter to avoid issues with / in version strings)
+RUN sed -i "s|version: '.*'|version: '${VERSION}'|" src/environments/environment.ts && \
+    sed -i "s|version: '.*'|version: '${VERSION}'|" src/environments/environment.prod.ts
 
 # Build Angular app with increased memory for ARM64 builds
 ENV NODE_OPTIONS="--max-old-space-size=4096"
