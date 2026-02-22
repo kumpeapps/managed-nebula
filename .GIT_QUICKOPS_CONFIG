@@ -1,4 +1,4 @@
 {
-  "commitPrefix": "[{{branch}}] resolves #{{ticket}}: ",
+  "commitPrefix": "[{{branch}}] ",
   "requireTests": "disabled"
 }

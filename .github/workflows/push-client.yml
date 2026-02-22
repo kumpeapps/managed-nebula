@@ -6,7 +6,6 @@ permissions:
 on:
   push:
     branches: [ dev, main ]
-    tags: [ 'v*' ]
     paths:
       - 'client/**'
       - 'docker-compose.yml'
@@ -64,13 +63,11 @@ jobs:
       - name: Get Latest Release Version
         id: get_version
         run: |
-          # Handle both branches and tags
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            # For tags, use the tag as version
-            LATEST_RELEASE="${GITHUB_REF#refs/tags/}"
-            echo "Triggered by tag: ${LATEST_RELEASE}"
+          # Branch pushes use latest release; release event uses release tag
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            LATEST_RELEASE="${{ github.event.release.tag_name }}"
+            echo "Release event tag: ${LATEST_RELEASE}"
           else
-            # For branches, find latest release
             BRANCH_NAME="${GITHUB_REF#refs/heads/}"
             echo "Current branch: ${BRANCH_NAME}"
             
@@ -98,50 +95,49 @@ jobs:
           cache-to: type=gha,mode=max,scope=client-dev
           provenance: false
 
-      - name: Build and Push Image (latest)
+      - name: Build and Push Image (latest-dev)
         if: github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v5
         with:
           context: ./client
           platforms: ${{ env.BUILD_PLATFORMS }}
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-dev
           build-args: |
             VERSION=${{ steps.get_version.outputs.latest_version }}
           cache-from: type=gha,scope=client-main
           cache-to: type=gha,mode=max,scope=client-main
           provenance: false
 
-      - name: Build and Push Image (tag)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Determine release tags
+        if: github.event_name == 'release'
         run: |
-          TAG_NAME="${GITHUB_REF#refs/tags/}"
-          
-          # Check if this is a pre-release tag (contains alpha, beta, or rc)
-          if [[ "$TAG_NAME" =~ (alpha|beta|rc) ]]; then
-            echo "::notice::Pre-release tag detected ($TAG_NAME) - pushing version tag only"
-            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG_NAME"
-          elif [[ "${{ github.event_name }}" == "release" ]] && [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
-            echo "::notice::Pre-release detected via GitHub release - pushing version tag only"
-            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG_NAME"
-          else
-            echo "::notice::Stable release tag detected ($TAG_NAME) - pushing version and :latest tags"
-            TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG_NAME,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          TAG_NAME="${{ github.event.release.tag_name }}"
+          TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG_NAME"
+
+          if [[ "${{ github.event.release.make_latest }}" == "true" ]]; then
+            echo "::notice::Release marked as latest - adding :latest tag"
+            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          fi
+
+          if [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
+            echo "::notice::Pre-release detected - adding :latest-rc tag"
+            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-rc"
           fi
           
           echo "tags=$TAGS" >> $GITHUB_OUTPUT
-        id: tag_logic
+        id: release_tag_logic
 
-      - name: Build and Push Tagged Image
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Build and Push Release Image
+        if: github.event_name == 'release'
         uses: docker/build-push-action@v5
         with:
           context: ./client
           platforms: ${{ env.BUILD_PLATFORMS }}
           push: true
-          tags: ${{ steps.tag_logic.outputs.tags }}
+          tags: ${{ steps.release_tag_logic.outputs.tags }}
           build-args: |
-            VERSION=${GITHUB_REF#refs/tags/}
+            VERSION=${{ github.event.release.tag_name }}
           cache-from: type=gha,scope=client-tag
           cache-to: type=gha,mode=max,scope=client-tag
           provenance: false
