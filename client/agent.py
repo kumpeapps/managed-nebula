@@ -20,6 +20,7 @@ PUB_PATH = STATE_DIR / "host.pub"
 PIDFILE = STATE_DIR / "nebula.pid"
 METRICS_FILE = STATE_DIR / "metrics.json"
 CACHED_CONFIG_FILE = STATE_DIR / "cached_config.json"
+NEBULA_LOG_FILE = STATE_DIR / "nebula.log"
 
 # Configuration with environment variable defaults
 PROCESS_CHECK_INTERVAL = int(os.getenv("PROCESS_CHECK_INTERVAL", "10"))  # seconds
@@ -534,6 +535,47 @@ def validate_config() -> bool:
         return False
 
 
+def start_nebula_process() -> subprocess.Popen:
+    """Start Nebula process with output redirected to log file and update PID file."""
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    log_handle = open(NEBULA_LOG_FILE, "ab")
+    try:
+        proc = subprocess.Popen(
+            ["nebula", "-config", str(CONFIG_PATH)],
+            stdout=log_handle,
+            stderr=subprocess.STDOUT
+        )
+    finally:
+        # Keep process output redirected to file while allowing parent to release descriptor
+        log_handle.close()
+
+    PIDFILE.write_text(str(proc.pid))
+    return proc
+
+
+def read_new_nebula_logs(last_offset: int) -> tuple[str, int]:
+    """Read new data from Nebula log file since last offset."""
+    if not NEBULA_LOG_FILE.exists():
+        return "", last_offset
+
+    try:
+        current_size = NEBULA_LOG_FILE.stat().st_size
+        if current_size < last_offset:
+            last_offset = 0
+
+        with open(NEBULA_LOG_FILE, "rb") as log_file:
+            log_file.seek(last_offset)
+            data = log_file.read()
+
+        if not data:
+            return "", current_size
+
+        return data.decode("utf-8", errors="ignore"), current_size
+    except Exception as e:
+        print(f"[agent] Warning: failed to read Nebula log: {e}")
+        return "", last_offset
+
+
 def restart_nebula_with_backoff() -> bool:
     """Restart Nebula with exponential backoff and failure tracking"""
     global metrics
@@ -581,14 +623,7 @@ def restart_nebula_with_backoff() -> bool:
         # Start nebula as background process
         # Security note: nebula binary and CONFIG_PATH are trusted system paths, not user-controlled
         print("[agent] Starting new Nebula process...")
-        proc = subprocess.Popen(
-            ["nebula", "-config", str(CONFIG_PATH)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-        
-        # Write new PID
-        PIDFILE.write_text(str(proc.pid))
+        proc = start_nebula_process()
         print(f"[agent] Started Nebula process {proc.pid}")
         
         # Wait for Nebula to initialize (up to RESTART_INIT_TIMEOUT seconds)
@@ -794,14 +829,18 @@ def run_once(restart_on_change: bool = False):
         # Server is unreachable or config fetch failed
         timestamp = datetime.now().isoformat()
         print(f"[agent] [{timestamp}] Failed to fetch config from server: {e}")
+
+        # Re-check live process state here (nebula_already_running is from start of run_once)
+        # because Nebula may have been intentionally stopped during binary update.
+        nebula_running_now = is_nebula_running()
         
         # If Nebula is already running with existing config, continue gracefully
-        if nebula_already_running and has_existing_config:
+        if nebula_running_now and has_existing_config:
             print(f"[agent] [{timestamp}] ✓ Server unreachable, but Nebula is running with existing config - continuing in offline mode")
             return
         
         # If Nebula is not running but we have an existing config, try to start it
-        if not nebula_already_running and has_existing_config:
+        if not nebula_running_now and has_existing_config:
             print(f"[agent] [{timestamp}] Server unreachable, attempting to start Nebula with existing config")
             if not restart_nebula_with_backoff():
                 print(f"[agent] [{timestamp}] ERROR: Failed to start Nebula with existing config")
@@ -841,14 +880,20 @@ def monitor_nebula_process():
     print(f"[agent] Starting process monitor (check interval: {PROCESS_CHECK_INTERVAL}s)")
     
     last_health_check = time.time()
+    last_log_offset = NEBULA_LOG_FILE.stat().st_size if NEBULA_LOG_FILE.exists() else 0
     
     while True:
         try:
+            new_logs, last_log_offset = read_new_nebula_logs(last_log_offset)
+            goodbye_detected = "goodbye" in new_logs.lower()
+
             # Check if process is running
             if not is_nebula_running():
-                # Process crashed!
                 timestamp = datetime.now().isoformat()
-                print(f"[agent] [{timestamp}] CRASH DETECTED: Nebula process not running")
+                if goodbye_detected:
+                    print(f"[agent] [{timestamp}] GOODBYE DETECTED: Nebula exited, restarting")
+                else:
+                    print(f"[agent] [{timestamp}] CRASH DETECTED: Nebula process not running")
                 
                 with metrics_lock:
                     metrics.crash_count += 1

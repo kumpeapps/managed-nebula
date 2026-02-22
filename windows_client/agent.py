@@ -39,6 +39,7 @@ WINTUN_DLL_NESTED = NEBULA_DIR / "dist" / "windows" / "wintun" / "bin" / "amd64"
 # Metrics and cache files
 METRICS_FILE = NEBULA_DIR / "metrics.json"
 CACHED_CONFIG_FILE = NEBULA_DIR / "cached_config.json"
+NEBULA_LOG_FILE = LOG_DIR / "nebula.log"
 
 # Configuration with environment variable defaults
 PROCESS_CHECK_INTERVAL = int(os.getenv("PROCESS_CHECK_INTERVAL", "10"))  # seconds
@@ -1067,14 +1068,41 @@ def monitor_nebula_process():
     logger.info("Starting process monitor (check interval: %ds)", PROCESS_CHECK_INTERVAL)
     
     last_health_check = time.time()
+    last_log_offset = NEBULA_LOG_FILE.stat().st_size if NEBULA_LOG_FILE.exists() else 0
+
+    def read_new_nebula_logs(offset: int) -> tuple[str, int]:
+        if not NEBULA_LOG_FILE.exists():
+            return "", offset
+
+        try:
+            current_size = NEBULA_LOG_FILE.stat().st_size
+            if current_size < offset:
+                offset = 0
+
+            with open(NEBULA_LOG_FILE, "rb") as log_file:
+                log_file.seek(offset)
+                data = log_file.read()
+
+            if not data:
+                return "", current_size
+
+            return data.decode("utf-8", errors="ignore"), current_size
+        except Exception as e:
+            logger.warning("Failed reading Nebula logs: %s", e)
+            return "", offset
     
     while True:
         try:
+            new_logs, last_log_offset = read_new_nebula_logs(last_log_offset)
+            goodbye_detected = "goodbye" in new_logs.lower()
+
             # Check if process is running
             if not is_nebula_running():
-                # Process crashed!
                 timestamp = datetime.now().isoformat()
-                logger.warning("[%s] CRASH DETECTED: Nebula process not running", timestamp)
+                if goodbye_detected:
+                    logger.warning("[%s] GOODBYE DETECTED: Nebula exited, restarting", timestamp)
+                else:
+                    logger.warning("[%s] CRASH DETECTED: Nebula process not running", timestamp)
                 
                 with metrics_lock:
                     metrics.crash_count += 1
