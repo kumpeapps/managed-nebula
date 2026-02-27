@@ -7,6 +7,7 @@ Supports automatic version management based on GlobalSettings.nebula_version.
 import logging
 import os
 import platform
+import re
 import shutil
 import subprocess
 import tarfile
@@ -30,6 +31,18 @@ class NebulaInstaller:
         """Initialize the Nebula installer service."""
         self.github_repo = "slackhq/nebula"
         self.base_url = "https://github.com"
+
+    @staticmethod
+    def _extract_version_from_output(output: str) -> Optional[str]:
+        """Extract a normalized Nebula version from command output."""
+        if not output:
+            return None
+
+        match = re.search(r'(?i)\bversion[:\s]+v?([0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?)', output)
+        if match:
+            return match.group(1)
+
+        return None
     
     def get_installed_version(self) -> Optional[str]:
         """
@@ -53,15 +66,13 @@ class NebulaInstaller:
                 check=True
             )
             
-            # Parse version from output like "Nebula version 1.9.7"
-            for line in result.stdout.splitlines():
-                if "version" in line.lower():
-                    parts = line.split()
-                    for i, part in enumerate(parts):
-                        if part.lower() == "version" and i + 1 < len(parts):
-                            version = parts[i + 1].lstrip('v')
-                            logger.info("Detected installed Nebula version: %s", version)
-                            return version
+            # Parse output formats like:
+            # - "Nebula version 1.10.3"
+            # - "Version: 1.10.3"
+            version = self._extract_version_from_output(result.stdout)
+            if version:
+                logger.info("Detected installed Nebula version: %s", version)
+                return version
             
             logger.warning("Could not parse version from nebula -version output")
             return None
@@ -198,14 +209,7 @@ class NebulaInstaller:
                     check=True
                 )
                 
-                downloaded_version = None
-                for line in result.stdout.splitlines():
-                    if "version" in line.lower():
-                        parts = line.split()
-                        for i, part in enumerate(parts):
-                            if part.lower() == "version" and i + 1 < len(parts):
-                                downloaded_version = parts[i + 1].lstrip('v')
-                                break
+                downloaded_version = self._extract_version_from_output(result.stdout)
                 
                 if downloaded_version != version:
                     msg = f"Version mismatch: expected {version}, got {downloaded_version}"
