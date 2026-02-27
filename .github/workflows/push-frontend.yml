@@ -131,21 +131,13 @@ jobs:
 
       - name: Determine release tags
         if: github.event_name == 'release'
-        run: |
-          TAG_NAME="${{ github.event.release.tag_name }}"
-          TAGS="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$TAG_NAME"
-
-          if [[ "${{ github.event.release.make_latest }}" == "true" ]]; then
-            echo "::notice::Release marked as latest - adding :latest tag"
-            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-          fi
-
-          if [[ "${{ github.event.release.prerelease }}" == "true" ]]; then
-            echo "::notice::Pre-release detected - adding :latest-rc tag"
-            TAGS="$TAGS,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-rc"
-          fi
-          
-          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+        run: bash .github/scripts/compute-release-tags.sh
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+          MAKE_LATEST_INPUT: ${{ github.event.release.make_latest }}
+          IS_PRERELEASE_INPUT: ${{ github.event.release.prerelease }}
         id: release_tag_logic
 
       - name: Build and Push Release Image
