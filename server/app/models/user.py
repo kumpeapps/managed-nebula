@@ -32,6 +32,11 @@ class User(Base):
     # Relationships
     api_keys: Mapped[list["UserAPIKey"]] = relationship("UserAPIKey", back_populates="user", lazy="selectin", cascade="all, delete-orphan")
     
+    @property
+    def username(self) -> str:
+        """Derive username from email for display purposes."""
+        return self.email
+
     async def has_permission(self, session: AsyncSession, resource: str, action: str) -> bool:
         """
         Check if user has a specific permission through their group memberships.
