@@ -85,6 +85,8 @@ class Client(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
     # Ownership
     owner_user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # Track which API key created this client (for scope restrictions)
+    created_by_api_key_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("user_api_keys.id", ondelete="SET NULL"), nullable=True, index=True)
     # Tracking config lifecycle
     last_config_download_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     config_last_changed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

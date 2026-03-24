@@ -2,6 +2,7 @@ from passlib.context import CryptContext
 from fastapi import HTTPException, Request, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from typing import Optional
 from ..db import get_session
 from ..models.user import User
 import logging
@@ -85,17 +86,73 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 async def get_current_user(request: Request, session: AsyncSession = Depends(get_session)) -> User:
+    """Get current user from either session or API key authentication.
+    
+    Supports two authentication methods:
+    1. Session-based: user_id in session (for frontend/web UI)
+    2. API key: Authorization header with "Bearer <api_key>" (for programmatic access)
+    
+    When authenticated via API key, stores the API key ID in request.state.api_key_id
+    for tracking purposes (e.g., which API key created a client).
+    """
+    # First, check for API key authentication
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        api_key_str = auth_header.replace("Bearer ", "")
+        
+        # Try to authenticate with API key
+        from ..services import api_key_manager
+        from ..models.api_key import UserAPIKey
+        
+        user = await api_key_manager.authenticate_with_api_key(session, api_key_str)
+        
+        if user:
+            # Find the API key object to get its ID
+            result = await session.execute(
+                select(UserAPIKey).where(
+                    UserAPIKey.user_id == user.id,
+                    UserAPIKey.is_active == True
+                )
+            )
+            for key in result.scalars().all():
+                if api_key_manager.verify_api_key(api_key_str, key.key_hash):
+                    # Store the API key ID in request state for tracking
+                    request.state.api_key_id = key.id
+                    request.state.api_key = key
+                    break
+            
+            return user
+        # If API key is provided but invalid, raise 401
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    
+    # Fall back to session-based authentication
+    # Clear any API key tracking for session-based auth
+    request.state.api_key_id = None
+    request.state.api_key = None
+    
     user_id = request.session.get("user_id")
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    
     user = (
         await session.execute(
             select(User).where(User.id == user_id)
         )
     ).scalars().first()
+    
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Invalid user")
+    
     return user
+
+
+def get_current_api_key_id(request: Request) -> Optional[int]:
+    """Get the ID of the API key used for authentication, if any.
+    
+    Returns:
+        API key ID if authenticated via API key, None if session-based auth
+    """
+    return getattr(request.state, "api_key_id", None)
 
 
 async def require_login(user: User = Depends(get_current_user)) -> User:
