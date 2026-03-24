@@ -1,6 +1,6 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
+# Dependabot configuration for security alerts only
+# Version update PRs are disabled - only security alerts will be shown in Security tab
+# To manually update dependencies, run updates locally or use @dependabot commands on issues
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
 version: 2
@@ -10,46 +10,54 @@ updates:
     directory: "/server"
     schedule:
       interval: "weekly"
-    target-branch: "dev"
+    target-branch: "main"
+    open-pull-requests-limit: 0
   - package-ecosystem: "docker"
     directory: "/client"
     schedule:
       interval: "weekly"
-    target-branch: "dev"
+    target-branch: "main"
+    open-pull-requests-limit: 0
   - package-ecosystem: "docker"
     directory: "/frontend"
     schedule:
       interval: "weekly"
-    target-branch: "dev"
+    target-branch: "main"
+    open-pull-requests-limit: 0
 
   # Python dependencies
   - package-ecosystem: "pip"
     directory: "/server"
     schedule:
       interval: "weekly"
-    target-branch: "dev"
+    target-branch: "main"
+    open-pull-requests-limit: 0
   - package-ecosystem: "pip"
     directory: "/client"
     schedule:
       interval: "weekly"
-    target-branch: "dev"
+    target-branch: "main"
+    open-pull-requests-limit: 0
   - package-ecosystem: "pip"
     directory: "/windows_client"
     schedule:
       interval: "weekly"
-    target-branch: "dev"
+    target-branch: "main"
+    open-pull-requests-limit: 0
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "weekly"
-    target-branch: "dev"
+    target-branch: "main"
+    open-pull-requests-limit: 0
 
   # Node.js dependencies
   - package-ecosystem: "npm"
     directory: "/frontend"
     schedule:
       interval: "weekly"
-    target-branch: "dev"
+    target-branch: "main"
+    open-pull-requests-limit: 0
     groups:
       npm_and_yarn:
         patterns:
@@ -60,18 +68,21 @@ updates:
     directory: "/macos_client"
     schedule:
       interval: "weekly"
-    target-branch: "dev"
+    target-branch: "main"
+    open-pull-requests-limit: 0
 
   # Ruby dependencies (macOS client - Fastlane)
   - package-ecosystem: "bundler"
     directory: "/macos_client"
     schedule:
       interval: "weekly"
-    target-branch: "dev"
+    target-branch: "main"
+    open-pull-requests-limit: 0
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
-    target-branch: "dev"
+    target-branch: "main"
+    open-pull-requests-limit: 0
