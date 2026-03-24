@@ -425,7 +425,7 @@ def _resolve_verify_ssl(config: dict = None) -> bool:
 
 def _fetch_server_nebula_version(server_url: str, verify_ssl: bool) -> str:
     """Fetch Nebula version from server"""
-    version_url = server_url.rstrip("/") + "/v1/version"
+    version_url = server_url.rstrip("/") + "/api/v1/version"
     with httpx.Client(timeout=10, verify=verify_ssl) as client:
         r = client.get(version_url)
         r.raise_for_status()

@@ -40,7 +40,7 @@ async def admin_user(db_session: AsyncSession):
     """Create admin user for testing"""
     # Check if admin already exists
     result = await db_session.execute(
-        select(User).where(User.username == "test_admin")
+        select(User).where(User.email == "test_admin")
     )
     user = result.scalar_one_or_none()
     
@@ -58,7 +58,6 @@ async def admin_user(db_session: AsyncSession):
         
         # Create admin user
         user = User(
-            username="test_admin",
             email="admin@test.com",
             password_hash=hash_password("testpass123"),
             role_id=admin_role.id,

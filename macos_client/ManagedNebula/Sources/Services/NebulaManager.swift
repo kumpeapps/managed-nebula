@@ -402,7 +402,7 @@ class NebulaManager {
         
         do {
             // Get server version (public endpoint, no auth required)
-            let versionURL = URL(string: "\(serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")))/v1/version")!
+            let versionURL = URL(string: "\(serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")))/api/v1/version")!
             
             let (data, response) = try await URLSession.shared.data(from: versionURL)
             

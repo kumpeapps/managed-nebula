@@ -83,11 +83,17 @@ from ..models.schemas import (
     GitHubSecretVerificationResponse,
     GitHubSecretRevocationRequest,
     GitHubSecretRevocationResponse,
+    APIKeyCreate,
+    APIKeyResponse,
+    APIKeyCreateResponse,
+    APIKeyUpdate,
+    APIKeyListResponse,
 )
 from ..services.cert_manager import CertManager
 from ..services.config_builder import build_nebula_config
 from ..services.ip_allocator import ensure_default_pool, allocate_ip_from_pool
 from ..services.token_manager import generate_client_token, get_token_prefix, get_token_preview
+from ..services import api_key_manager
 from ..core.auth import require_permission, get_current_user
 from ..core.config import settings, DEFAULT_NEBULA_VERSION
 from ..core.github_verification import verify_github_signature
@@ -540,7 +546,7 @@ async def update_settings(body: SettingsUpdate, session: AsyncSession = Depends(
         new_version = getattr(row, 'nebula_version', DEFAULT_NEBULA_VERSION).lstrip('v')
         logger.info(
             f"Nebula version changed from {old_nebula_version} to {new_version}, "
-            f"triggering automatic installation (requested by user {user.username})"
+            f"triggering automatic installation (requested by user {user.email})"
         )
         
         installer = NebulaInstaller()
@@ -865,7 +871,7 @@ async def install_nebula_version(
     previous_version = installer.get_installed_version()
     
     # Perform installation
-    logger.info(f"Admin user {user.username} initiated Nebula installation: {configured_version}")
+    logger.info(f"Admin user {user.email} initiated Nebula installation: {configured_version}")
     success, message = await installer.download_and_install(configured_version, force=True)
     
     if success:
@@ -1232,12 +1238,14 @@ async def list_clients(
 @router.post("/clients", response_model=ClientResponse)
 async def create_client(
     body: ClientCreate,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     user: User = Depends(require_permission("clients", "create"))
 ):
     """Create a new client with token and IP assignment (admin-only)."""
     from sqlalchemy.orm import selectinload
     from ..models.client import FirewallRuleset
+    from ..core.auth import get_current_api_key_id
 
     # Validate groups
     if body.group_ids:
@@ -1264,6 +1272,9 @@ async def create_client(
     else:
         rulesets = []
 
+    # Get API key ID if authenticated via API key
+    api_key_id = get_current_api_key_id(request)
+
     # Create client
     client = Client(
         name=body.name,
@@ -1271,6 +1282,7 @@ async def create_client(
         public_ip=body.public_ip,
         is_blocked=body.is_blocked,
         owner_user_id=user.id,
+        created_by_api_key_id=api_key_id,
         config_last_changed_at=datetime.utcnow(),
         groups=groups,
         firewall_rulesets=rulesets
@@ -3964,6 +3976,259 @@ async def delete_user(user_id: int, session: AsyncSession = Depends(get_session)
     await session.delete(u)
     await session.commit()
     return {"status": "deleted", "id": user_id}
+
+
+# ============ API Keys REST API ============
+
+@router.post("/api-keys", response_model=APIKeyCreateResponse)
+async def create_api_key(
+    key_data: APIKeyCreate,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new API key for the current user.
+    
+    The API key will be returned only once. Store it securely as it cannot be retrieved later.
+    """
+    # Rate limiting: check if user has too many active keys
+    active_count = await api_key_manager.get_api_key_count(session, current_user.id)
+    MAX_KEYS_PER_USER = 10
+    
+    if active_count >= MAX_KEYS_PER_USER:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximum number of API keys ({MAX_KEYS_PER_USER}) reached. Please revoke an existing key first."
+        )
+    
+    # Create the API key with scope restrictions
+    api_key_obj, full_key = await api_key_manager.create_api_key(
+        session=session,
+        user_id=current_user.id,
+        name=key_data.name,
+        scopes=key_data.scopes,
+        expires_in_days=key_data.expires_in_days,
+        allowed_group_ids=key_data.allowed_group_ids,
+        allowed_ip_pool_ids=key_data.allowed_ip_pool_ids,
+        restrict_to_created_clients=key_data.restrict_to_created_clients
+    )
+    
+    # Parse scopes from JSON string if present
+    scopes = None
+    if api_key_obj.scopes:
+        import json
+        scopes = json.loads(api_key_obj.scopes)
+    
+    return APIKeyCreateResponse(
+        id=api_key_obj.id,
+        user_id=api_key_obj.user_id,
+        name=api_key_obj.name,
+        key=full_key,
+        key_prefix=api_key_obj.key_prefix,
+        scopes=scopes,
+        is_active=api_key_obj.is_active,
+        created_at=api_key_obj.created_at,
+        expires_at=api_key_obj.expires_at,
+        restrict_to_created_clients=api_key_obj.restrict_to_created_clients,
+        parent_key_id=api_key_obj.parent_key_id,
+        allowed_groups=[GroupRef(id=g.id, name=g.name) for g in api_key_obj.allowed_groups],
+        allowed_ip_pools=[IPPoolRef(id=p.id, cidr=p.cidr, description=p.description) for p in api_key_obj.allowed_ip_pools]
+    )
+
+
+@router.get("/api-keys", response_model=APIKeyListResponse)
+async def list_api_keys(
+    include_inactive: bool = False,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """List all API keys for the current user."""
+    import json
+    
+    keys = await api_key_manager.get_user_api_keys(
+        session=session,
+        user_id=current_user.id,
+        include_inactive=include_inactive
+    )
+    
+    # Convert to response models
+    key_responses = []
+    for key in keys:
+        scopes = None
+        if key.scopes:
+            scopes = json.loads(key.scopes)
+        
+        key_responses.append(APIKeyResponse(
+            id=key.id,
+            user_id=key.user_id,
+            name=key.name,
+            key_prefix=key.key_prefix,
+            scopes=scopes,
+            is_active=key.is_active,
+            created_at=key.created_at,
+            expires_at=key.expires_at,
+            last_used_at=key.last_used_at,
+            usage_count=key.usage_count,
+            restrict_to_created_clients=key.restrict_to_created_clients,
+            parent_key_id=key.parent_key_id,
+            allowed_groups=[GroupRef(id=g.id, name=g.name) for g in key.allowed_groups],
+            allowed_ip_pools=[IPPoolRef(id=p.id, cidr=p.cidr, description=p.description) for p in key.allowed_ip_pools]
+        ))
+    
+    return APIKeyListResponse(
+        keys=key_responses,
+        total=len(key_responses)
+    )
+
+
+@router.get("/api-keys/{key_id}", response_model=APIKeyResponse)
+async def get_api_key(
+    key_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Get details of a specific API key."""
+    import json
+    
+    api_key = await api_key_manager.get_api_key_by_id(
+        session=session,
+        key_id=key_id,
+        user_id=current_user.id
+    )
+    
+    if not api_key:
+        raise HTTPException(status_code=404, detail="API key not found")
+    
+    scopes = None
+    if api_key.scopes:
+        scopes = json.loads(api_key.scopes)
+    
+    return APIKeyResponse(
+        id=api_key.id,
+        user_id=api_key.user_id,
+        name=api_key.name,
+        key_prefix=api_key.key_prefix,
+        scopes=scopes,
+        is_active=api_key.is_active,
+        created_at=api_key.created_at,
+        expires_at=api_key.expires_at,
+        last_used_at=api_key.last_used_at,
+        usage_count=api_key.usage_count,
+        restrict_to_created_clients=api_key.restrict_to_created_clients,
+        parent_key_id=api_key.parent_key_id,
+        allowed_groups=[GroupRef(id=g.id, name=g.name) for g in api_key.allowed_groups],
+        allowed_ip_pools=[IPPoolRef(id=p.id, cidr=p.cidr, description=p.description) for p in api_key.allowed_ip_pools]
+    )
+
+
+@router.put("/api-keys/{key_id}", response_model=APIKeyResponse)
+async def update_api_key(
+    key_id: int,
+    key_data: APIKeyUpdate,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Update an API key's metadata and scope restrictions."""
+    import json
+    
+    api_key = await api_key_manager.update_api_key(
+        session=session,
+        key_id=key_id,
+        user_id=current_user.id,
+        name=key_data.name,
+        is_active=key_data.is_active,
+        allowed_group_ids=key_data.allowed_group_ids,
+        allowed_ip_pool_ids=key_data.allowed_ip_pool_ids,
+        restrict_to_created_clients=key_data.restrict_to_created_clients
+    )
+    
+    if not api_key:
+        raise HTTPException(status_code=404, detail="API key not found")
+    
+    scopes = None
+    if api_key.scopes:
+        scopes = json.loads(api_key.scopes)
+    
+    return APIKeyResponse(
+        id=api_key.id,
+        user_id=api_key.user_id,
+        name=api_key.name,
+        key_prefix=api_key.key_prefix,
+        scopes=scopes,
+        is_active=api_key.is_active,
+        created_at=api_key.created_at,
+        expires_at=api_key.expires_at,
+        last_used_at=api_key.last_used_at,
+        usage_count=api_key.usage_count,
+        restrict_to_created_clients=api_key.restrict_to_created_clients,
+        parent_key_id=api_key.parent_key_id,
+        allowed_groups=[GroupRef(id=g.id, name=g.name) for g in api_key.allowed_groups],
+        allowed_ip_pools=[IPPoolRef(id=p.id, cidr=p.cidr, description=p.description) for p in api_key.allowed_ip_pools]
+    )
+
+
+@router.delete("/api-keys/{key_id}")
+async def revoke_api_key(
+    key_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Revoke (deactivate) an API key. The key cannot be reactivated."""
+    success = await api_key_manager.revoke_api_key(
+        session=session,
+        key_id=key_id,
+        user_id=current_user.id
+    )
+    
+    if not success:
+        raise HTTPException(status_code=404, detail="API key not found")
+    
+    return {"status": "revoked", "id": key_id}
+
+
+@router.post("/api-keys/{key_id}/regenerate", response_model=APIKeyCreateResponse)
+async def regenerate_api_key(
+    key_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Regenerate an API key while maintaining its scope restrictions.
+    
+    Creates a new key with the same permissions as the original, then deactivates the original.
+    The new key will be returned only once. Store it securely as it cannot be retrieved later.
+    """
+    import json
+    
+    result = await api_key_manager.regenerate_api_key(
+        session=session,
+        key_id=key_id,
+        user_id=current_user.id
+    )
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="API key not found")
+    
+    api_key_obj, full_key = result
+    
+    # Parse scopes from JSON string if present
+    scopes = None
+    if api_key_obj.scopes:
+        scopes = json.loads(api_key_obj.scopes)
+    
+    return APIKeyCreateResponse(
+        id=api_key_obj.id,
+        user_id=api_key_obj.user_id,
+        name=api_key_obj.name,
+        key=full_key,
+        key_prefix=api_key_obj.key_prefix,
+        scopes=scopes,
+        is_active=api_key_obj.is_active,
+        created_at=api_key_obj.created_at,
+        expires_at=api_key_obj.expires_at,
+        restrict_to_created_clients=api_key_obj.restrict_to_created_clients,
+        parent_key_id=api_key_obj.parent_key_id,
+        allowed_groups=[GroupRef(id=g.id, name=g.name) for g in api_key_obj.allowed_groups],
+        allowed_ip_pools=[IPPoolRef(id=p.id, cidr=p.cidr, description=p.description) for p in api_key_obj.allowed_ip_pools]
+    )
 
 
 # ============ Permissions REST API ============

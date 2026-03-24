@@ -367,4 +367,43 @@ export class ApiService {
   getVersionStatus(): Observable<VersionStatusResponse> {
     return this.applyDelay(this.http.get<VersionStatusResponse>(`${this.apiUrl}/version-status`, { withCredentials: true }));
   }
+
+  // API Key endpoints
+  getAPIKeys(includeInactive: boolean = false): Observable<any> {
+    const params = new HttpParams().set('include_inactive', includeInactive.toString());
+    return this.applyDelay(this.http.get<any>(`${this.apiUrl}/api-keys`, { params, withCredentials: true }));
+  }
+
+  getAPIKey(id: number): Observable<any> {
+    return this.applyDelay(this.http.get<any>(`${this.apiUrl}/api-keys/${id}`, { withCredentials: true }));
+  }
+
+  createAPIKey(data: { 
+    name: string; 
+    scopes?: string[] | null; 
+    expires_in_days?: number | null;
+    allowed_group_ids?: number[] | null;
+    allowed_ip_pool_ids?: number[] | null;
+    restrict_to_created_clients?: boolean;
+  }): Observable<any> {
+    return this.applyDelay(this.http.post<any>(`${this.apiUrl}/api-keys`, data, { withCredentials: true }));
+  }
+
+  updateAPIKey(id: number, data: { 
+    name?: string; 
+    is_active?: boolean;
+    allowed_group_ids?: number[] | null;
+    allowed_ip_pool_ids?: number[] | null;
+    restrict_to_created_clients?: boolean;
+  }): Observable<any> {
+    return this.applyDelay(this.http.put<any>(`${this.apiUrl}/api-keys/${id}`, data, { withCredentials: true }));
+  }
+
+  revokeAPIKey(id: number): Observable<void> {
+    return this.applyDelay(this.http.delete<void>(`${this.apiUrl}/api-keys/${id}`, { withCredentials: true }));
+  }
+
+  regenerateAPIKey(id: number): Observable<any> {
+    return this.applyDelay(this.http.post<any>(`${this.apiUrl}/api-keys/${id}/regenerate`, {}, { withCredentials: true }));
+  }
 }

@@ -70,6 +70,12 @@ export interface GroupRef {
   name: string;
 }
 
+export interface IPPoolRef {
+  id: number;
+  cidr: string;
+  description?: string | null;
+}
+
 export interface Group {
   id: number;
   name: string;
@@ -343,4 +349,60 @@ export interface VersionStatusResponse {
   client_advisories: SecurityAdvisoryInfo[];
   nebula_advisories: SecurityAdvisoryInfo[];
   last_checked: string | null;
+}
+
+// API Key interfaces
+export interface APIKey {
+  id: number;
+  user_id: number;
+  name: string;
+  key_prefix: string;
+  scopes: string[] | null;
+  is_active: boolean;
+  created_at: string;
+  expires_at: string | null;
+  last_used_at: string | null;
+  usage_count: number;
+  restrict_to_created_clients: boolean;
+  parent_key_id: number | null;
+  allowed_groups: GroupRef[];
+  allowed_ip_pools: IPPoolRef[];
+}
+
+export interface APIKeyCreate {
+  name: string;
+  scopes?: string[] | null;
+  expires_in_days?: number | null;
+  allowed_group_ids?: number[] | null;
+  allowed_ip_pool_ids?: number[] | null;
+  restrict_to_created_clients?: boolean;
+}
+
+export interface APIKeyCreateResponse {
+  id: number;
+  user_id: number;
+  name: string;
+  key: string;
+  key_prefix: string;
+  scopes: string[] | null;
+  is_active: boolean;
+  created_at: string;
+  expires_at: string | null;
+  restrict_to_created_clients: boolean;
+  parent_key_id: number | null;
+  allowed_groups: GroupRef[];
+  allowed_ip_pools: IPPoolRef[];
+}
+
+export interface APIKeyUpdate {
+  name?: string;
+  is_active?: boolean;
+  allowed_group_ids?: number[] | null;
+  allowed_ip_pool_ids?: number[] | null;
+  restrict_to_created_clients?: boolean;
+}
+
+export interface APIKeyListResponse {
+  keys: APIKey[];
+  total: number;
 }

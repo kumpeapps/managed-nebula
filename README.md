@@ -101,7 +101,15 @@ Nebula is a scalable overlay networking tool focusing on performance, simplicity
 
 ## 🆕 Recent Updates
 
-### 🔄 Process Monitoring & Resilient Recovery (NEW!)
+### � API Key Authentication (NEW!)
+- 🔐 **Programmatic Access** - Generate API keys for automation, CI/CD, and integrations
+- 🔒 **Secure & Flexible** - bcrypt_sha256 hashing, configurable expiration, usage tracking
+- 📊 **Management UI** - Full key lifecycle management in Profile → API Keys tab
+- 📖 **Bearer Token Auth** - Use `Authorization: Bearer mnapi_...` header for REST API access
+- 🛡️ **Rate Limited** - Max 10 active keys per user with automatic revocation support
+- 📚 **Documentation**: See [API_KEY_GUIDE.md](API_KEY_GUIDE.md) for complete guide with examples
+
+### 🔄 Process Monitoring & Resilient Recovery
 - 🛡️ **Automatic Crash Detection** - Monitors Nebula process with configurable intervals (default: 10s)
 - 🔄 **Intelligent Restart Logic** - Exponential backoff (1s → 2s → 4s, max 30s) with max 5 attempts
 - 📊 **Comprehensive Metrics** - Tracks crashes, restarts, disconnects, and config fetch failures
@@ -498,6 +506,21 @@ DB_URL=mysql+aiomysql://username:password@hostname:3306/database
 - `POST /api/v1/auth/logout` - Logout
 - `GET /api/v1/auth/me` - Get current user info
 
+#### API Keys (Programmatic Access)
+- `GET /api/v1/api-keys` - List user's API keys
+- `POST /api/v1/api-keys` - Generate new API key (shown only once!)
+- `GET /api/v1/api-keys/{id}` - Get specific API key details
+- `PUT /api/v1/api-keys/{id}` - Update API key (name, status)
+- `DELETE /api/v1/api-keys/{id}` - Revoke API key
+
+**✨ NEW: API Key Authentication** - Generate API keys for automation and integrations!
+- 🔐 Use `Authorization: Bearer mnapi_...` header for programmatic access
+- ⚡ No session cookies required - perfect for CI/CD, scripts, and automation
+- 🔒 Secure bcrypt_sha256 hashing with rate limiting (max 10 keys per user)
+- ⏱️ Configurable expiration (up to 10 years or never expire)
+- 📊 Usage tracking with last-used timestamp and usage count
+- 📖 See [API_KEY_GUIDE.md](API_KEY_GUIDE.md) for full documentation and examples
+
 #### Client Configuration (for agents)
 - `POST /api/v1/client/config` - Fetch Nebula config and certificates (token-based auth)
 
@@ -808,10 +831,51 @@ npm run build:prod  # Output in dist/
 
 The system uses `bcrypt_sha256` for password hashing to avoid bcrypt's 72-byte password truncation limitation.
 
+## 🤖 Copilot Integration Agent (NEW!)
+
+We provide a **reusable Copilot agent** that can be copied to other repositories to help developers integrate with or extend Managed Nebula. The agent provides:
+
+- 🔌 **Complete API Integration Guidance** - Authentication, client provisioning, group management
+- 📝 **Code Examples** - Python, JavaScript, curl examples with error handling
+- 🛠️ **Common Patterns** - Bulk operations, health monitoring, CI/CD integration
+- 🔒 **Security Best Practices** - API key management, rate limiting, retry logic
+- 🧪 **Testing Templates** - Unit and integration test examples
+
+### How to Use in Your Project
+
+1. **Copy the agent file** to your repository:
+   ```bash
+   mkdir -p .github/agents
+   curl -o .github/agents/managed-nebula-integration.agent.md \
+     https://raw.githubusercontent.com/kumpeapps/managed-nebula/main/.github/agents/managed-nebula-integration.agent.md
+   ```
+
+2. **Use in VS Code Copilot Chat**:
+   ```
+   @managed-nebula How do I create a client using the API with Python?
+   @managed-nebula Show me a GitHub Actions workflow for automated provisioning
+   @managed-nebula Write integration tests for my Nebula client manager
+   ```
+
+3. **Access Quick Reference**:
+   - **Full Agent**: [.github/agents/managed-nebula-integration.agent.md](.github/agents/managed-nebula-integration.agent.md)
+   - **Usage Guide**: [.github/agents/README.md](.github/agents/README.md)
+   - **Quick Reference**: [.github/agents/QUICK_REFERENCE.md](.github/agents/QUICK_REFERENCE.md)
+   - **GitHub Actions Examples**: [.github/agents/GITHUB_ACTIONS_EXAMPLES.md](.github/agents/GITHUB_ACTIONS_EXAMPLES.md)
+
+The agent is perfect for:
+- Building Terraform/Pulumi providers
+- Creating CLI tools
+- Implementing Kubernetes operators
+- Setting up monitoring dashboards
+- Integrating with existing infrastructure automation
+
 ## 📖 Documentation
 
 - **[Quick Start Guide](QUICKSTART.md)** - Common commands and troubleshooting
 - **[API Docs Access Guide](DOCS_ACCESS.md)** - How to access Swagger UI, ReDoc, and OpenAPI schema
+- **[API Key Authentication Guide](API_KEY_GUIDE.md)** - Complete guide for programmatic access with API keys
+- **[Copilot Integration Agent](.github/agents/README.md)** - Reusable AI agent for helping integrate with Managed Nebula
 - [API Documentation](API_DOCUMENTATION.md) - Complete REST API reference
 - [Group System](GROUP_SYSTEM.md) - Hierarchical groups and permissions
 - [Copilot Instructions](.github/copilot-instructions.md) - AI agent guidance for development

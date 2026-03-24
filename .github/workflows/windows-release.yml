@@ -71,7 +71,7 @@ jobs:
     - name: Download Nebula binaries
       shell: pwsh
       run: |
-        $nebulaVersion = "1.9.7"
+        $nebulaVersion = "1.10.3"
         $nebulaUrl = "https://github.com/slackhq/nebula/releases/download/v$nebulaVersion/nebula-windows-amd64.zip"
         $nebulaTmp = "windows_client\nebula-tmp"
         
@@ -281,7 +281,7 @@ jobs:
           - `NebulaAgent.exe` - Agent CLI tool
           - `NebulaAgentService.exe` - Windows Service (background)
           - `NebulaAgentGUI.exe` - GUI Configuration App (system tray)
-          - `nebula.exe` - Nebula VPN binary (v1.9.7)
+          - `nebula.exe` - Nebula VPN binary
           - `nebula-cert.exe` - Nebula certificate tool
           
           ## System Requirements

@@ -25,6 +25,15 @@ class UserGroupRef(BaseModel):
     name: str
 
 
+class IPPoolRef(BaseModel):
+    """Reference to an IP pool for nested responses."""
+    id: int
+    cidr: str
+    description: Optional[str] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ============ Client Schemas ============
 
 class FirewallRulesetRef(BaseModel):
@@ -732,3 +741,69 @@ class VersionStatusResponse(BaseModel):
     last_checked: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
+
+
+# ============ API Key Schemas ============
+
+class APIKeyCreate(BaseModel):
+    """Request model for creating a new API key."""
+    name: str = Field(..., min_length=1, max_length=255, description="Descriptive name for the API key")
+    scopes: Optional[List[str]] = Field(default=None, description="List of permission scopes (legacy, for future use)")
+    expires_in_days: Optional[int] = Field(default=None, ge=1, le=3650, description="Number of days until the key expires (max 10 years)")
+    allowed_group_ids: Optional[List[int]] = Field(default=None, description="List of group IDs this key can access (None = all groups)")
+    allowed_ip_pool_ids: Optional[List[int]] = Field(default=None, description="List of IP pool IDs this key can access (None = all pools)")
+    restrict_to_created_clients: bool = Field(default=False, description="If true, key can only access clients it created")
+
+
+class APIKeyResponse(BaseModel):
+    """Response model for API key (without the actual key value)."""
+    id: int
+    user_id: int
+    name: str
+    key_prefix: str
+    scopes: Optional[List[str]] = None
+    is_active: bool
+    created_at: datetime
+    expires_at: Optional[datetime]
+    last_used_at: Optional[datetime]
+    usage_count: int
+    restrict_to_created_clients: bool
+    parent_key_id: Optional[int] = None
+    allowed_groups: List[GroupRef] = []
+    allowed_ip_pools: List[IPPoolRef] = []
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class APIKeyCreateResponse(BaseModel):
+    """Response model when creating a new API key (includes the full key - shown only once)."""
+    id: int
+    user_id: int
+    name: str
+    key: str = Field(..., description="Full API key - save this securely, it won't be shown again")
+    key_prefix: str
+    scopes: Optional[List[str]] = None
+    is_active: bool
+    created_at: datetime
+    expires_at: Optional[datetime]
+    restrict_to_created_clients: bool
+    parent_key_id: Optional[int] = None
+    allowed_groups: List[GroupRef] = []
+    allowed_ip_pools: List[IPPoolRef] = []
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+class APIKeyUpdate(BaseModel):
+    """Request model for updating an API key."""
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    is_active: Optional[bool] = None
+    allowed_group_ids: Optional[List[int]] = Field(None, description="List of group IDs (None = no change, [] = clear restrictions)")
+    allowed_ip_pool_ids: Optional[List[int]] = Field(None, description="List of IP pool IDs (None = no change, [] = clear restrictions)")
+    restrict_to_created_clients: Optional[bool] = None
+
+
+class APIKeyListResponse(BaseModel):
+    """Response model for listing API keys."""
+    keys: List[APIKeyResponse]
+    total: int
