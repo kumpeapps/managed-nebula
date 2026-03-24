@@ -546,7 +546,7 @@ async def update_settings(body: SettingsUpdate, session: AsyncSession = Depends(
         new_version = getattr(row, 'nebula_version', DEFAULT_NEBULA_VERSION).lstrip('v')
         logger.info(
             f"Nebula version changed from {old_nebula_version} to {new_version}, "
-            f"triggering automatic installation (requested by user {user.username})"
+            f"triggering automatic installation (requested by user {user.email})"
         )
         
         installer = NebulaInstaller()
@@ -871,7 +871,7 @@ async def install_nebula_version(
     previous_version = installer.get_installed_version()
     
     # Perform installation
-    logger.info(f"Admin user {user.username} initiated Nebula installation: {configured_version}")
+    logger.info(f"Admin user {user.email} initiated Nebula installation: {configured_version}")
     success, message = await installer.download_and_install(configured_version, force=True)
     
     if success:
