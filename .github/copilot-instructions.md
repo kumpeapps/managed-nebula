@@ -160,7 +160,7 @@ Uses `nebula-cert` CLI via subprocess calls in `services/cert_manager.py`:
 
 ## API Authentication Patterns
 
-Two distinct auth mechanisms:
+Three distinct auth mechanisms:
 
 1. **Angular Frontend**: Session-based (SessionMiddleware), auth via `core/auth.py::get_current_user()`
    - Login via `POST /api/v1/auth/login` (JSON), logout via `POST /api/v1/auth/logout`
@@ -168,7 +168,18 @@ Two distinct auth mechanisms:
    - Role-based: `require_admin()` dependency for privileged routes
    - Session stored in cookies, automatically sent by browser
 
-2. **Client API**: Token-based at `/api/v1/client/config`
+2. **API Keys** (Programmatic Access): Token-based via Bearer authentication
+   - Authenticate via `Authorization: Bearer mnapi_<64-hex-chars>` header
+   - Created/managed via `/api/v1/api-keys` endpoints
+   - Supports fine-grained scope restrictions:
+     - `allowed_group_ids`: Limit to specific groups
+     - `allowed_ip_pool_ids`: Limit to specific IP pools
+     - `restrict_to_created_clients`: Only access clients created by this key
+   - Regeneration maintains permissions: `POST /api/v1/api-keys/{id}/regenerate`
+   - Authorization tracked in `request.state.api_key_id` and `request.state.api_key`
+   - Clients track creating key via `created_by_api_key_id` column
+
+3. **Client API**: Token-based at `/api/v1/client/config`
    - Validates `ClientToken` from request body (not headers)
    - Tokens created per-client in database, checked for `is_active=True`
 
@@ -272,6 +283,48 @@ alembic revision -m "description"
 alembic upgrade head
 ```
 
+## API Key Authorization Service (`services/api_key_auth.py`)
+
+When API keys have scope restrictions, use the authorization service to enforce permissions:
+
+**Key Functions:**
+- `check_client_access(session, api_key, client, operation)` - Returns bool for client access
+- `check_group_access(api_key, group)` - Returns bool for group access
+- `check_ip_pool_access(api_key, ip_pool)` - Returns bool for IP pool access
+- `require_client_access()` - Raises HTTPException(403) if access denied
+- `filter_clients_by_scope()` - Filters client list based on key permissions
+
+**When to Use:**
+- In API endpoints that list/access clients when authenticated via API key
+- Before modifying resources that have scope restrictions
+- Use `request.state.api_key` to get the authenticated API key object
+
+**Example Pattern:**
+```python
+@router.get("/clients")
+async def list_clients(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user)
+):
+    # Get all clients user can access
+    result = await session.execute(select(Client))
+    clients = result.scalars().all()
+    
+    # If authenticated via API key, filter by scope
+    if hasattr(request.state, "api_key") and request.state.api_key:
+        from ..services.api_key_auth import filter_clients_by_scope
+        clients = await filter_clients_by_scope(session, request.state.api_key, clients)
+    
+    return clients
+```
+
+**Authorization Checks:**
+- Group restrictions: Client must be in at least one allowed group
+- IP pool restrictions: Client must have IP in at least one allowed pool
+- Created clients only: Client's `created_by_api_key_id` must match key ID
+- Empty restrictions = no limitations (full user access)
+
 ## Key Conventions
 
 - **Async everywhere**: All database access via `AsyncSession`, `async def` route handlers
@@ -299,3 +352,6 @@ alembic upgrade head
 - Tests assume `nebula-cert` binary is in PATH (Docker images include it)
 - Always use Pydantic schemas from `models/schemas.py` - don't define inline BaseModel classes in routers
 - Frontend auth uses session cookies - ensure CORS/CSRF properly configured for production
+- When API keys are used for authentication, check `request.state.api_key` for scope restrictions
+- Always use `filter_clients_by_scope()` when listing clients with API key auth to enforce restrictions
+- Client creation should store `created_by_api_key_id` when authenticated via API key for proper scope tracking

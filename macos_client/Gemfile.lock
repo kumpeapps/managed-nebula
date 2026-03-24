@@ -169,7 +169,7 @@ GEM
     httpclient (2.9.0)
       mutex_m
     jmespath (1.6.2)
-    json (2.18.1)
+    json (2.19.2)
     jwt (2.10.2)
       base64
     logger (1.7.0)
@@ -185,7 +185,7 @@ GEM
     os (1.1.4)
     ostruct (0.6.3)
     plist (3.7.2)
-    public_suffix (7.0.2)
+    public_suffix (6.0.2)
     rake (13.3.1)
     representable (3.2.0)
       declarative (< 0.1.0)
@@ -230,6 +230,7 @@ GEM
       xcpretty (~> 0.2, >= 0.0.7)
 
 PLATFORMS
+  aarch64-linux
   arm64-darwin-23
   arm64-darwin-24
   x86_64-linux
@@ -238,4 +239,4 @@ DEPENDENCIES
   fastlane
 
 BUNDLED WITH
-   2.3.26
+   2.6.9

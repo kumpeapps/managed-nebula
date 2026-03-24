@@ -1,10 +1,13 @@
 from __future__ import annotations
 from sqlalchemy import String, Integer, Boolean, DateTime, select, func, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column
-from typing import Optional
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from typing import Optional, TYPE_CHECKING
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from ..db import Base
+
+if TYPE_CHECKING:
+    from .api_key import UserAPIKey
 
 
 class Role(Base):
@@ -26,6 +29,14 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
     
+    # Relationships
+    api_keys: Mapped[list["UserAPIKey"]] = relationship("UserAPIKey", back_populates="user", lazy="selectin", cascade="all, delete-orphan")
+    
+    @property
+    def username(self) -> str:
+        """Derive username from email for display purposes."""
+        return self.email
+
     async def has_permission(self, session: AsyncSession, resource: str, action: str) -> bool:
         """
         Check if user has a specific permission through their group memberships.
