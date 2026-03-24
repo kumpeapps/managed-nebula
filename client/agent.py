@@ -252,7 +252,7 @@ def check_and_update_nebula(server_url: str) -> bool:
     
     try:
         # Get server version (public endpoint, no auth required)
-        version_url = server_url.rstrip("/") + "/v1/version"
+        version_url = server_url.rstrip("/") + "/api/v1/version"
         with httpx.Client(timeout=10, verify=verify_ssl) as client:
             r = client.get(version_url)
             r.raise_for_status()
