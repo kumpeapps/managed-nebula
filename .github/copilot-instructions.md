@@ -183,6 +183,62 @@ Three distinct auth mechanisms:
    - Validates `ClientToken` from request body (not headers)
    - Tokens created per-client in database, checked for `is_active=True`
 
+## Frontend UI (`frontend/src/app/components/`)
+
+**Angular 17 SPA with key management interfaces:**
+
+- **Profile Component** (`profile.component.ts`): User profile and API key management
+  - **Profile Settings Tab**: Email/password updates
+  - **API Keys Tab**: Complete API key lifecycle management
+    - Create keys with name, expiration, and scope restrictions (groups, IP pools, client restriction)
+    - Edit existing key permissions (name, groups, IP pools, restrictions)
+    - Regenerate keys (creates new key with same permissions, revokes old)
+    - Revoke keys (immediate deactivation)
+    - View key details: preview, status, creation date, expiration, last used, usage count
+    - Scope display: Shows group/IP pool restrictions and "created clients only" flag
+  - Route: `/profile`
+
+- **Settings Component** (`settings.component.ts`): Admin-only system settings
+  - Version information (frontend, server, Nebula)
+  - Nebula configuration (punchy, lighthouse settings)
+  - Version cache management
+  - GitHub webhook secret configuration
+  - Route: `/settings` (admin only)
+
+- **Navbar Component** (`navbar.component.ts`): Main navigation
+  - Conditional visibility based on authentication and role
+  - Profile link available to all authenticated users
+  - Settings link visible to admins only
+
+## GitHub Secret Scanning Integration
+
+**Automatic token revocation for leaked secrets via GitHub Secret Scanning Partner Program:**
+
+- **Metadata Endpoint** (`GET /.well-known/secret-scanning.json`): Public endpoint that returns regex patterns
+  - Client tokens: `<prefix>[a-z0-9]{32}` (prefix configurable, default `mnebula_`)
+  - API keys: `mnapi_[a-f0-9]{64}` (fixed format, 70 chars total)
+  
+- **Verify Endpoint** (`POST /api/v1/github/secret-scanning/verify`): Checks if tokens are valid
+  - Requires GitHub webhook signature verification (HMAC SHA-256)
+  - Accepts both client tokens and API keys (determined by `mnapi_` prefix)
+  - Client tokens: Direct database lookup by token value
+  - API keys: Iterates through active keys, verifies against hash using `passlib`
+  - Returns token details: label, URL, is_active status
+  - Logs all verification attempts to `GitHubSecretScanningLog`
+  
+- **Revoke Endpoint** (`POST /api/v1/github/secret-scanning/revoke`): Auto-deactivates leaked tokens
+  - Requires GitHub webhook signature verification
+  - Client tokens: Sets `is_active=False` in `ClientToken` table
+  - API keys: Sets `is_active=False` in `UserAPIKey` table
+  - Logs revocations with warning level (includes client_id or key_id)
+  - Returns count of successfully revoked tokens
+  
+- **Implementation Notes**:
+  - Both endpoints use `get_token_preview()` for safe logging (first 12 chars)
+  - API key verification requires iterating all active keys (they're bcrypt hashed)
+  - Signature verification uses constant-time comparison (`hmac.compare_digest`)
+  - Webhook secret configurable via `/api/v1/settings/github-webhook-secret`
+
 ## REST API Architecture (`server/app/routers/api.py`)
 
 **All endpoints under `/api/v1` prefix, pure JSON responses:**
@@ -355,3 +411,6 @@ async def list_clients(
 - When API keys are used for authentication, check `request.state.api_key` for scope restrictions
 - Always use `filter_clients_by_scope()` when listing clients with API key auth to enforce restrictions
 - Client creation should store `created_by_api_key_id` when authenticated via API key for proper scope tracking
+- API key regeneration (`POST /api-keys/{id}/regenerate`) maintains scope restrictions and parent_key_id for client access tracking
+- Frontend API key forms handle scope restrictions via multi-select dropdowns for groups/IP pools
+- GitHub secret scanning works for both client tokens and API keys - ensure webhook secret is configured

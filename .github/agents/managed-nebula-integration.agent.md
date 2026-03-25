@@ -123,6 +123,7 @@ response = requests.post(f"{BASE_URL}/clients", headers=headers, json=new_client
 - Usage tracking with last_used_at and usage_count
 - Instant revocation support
 - Secure bcrypt_sha256 hashing
+- **Web UI**: Manage keys via Profile → API Keys tab (create, edit, regenerate, revoke)
 
 **Scope Restrictions (Fine-Grained Access Control):**
 
@@ -407,6 +408,15 @@ def setup_team_access(api_url, api_key, team_name, members):
 - `DELETE /api/v1/api-keys/{id}` - Revoke key
 - `POST /api/v1/api-keys/{id}/regenerate` - Regenerate key (maintains scope restrictions)
 
+**Web UI**: API keys managed via Profile → API Keys tab
+
+### GitHub Secret Scanning (Security)
+- `GET /.well-known/secret-scanning.json` - Public metadata for GitHub Secret Scanning Partner Program
+- `POST /api/v1/github/secret-scanning/verify` - Verify if leaked tokens are valid (requires signature)
+- `POST /api/v1/github/secret-scanning/revoke` - Auto-revoke leaked tokens found in public repos
+  - Supports both client tokens (`<prefix>[a-z0-9]{32}`) and API keys (`mnapi_[a-f0-9]{64}`)
+  - Webhook secret configurable via `/api/v1/settings/github-webhook-secret`
+
 ### Groups
 - `GET /api/v1/groups` - List groups
 - `POST /api/v1/groups` - Create group (supports hierarchical names like "parent:child")
@@ -441,8 +451,12 @@ def setup_team_access(api_url, api_key, team_name, members):
    - **IP Pool Restrictions**: Limit key to specific IP pools via `allowed_ip_pool_ids`
    - **Created Clients Only**: Set `restrict_to_created_clients: true` to only access clients created by that key
 4. **Create Separate Keys**: Use different keys for different purposes/environments
-4. **Store Keys Securely**: Use environment variables or secret managers
-5. **Monitor Key Usage**: Check last_used_at and usage_count regularly
+5. **Store Keys Securely**: Use environment variables or secret managers
+6. **Monitor Key Usage**: Check last_used_at and usage_count regularly
+7. **GitHub Secret Scanning**: Managed Nebula supports automatic token revocation if keys are leaked to public GitHub repos
+   - Client tokens and API keys are automatically detected
+   - Leaked tokens are auto-revoked via GitHub webhook
+   - Configure webhook secret at Profile → Settings → GitHub Webhook Secret
 
 ### Error Handling
 

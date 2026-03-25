@@ -5154,36 +5154,78 @@ async def github_secret_scanning_verify(
     # Process each token
     responses = []
     for token_request in tokens:
-        # Look up token in database
-        token_result = await session.execute(
-            select(ClientToken)
-            .options(selectinload(ClientToken.client))
-            .where(ClientToken.token == token_request.token)
-        )
-        token = token_result.scalar_one_or_none()
-        
-        if token:
-            # Token found - return details
-            client = token.client
-            responses.append(
-                GitHubSecretVerificationResponse(
-                    token=token_request.token,
-                    type=token_request.type,
-                    label=client.name if client else "unknown",
-                    url=f"{request.base_url}clients/{client.id}" if client else None,
-                    is_active=token.is_active
-                )
-            )
+        # Determine token type by checking prefix
+        if token_request.token.startswith("mnapi_"):
+            # Check API key
+            from ..models.api_key import UserAPIKey
+            from ..services.api_key_manager import verify_api_key
             
-            # Log verification
-            log_entry = GitHubSecretScanningLog(
-                action="verify",
-                token_preview=get_token_preview(token_request.token),
-                github_url=token_request.url,
-                is_active=token.is_active,
-                client_id=token.client_id
+            api_key_result = await session.execute(
+                select(UserAPIKey)
+                .options(selectinload(UserAPIKey.user))
+                .where(UserAPIKey.is_active == True)
             )
-            session.add(log_entry)
+            api_keys = api_key_result.scalars().all()
+            
+            # Verify against all active API keys (they're hashed)
+            found_key = None
+            for key in api_keys:
+                if verify_api_key(token_request.token, key.key_hash):
+                    found_key = key
+                    break
+            
+            if found_key:
+                # API key found - return details
+                responses.append(
+                    GitHubSecretVerificationResponse(
+                        token=token_request.token,
+                        type=token_request.type,
+                        label=f"API Key: {found_key.name}" if found_key.name else "API Key",
+                        url=f"{request.base_url}api/v1/api-keys/{found_key.id}",
+                        is_active=found_key.is_active
+                    )
+                )
+                
+                # Log verification
+                log_entry = GitHubSecretScanningLog(
+                    action="verify",
+                    token_preview=get_token_preview(token_request.token),
+                    github_url=token_request.url,
+                    is_active=found_key.is_active,
+                    client_id=None  # API keys not tied to specific client
+                )
+                session.add(log_entry)
+        else:
+            # Check client token
+            token_result = await session.execute(
+                select(ClientToken)
+                .options(selectinload(ClientToken.client))
+                .where(ClientToken.token == token_request.token)
+            )
+            token = token_result.scalar_one_or_none()
+            
+            if token:
+                # Token found - return details
+                client = token.client
+                responses.append(
+                    GitHubSecretVerificationResponse(
+                        token=token_request.token,
+                        type=token_request.type,
+                        label=client.name if client else "unknown",
+                        url=f"{request.base_url}clients/{client.id}" if client else None,
+                        is_active=token.is_active
+                    )
+                )
+                
+                # Log verification
+                log_entry = GitHubSecretScanningLog(
+                    action="verify",
+                    token_preview=get_token_preview(token_request.token),
+                    github_url=token_request.url,
+                    is_active=token.is_active,
+                    client_id=token.client_id
+                )
+                session.add(log_entry)
         # If token not found, don't add to responses (don't leak info)
     
     await session.commit()
@@ -5226,32 +5268,71 @@ async def github_secret_scanning_revoke(
     # Process each token
     revoked_count = 0
     for token_request in tokens:
-        # Look up token in database
-        token_result = await session.execute(
-            select(ClientToken).where(ClientToken.token == token_request.token)
-        )
-        token = token_result.scalar_one_or_none()
-        
-        if token and token.is_active:
-            # Deactivate token
-            token.is_active = False
-            revoked_count += 1
+        # Determine token type by checking prefix
+        if token_request.token.startswith("mnapi_"):
+            # Check API key
+            from ..models.api_key import UserAPIKey
+            from ..services.api_key_manager import verify_api_key
             
-            logger.warning(
-                f"Token revoked by GitHub Secret Scanning: "
-                f"client_id={token.client_id}, "
-                f"github_url={token_request.url}"
+            api_key_result = await session.execute(
+                select(UserAPIKey).where(UserAPIKey.is_active == True)
             )
-        
-        # Log revocation attempt (even if token not found)
-        log_entry = GitHubSecretScanningLog(
-            action="revoke",
-            token_preview=get_token_preview(token_request.token),
-            github_url=token_request.url,
-            is_active=token.is_active if token else False,
-            client_id=token.client_id if token else None
-        )
-        session.add(log_entry)
+            api_keys = api_key_result.scalars().all()
+            
+            # Verify against all active API keys (they're hashed)
+            found_key = None
+            for key in api_keys:
+                if verify_api_key(token_request.token, key.key_hash):
+                    found_key = key
+                    break
+            
+            if found_key and found_key.is_active:
+                # Deactivate API key
+                found_key.is_active = False
+                revoked_count += 1
+                
+                logger.warning(
+                    f"API key revoked by GitHub Secret Scanning: "
+                    f"key_id={found_key.id}, user_id={found_key.user_id}, "
+                    f"name={found_key.name}, github_url={token_request.url}"
+                )
+            
+            # Log revocation attempt (even if key not found)
+            log_entry = GitHubSecretScanningLog(
+                action="revoke",
+                token_preview=get_token_preview(token_request.token),
+                github_url=token_request.url,
+                is_active=found_key.is_active if found_key else False,
+                client_id=None  # API keys not tied to specific client
+            )
+            session.add(log_entry)
+        else:
+            # Check client token
+            token_result = await session.execute(
+                select(ClientToken).where(ClientToken.token == token_request.token)
+            )
+            token = token_result.scalar_one_or_none()
+            
+            if token and token.is_active:
+                # Deactivate token
+                token.is_active = False
+                revoked_count += 1
+                
+                logger.warning(
+                    f"Client token revoked by GitHub Secret Scanning: "
+                    f"client_id={token.client_id}, "
+                    f"github_url={token_request.url}"
+                )
+            
+            # Log revocation attempt (even if token not found)
+            log_entry = GitHubSecretScanningLog(
+                action="revoke",
+                token_preview=get_token_preview(token_request.token),
+                github_url=token_request.url,
+                is_active=token.is_active if token else False,
+                client_id=token.client_id if token else None
+            )
+            session.add(log_entry)
     
     await session.commit()
     
