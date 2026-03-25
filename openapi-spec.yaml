@@ -1,0 +1,3296 @@
+openapi: 3.0.3
+info:
+  title: Managed Nebula API
+  description: |
+    REST API for Managed Nebula - A mesh VPN management platform built on Nebula.
+    
+    ## Quick Start with API Keys
+    
+    1. **Get an API Key**: Login to the web UI → Profile → API Keys tab → Create API Key
+    2. **Set the `apiKey` variable**: In your API client (Paw, Postman, etc.), create a variable named `apiKey` with your full key (e.g., `mnapi_1234...`)
+    3. **Make requests**: All authenticated endpoints will automatically use `Bearer {apiKey}` authentication
+    
+    ## Using with Different Tools
+    
+    ### Postman
+    ```
+    1. Import this OpenAPI spec
+    2. In Environments, create a new variable: `apiKey` = `mnapi_your_key_here`
+    3. Requests will automatically use: Authorization: Bearer {{apiKey}}
+    ```
+    
+    ### Paw (RapidAPI)
+    ```
+    1. Import this OpenAPI spec
+    2. Set Environment Variable: apiKey = mnapi_your_key_here
+    3. The bearer token will be automatically configured
+    ```
+    
+    ### cURL Example
+    ```bash
+    curl -H "Authorization: Bearer mnapi_your_key_here" \
+         https://your-server:8080/clients
+    ```
+    
+    ## Authentication
+    
+    The API supports three authentication methods:
+    
+    1. **Session-based (Web UI)**: Login via `/api/v1/auth/login` and use session cookies
+    2. **API Keys (Recommended)**: Use `Authorization: Bearer mnapi_<key>` header for programmatic access
+    3. **Client Tokens**: Used by client agents to fetch configurations
+    
+    ## Authorization
+    
+    - Most endpoints require authentication
+    - Admin-only endpoints are marked in their descriptions
+    - API keys can have scope restrictions (groups, IP pools, created clients only)
+    
+    ## Rate Limiting
+    
+    No rate limiting is currently enforced, but it may be added in future versions.
+    
+    ## Versioning
+    
+    All endpoints are versioned under `/api/v1/`. Breaking changes will introduce new version paths.
+  version: 1.0.0
+  contact:
+    name: Managed Nebula Support
+    url: https://github.com/kumpeapps/managed-nebula
+  license:
+    name: MIT
+    url: https://github.com/kumpeapps/managed-nebula/blob/main/LICENSE
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: https://api.managednebula.example.com
+    description: Production server (example)
+
+tags:
+  - name: auth
+    description: Authentication and user profile management
+  - name: clients
+    description: Nebula client (node) management
+  - name: groups
+    description: Client groups for organizing nodes
+  - name: firewall-rulesets
+    description: Firewall ruleset management
+  - name: ip-pools
+    description: IP address pool management
+  - name: ip-groups
+    description: IP group management for certificate IP restrictions
+  - name: ca
+    description: Certificate Authority management
+  - name: users
+    description: User account management (admin only)
+  - name: user-groups
+    description: User group management for permissions
+  - name: api-keys
+    description: API key management for programmatic access
+  - name: permissions
+    description: Permission and access control management
+  - name: settings
+    description: System settings and configuration
+  - name: version
+    description: Version information and status
+  - name: github
+    description: GitHub integrations (secret scanning)
+  - name: public
+    description: Public endpoints (no authentication required)
+  - name: health
+    description: Health check endpoints
+
+security:
+  - bearerAuth: []
+  - sessionAuth: []
+
+paths:
+  # ==================== Authentication ====================
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Login
+      description: Authenticate user and create session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: admin@example.com
+                password:
+                  type: string
+                  format: password
+                  example: changeme
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          description: Invalid credentials
+        '403':
+          description: User inactive
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: Logout
+      description: Clear session and logout
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      summary: Get current user
+      description: Get authenticated user information
+      responses:
+        '200':
+          description: Current user information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          description: Not authenticated
+    
+    put:
+      tags: [auth]
+      summary: Update current user profile
+      description: Update email and/or password for current user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: New email (optional)
+                current_password:
+                  type: string
+                  format: password
+                  description: Current password for verification
+                new_password:
+                  type: string
+                  format: password
+                  description: New password (optional)
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          description: Current password incorrect
+        '403':
+          description: Users are managed externally
+        '409':
+          description: Email already exists
+
+  # ==================== Health & Status ====================
+  /healthz:
+    get:
+      tags: [health]
+      summary: Health check
+      description: Check if the API is running
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /warnings:
+    get:
+      tags: [health]
+      summary: Get system warnings
+      description: Get system warnings and configuration issues
+      responses:
+        '200':
+          description: List of warnings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+
+  /version:
+    get:
+      tags: [version]
+      summary: Get version information
+      description: Get server and Nebula version information
+      responses:
+        '200':
+          description: Version information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResponse'
+
+  /version-status:
+    get:
+      tags: [version]
+      summary: Get version status
+      description: Get version update status and security advisories
+      responses:
+        '200':
+          description: Version status information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionStatusResponse'
+
+  # ==================== Clients ====================
+  /clients:
+    get:
+      tags: [clients]
+      summary: List all clients
+      description: Get list of all Nebula clients. Results filtered by API key scope if using API key auth.
+      security:
+        - bearerAuth: []
+        - sessionAuth: []
+      responses:
+        '200':
+          description: List of clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClientResponse'
+              examples:
+                success:
+                  summary: Successful response
+                  value:
+                    - id: 1
+                      name: web-server-01
+                      ip_address: 10.0.0.10
+                      is_lighthouse: false
+                      is_blocked: false
+                      groups:
+                        - id: 1
+                          name: web-servers
+                      firewall_rulesets:
+                        - id: 1
+                          name: default-web
+    
+    post:
+      tags: [clients]
+      summary: Create new client
+      description: Create a new Nebula client node
+      security:
+        - bearerAuth: []
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientCreate'
+            examples:
+              basic:
+                summary: Basic client
+                value:
+                  name: web-server-01
+                  pool_id: 1
+                  group_ids: [1]
+              lighthouse:
+                summary: Lighthouse node
+                value:
+                  name: lighthouse-01
+                  is_lighthouse: true
+                  public_ip: 1.2.3.4
+                  pool_id: 1
+      responses:
+        '200':
+          description: Client created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientResponse'
+        '400':
+          description: Invalid request
+        '409':
+          description: Client name already exists
+
+  /clients/{client_id}:
+    get:
+      tags: [clients]
+      summary: Get client by ID
+      description: Get detailed information about a specific client
+      parameters:
+        - $ref: '#/components/parameters/ClientIdPath'
+      responses:
+        '200':
+          description: Client details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientResponse'
+        '403':
+          description: Access denied (API key scope)
+        '404':
+          description: Client not found
+    
+    put:
+      tags: [clients]
+      summary: Update client
+      description: Update client configuration
+      parameters:
+        - $ref: '#/components/parameters/ClientIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientUpdate'
+      responses:
+        '200':
+          description: Client updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientResponse'
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied
+        '404':
+          description: Client not found
+    
+    delete:
+      tags: [clients]
+      summary: Delete client
+      description: Delete a client and all associated data
+      parameters:
+        - $ref: '#/components/parameters/ClientIdPath'
+      responses:
+        '200':
+          description: Client deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+        '403':
+          description: Access denied
+        '404':
+          description: Client not found
+
+  /clients/{client_id}/alternate-ips:
+    post:
+      tags: [clients]
+      summary: Add alternate IP to client
+      description: Assign an additional IP address to a client (for v2 certificate multi-IP support)
+      parameters:
+        - $ref: '#/components/parameters/ClientIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pool_id]
+              properties:
+                pool_id:
+                  type: integer
+                  description: IP pool to allocate from
+                ip_address:
+                  type: string
+                  description: Specific IP to assign (optional, auto-allocated if not provided)
+      responses:
+        '201':
+          description: IP assigned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IPAssignmentResponse'
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied
+        '404':
+          description: Client or pool not found
+        '409':
+          description: IP already assigned
+
+  /clients/{client_id}/alternate-ips/{ip_assignment_id}:
+    delete:
+      tags: [clients]
+      summary: Remove alternate IP from client
+      description: Remove an IP assignment from a client
+      parameters:
+        - $ref: '#/components/parameters/ClientIdPath'
+        - name: ip_assignment_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: IP removed successfully
+        '403':
+          description: Access denied or cannot remove primary IP
+        '404':
+          description: Client or IP assignment not found
+
+  /clients/{client_id}/owner:
+    put:
+      tags: [clients]
+      summary: Update client owner
+      description: Change the owner of a client (admin only)
+      parameters:
+        - $ref: '#/components/parameters/ClientIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [owner_user_id]
+              properties:
+                owner_user_id:
+                  type: integer
+                  nullable: true
+                  description: New owner user ID (null to remove owner)
+      responses:
+        '200':
+          description: Owner updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientResponse'
+        '403':
+          description: Admin only
+        '404':
+          description: Client or user not found
+
+  /clients/{client_id}/permissions:
+    get:
+      tags: [clients, permissions]
+      summary: List client permissions
+      description: Get all permissions granted for a specific client
+      parameters:
+        - $ref: '#/components/parameters/ClientIdPath'
+      responses:
+        '200':
+          description: List of permissions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClientPermissionResponse'
+        '403':
+          description: Access denied
+        '404':
+          description: Client not found
+    
+    post:
+      tags: [clients, permissions]
+      summary: Grant client permission
+      description: Grant a permission to a user or user group for a specific client
+      parameters:
+        - $ref: '#/components/parameters/ClientIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientPermissionGrant'
+      responses:
+        '200':
+          description: Permission granted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientPermissionResponse'
+        '400':
+          description: Invalid request
+        '403':
+          description: Access denied
+        '404':
+          description: Client, user, or permission not found
+        '409':
+          description: Permission already granted
+
+  /clients/{client_id}/permissions/{permission_id}:
+    delete:
+      tags: [clients, permissions]
+      summary: Revoke client permission
+      description: Revoke a permission for a client
+      parameters:
+        - $ref: '#/components/parameters/ClientIdPath'
+        - name: permission_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Permission revoked successfully
+        '403':
+          description: Access denied
+        '404':
+          description: Client or permission not found
+
+  /clients/{client_id}/certificates:
+    get:
+      tags: [clients]
+      summary: List client certificates
+      description: Get all certificates issued for a client
+      parameters:
+        - $ref: '#/components/parameters/ClientIdPath'
+      responses:
+        '200':
+          description: List of certificates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClientCertificateResponse'
+        '403':
+          description: Access denied
+        '404':
+          description: Client not found
+
+  /clients/{client_id}/certificates/reissue:
+    post:
+      tags: [clients]
+      summary: Reissue client certificate
+      description: Force reissue of client certificate (for IP/group changes or rotation)
+      parameters:
+        - $ref: '#/components/parameters/ClientIdPath'
+      responses:
+        '200':
+          description: Certificate reissued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientCertificateResponse'
+        '403':
+          description: Access denied
+        '404':
+          description: Client not found
+        '503':
+          description: No active CA available
+
+  /clients/{client_id}/certificates/{cert_id}/revoke:
+    post:
+      tags: [clients]
+      summary: Revoke client certificate
+      description: Revoke a specific certificate for a client
+      parameters:
+        - $ref: '#/components/parameters/ClientIdPath'
+        - name: cert_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Certificate revoked successfully
+        '403':
+          description: Access denied
+        '404':
+          description: Client or certificate not found
+
+  /clients/{client_id}/config:
+    get:
+      tags: [clients]
+      summary: Get client configuration
+      description: Download Nebula configuration YAML for a client
+      parameters:
+        - $ref: '#/components/parameters/ClientIdPath'
+      responses:
+        '200':
+          description: Configuration YAML
+          content:
+            application/x-yaml:
+              schema:
+                type: string
+            text/plain:
+              schema:
+                type: string
+        '403':
+          description: Access denied or client blocked
+        '404':
+          description: Client not found
+        '409':
+          description: No IP assigned to client
+        '503':
+          description: No active CA available
+
+  /clients/{client_id}/docker-compose:
+    get:
+      tags: [clients]
+      summary: Get Docker Compose configuration
+      description: Get Docker Compose YAML for deploying the client as a container
+      parameters:
+        - $ref: '#/components/parameters/ClientIdPath'
+      responses:
+        '200':
+          description: Docker Compose YAML
+          content:
+            application/x-yaml:
+              schema:
+                type: string
+        '403':
+          description: Access denied
+        '404':
+          description: Client not found
+
+  /client/config:
+    post:
+      tags: [clients]
+      summary: Client agent config fetch
+      description: Endpoint for client agents to fetch their configuration (uses client token authentication)
+      security:
+        - clientToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: Client token for authentication
+                  example: mnebula_abcdef1234567890abcdef12
+                public_key:
+                  type: string
+                  description: Client's Nebula public key (for certificate signing)
+                client_version:
+                  type: string
+                  description: Client version (optional)
+                  example: 1.0.0
+                nebula_version:
+                  type: string
+                  description: Nebula version (optional)
+                  example: 1.9.0
+      responses:
+        '200':
+          description: Configuration and certificates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  config:
+                    type: string
+                    description: Nebula YAML configuration
+                  client_cert_pem:
+                    type: string
+                    description: Client certificate in PEM format
+                  ca_chain_pems:
+                    type: array
+                    items:
+                      type: string
+                    description: CA certificate chain in PEM format
+        '401':
+          description: Invalid token
+        '403':
+          description: Client blocked
+        '503':
+          description: No active CA available
+
+  # ==================== Groups ====================
+  /groups:
+    get:
+      tags: [groups]
+      summary: List all groups
+      description: Get list of all client groups
+      responses:
+        '200':
+          description: List of groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GroupResponse'
+    
+    post:
+      tags: [groups]
+      summary: Create new group
+      description: Create a new client group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupCreate'
+      responses:
+        '200':
+          description: Group created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupResponse'
+        '400':
+          description: Invalid request
+        '409':
+          description: Group name already exists
+
+  /groups/{group_id}:
+    get:
+      tags: [groups]
+      summary: Get group by ID
+      description: Get detailed information about a specific group
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Group details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupResponse'
+        '404':
+          description: Group not found
+    
+    put:
+      tags: [groups]
+      summary: Update group
+      description: Update group information
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupUpdate'
+      responses:
+        '200':
+          description: Group updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupResponse'
+        '400':
+          description: Invalid request
+        '404':
+          description: Group not found
+    
+    delete:
+      tags: [groups]
+      summary: Delete group
+      description: Delete a group (fails if clients are still using it)
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Group deleted successfully
+        '404':
+          description: Group not found
+        '409':
+          description: Group still has clients
+
+  /groups/{group_id}/permissions:
+    get:
+      tags: [groups, permissions]
+      summary: List group permissions
+      description: Get all permissions granted for a specific group
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of permissions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GroupPermissionResponse'
+        '404':
+          description: Group not found
+    
+    post:
+      tags: [groups, permissions]
+      summary: Grant group permission
+      description: Grant a permission to a user or user group for a specific group
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupPermissionGrant'
+      responses:
+        '200':
+          description: Permission granted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupPermissionResponse'
+        '400':
+          description: Invalid request
+        '404':
+          description: Group, user, or permission not found
+        '409':
+          description: Permission already granted
+
+  /groups/{group_id}/permissions/{permission_id}:
+    delete:
+      tags: [groups, permissions]
+      summary: Revoke group permission
+      description: Revoke a permission for a group
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: permission_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Permission revoked successfully
+        '404':
+          description: Group or permission not found
+
+  # ==================== Firewall Rulesets ====================
+  /firewall-rulesets:
+    get:
+      tags: [firewall-rulesets]
+      summary: List all firewall rulesets
+      description: Get list of all firewall rulesets
+      responses:
+        '200':
+          description: List of firewall rulesets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FirewallRulesetResponse'
+    
+    post:
+      tags: [firewall-rulesets]
+      summary: Create new firewall ruleset
+      description: Create a new firewall ruleset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FirewallRulesetCreate'
+      responses:
+        '200':
+          description: Ruleset created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FirewallRulesetResponse'
+        '400':
+          description: Invalid YAML or request
+        '409':
+          description: Ruleset name already exists
+
+  /firewall-rulesets/{ruleset_id}:
+    get:
+      tags: [firewall-rulesets]
+      summary: Get firewall ruleset by ID
+      description: Get detailed information about a specific firewall ruleset
+      parameters:
+        - name: ruleset_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Ruleset details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FirewallRulesetResponse'
+        '404':
+          description: Ruleset not found
+    
+    put:
+      tags: [firewall-rulesets]
+      summary: Update firewall ruleset
+      description: Update firewall ruleset configuration
+      parameters:
+        - name: ruleset_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FirewallRulesetUpdate'
+      responses:
+        '200':
+          description: Ruleset updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FirewallRulesetResponse'
+        '400':
+          description: Invalid YAML or request
+        '404':
+          description: Ruleset not found
+    
+    delete:
+      tags: [firewall-rulesets]
+      summary: Delete firewall ruleset
+      description: Delete a firewall ruleset (fails if clients are still using it)
+      parameters:
+        - name: ruleset_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Ruleset deleted successfully
+        '404':
+          description: Ruleset not found
+        '409':
+          description: Ruleset still has clients
+
+  # ==================== IP Pools ====================
+  /ip-pools:
+    get:
+      tags: [ip-pools]
+      summary: List all IP pools
+      description: Get list of all IP address pools
+      responses:
+        '200':
+          description: List of IP pools
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IPPoolResponse'
+    
+    post:
+      tags: [ip-pools]
+      summary: Create new IP pool
+      description: Create a new IP address pool
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IPPoolCreate'
+      responses:
+        '200':
+          description: Pool created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IPPoolResponse'
+        '400':
+          description: Invalid CIDR or request
+
+  /ip-pools/{pool_id}:
+    get:
+      tags: [ip-pools]
+      summary: Get IP pool by ID
+      description: Get detailed information about a specific IP pool
+      parameters:
+        - name: pool_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Pool details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IPPoolResponse'
+        '404':
+          description: Pool not found
+    
+    put:
+      tags: [ip-pools]
+      summary: Update IP pool
+      description: Update IP pool information (cannot change CIDR if IPs are allocated)
+      parameters:
+        - name: pool_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IPPoolUpdate'
+      responses:
+        '200':
+          description: Pool updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IPPoolResponse'
+        '400':
+          description: Invalid CIDR or cannot change CIDR
+        '404':
+          description: Pool not found
+    
+    delete:
+      tags: [ip-pools]
+      summary: Delete IP pool
+      description: Delete an IP pool (fails if IPs are allocated)
+      parameters:
+        - name: pool_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Pool deleted successfully
+        '404':
+          description: Pool not found
+        '409':
+          description: Pool has allocated IPs
+
+  /ip-pools/{pool_id}/clients:
+    get:
+      tags: [ip-pools, clients]
+      summary: List clients in IP pool
+      description: Get all clients with IPs allocated from this pool
+      parameters:
+        - name: pool_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClientResponse'
+        '404':
+          description: Pool not found
+
+  /ip-pools/{pool_id}/available-ips:
+    get:
+      tags: [ip-pools]
+      summary: List available IPs in pool
+      description: Get list of unallocated IP addresses in the pool
+      parameters:
+        - name: pool_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of available IPs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AvailableIPResponse'
+        '404':
+          description: Pool not found
+
+  # ==================== IP Groups ====================
+  /ip-groups:
+    get:
+      tags: [ip-groups]
+      summary: List all IP groups
+      description: Get list of all IP groups (for certificate IP/CIDR restrictions)
+      responses:
+        '200':
+          description: List of IP groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IPGroupResponse'
+    
+    post:
+      tags: [ip-groups]
+      summary: Create new IP group
+      description: Create a new IP group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IPGroupCreate'
+      responses:
+        '200':
+          description: IP group created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IPGroupResponse'
+        '400':
+          description: Invalid request
+        '409':
+          description: IP group name already exists
+
+  /ip-groups/{group_id}:
+    get:
+      tags: [ip-groups]
+      summary: Get IP group by ID
+      description: Get detailed information about a specific IP group
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: IP group details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IPGroupResponse'
+        '404':
+          description: IP group not found
+    
+    put:
+      tags: [ip-groups]
+      summary: Update IP group
+      description: Update IP group configuration
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IPGroupUpdate'
+      responses:
+        '200':
+          description: IP group updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IPGroupResponse'
+        '400':
+          description: Invalid request
+        '404':
+          description: IP group not found
+    
+    delete:
+      tags: [ip-groups]
+      summary: Delete IP group
+      description: Delete an IP group (fails if clients are still using it)
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: IP group deleted successfully
+        '404':
+          description: IP group not found
+        '409':
+          description: IP group still has clients
+
+  /ip-groups/{group_id}/clients:
+    get:
+      tags: [ip-groups, clients]
+      summary: List clients in IP group
+      description: Get all clients assigned to this IP group
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClientResponse'
+        '404':
+          description: IP group not found
+
+  # ==================== Certificate Authority ====================
+  /ca:
+    get:
+      tags: [ca]
+      summary: List all CAs
+      description: Get list of all Certificate Authorities
+      responses:
+        '200':
+          description: List of CAs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CAResponse'
+
+  /ca/create:
+    post:
+      tags: [ca]
+      summary: Create new CA
+      description: Create a new Certificate Authority
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CACreate'
+      responses:
+        '200':
+          description: CA created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CAResponse'
+        '400':
+          description: Invalid request
+
+  /ca/import:
+    post:
+      tags: [ca]
+      summary: Import existing CA
+      description: Import an existing CA certificate and key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CAImport'
+      responses:
+        '200':
+          description: CA imported successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CAResponse'
+        '400':
+          description: Invalid certificate or key
+
+  /ca/{ca_id}/set-signing:
+    post:
+      tags: [ca]
+      summary: Set CA as signing CA
+      description: Set a CA as the active signing CA for new certificates
+      parameters:
+        - name: ca_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: CA set as signing CA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CAResponse'
+        '404':
+          description: CA not found
+
+  /ca/{ca_id}:
+    delete:
+      tags: [ca]
+      summary: Delete CA
+      description: Delete a CA (cannot delete active CA)
+      parameters:
+        - name: ca_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: CA deleted successfully
+        '404':
+          description: CA not found
+        '409':
+          description: Cannot delete active CA
+
+  # ==================== Users ====================
+  /users:
+    get:
+      tags: [users]
+      summary: List all users
+      description: Get list of all users (admin only)
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserResponse'
+        '403':
+          description: Admin only
+    
+    post:
+      tags: [users]
+      summary: Create new user
+      description: Create a new user account (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '200':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Invalid request
+        '403':
+          description: Admin only
+        '409':
+          description: Email already exists
+
+  /users/{user_id}:
+    get:
+      tags: [users]
+      summary: Get user by ID
+      description: Get detailed information about a specific user (admin only)
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '403':
+          description: Admin only
+        '404':
+          description: User not found
+    
+    put:
+      tags: [users]
+      summary: Update user
+      description: Update user information (admin only)
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Invalid request
+        '403':
+          description: Admin only
+        '404':
+          description: User not found
+    
+    delete:
+      tags: [users]
+      summary: Delete user
+      description: Delete a user account (admin only, cannot delete self)
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User deleted successfully
+        '403':
+          description: Admin only or cannot delete self
+        '404':
+          description: User not found
+
+  # ==================== API Keys ====================
+  /api-keys:
+    get:
+      tags: [api-keys]
+      summary: List all API keys
+      description: Get list of all API keys for current user
+      responses:
+        '200':
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKeyListResponse'
+    
+    post:
+      tags: [api-keys]
+      summary: Create new API key
+      description: Create a new API key for programmatic access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/APIKeyCreate'
+      responses:
+        '200':
+          description: API key created successfully (key only shown once)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKeyCreateResponse'
+        '400':
+          description: Invalid request
+
+  /api-keys/{key_id}:
+    get:
+      tags: [api-keys]
+      summary: Get API key by ID
+      description: Get detailed information about a specific API key
+      parameters:
+        - name: key_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: API key details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKeyResponse'
+        '404':
+          description: API key not found
+    
+    put:
+      tags: [api-keys]
+      summary: Update API key
+      description: Update API key configuration (name, expiration, scopes)
+      parameters:
+        - name: key_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/APIKeyUpdate'
+      responses:
+        '200':
+          description: API key updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKeyResponse'
+        '400':
+          description: Invalid request
+        '404':
+          description: API key not found
+    
+    delete:
+      tags: [api-keys]
+      summary: Delete API key
+      description: Delete (revoke) an API key
+      parameters:
+        - name: key_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: API key deleted successfully
+        '404':
+          description: API key not found
+
+  /api-keys/{key_id}/regenerate:
+    post:
+      tags: [api-keys]
+      summary: Regenerate API key
+      description: Generate new key value while maintaining permissions (old key is revoked)
+      parameters:
+        - name: key_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: API key regenerated successfully (key only shown once)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIKeyCreateResponse'
+        '404':
+          description: API key not found
+
+  # ==================== Permissions ====================
+  /permissions:
+    get:
+      tags: [permissions]
+      summary: List all permissions
+      description: Get list of all available permissions in the system
+      responses:
+        '200':
+          description: List of permissions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PermissionResponse'
+
+  # ==================== User Groups ====================
+  /user-groups:
+    get:
+      tags: [user-groups]
+      summary: List all user groups
+      description: Get list of all user groups
+      responses:
+        '200':
+          description: List of user groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserGroupResponse'
+    
+    post:
+      tags: [user-groups]
+      summary: Create new user group
+      description: Create a new user group (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserGroupCreate'
+      responses:
+        '200':
+          description: User group created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserGroupResponse'
+        '400':
+          description: Invalid request
+        '403':
+          description: Admin only
+        '409':
+          description: Group name already exists
+
+  /user-groups/{group_id}:
+    get:
+      tags: [user-groups]
+      summary: Get user group by ID
+      description: Get detailed information about a specific user group
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User group details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserGroupResponse'
+        '404':
+          description: User group not found
+    
+    put:
+      tags: [user-groups]
+      summary: Update user group
+      description: Update user group information (admin only)
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserGroupUpdate'
+      responses:
+        '200':
+          description: User group updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserGroupResponse'
+        '400':
+          description: Invalid request
+        '403':
+          description: Admin only
+        '404':
+          description: User group not found
+    
+    delete:
+      tags: [user-groups]
+      summary: Delete user group
+      description: Delete a user group (admin only, cannot delete admin group)
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User group deleted successfully
+        '403':
+          description: Admin only or cannot delete admin group
+        '404':
+          description: User group not found
+
+  /user-groups/{group_id}/members:
+    get:
+      tags: [user-groups]
+      summary: List user group members
+      description: Get all members of a user group
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserResponse'
+        '404':
+          description: User group not found
+    
+    post:
+      tags: [user-groups]
+      summary: Add user to group
+      description: Add a user as a member of a user group (admin only)
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id:
+                  type: integer
+      responses:
+        '200':
+          description: User added to group successfully
+        '403':
+          description: Admin only
+        '404':
+          description: User group or user not found
+        '409':
+          description: User already in group
+
+  /user-groups/{group_id}/members/{user_id}:
+    delete:
+      tags: [user-groups]
+      summary: Remove user from group
+      description: Remove a user from a user group (admin only)
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User removed from group successfully
+        '403':
+          description: Admin only
+        '404':
+          description: User group, user, or membership not found
+
+  /user-groups/{group_id}/permissions:
+    get:
+      tags: [user-groups, permissions]
+      summary: List user group permissions
+      description: Get all permissions granted to a user group
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of permissions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PermissionResponse'
+        '404':
+          description: User group not found
+    
+    post:
+      tags: [user-groups, permissions]
+      summary: Grant permission to user group
+      description: Grant a permission to a user group (admin only)
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permission_id]
+              properties:
+                permission_id:
+                  type: integer
+      responses:
+        '200':
+          description: Permission granted successfully
+        '403':
+          description: Admin only
+        '404':
+          description: User group or permission not found
+        '409':
+          description: Permission already granted
+
+  /user-groups/{group_id}/permissions/{permission_id}:
+    delete:
+      tags: [user-groups, permissions]
+      summary: Revoke permission from user group
+      description: Revoke a permission from a user group (admin only)
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: permission_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Permission revoked successfully
+        '403':
+          description: Admin only
+        '404':
+          description: User group or permission not found
+
+  # ==================== Settings ====================
+  /settings:
+    get:
+      tags: [settings]
+      summary: Get system settings
+      description: Get global system settings
+      responses:
+        '200':
+          description: System settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingsResponse'
+    
+    put:
+      tags: [settings]
+      summary: Update system settings
+      description: Update global system settings (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettingsUpdate'
+      responses:
+        '200':
+          description: Settings updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingsResponse'
+        '400':
+          description: Invalid request
+        '403':
+          description: Admin only
+
+  /settings/docker-compose-template:
+    get:
+      tags: [settings]
+      summary: Get Docker Compose template
+      description: Get the Docker Compose template used for client deployments
+      responses:
+        '200':
+          description: Docker Compose template
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DockerComposeTemplateResponse'
+    
+    put:
+      tags: [settings]
+      summary: Update Docker Compose template
+      description: Update the Docker Compose template (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DockerComposeTemplateUpdate'
+      responses:
+        '200':
+          description: Template updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DockerComposeTemplateResponse'
+        '400':
+          description: Invalid request
+        '403':
+          description: Admin only
+
+  /settings/placeholders:
+    get:
+      tags: [settings]
+      summary: Get available placeholders
+      description: Get list of available placeholders for Docker Compose templates
+      responses:
+        '200':
+          description: List of placeholders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaceholdersResponse'
+
+  /settings/version-cache:
+    get:
+      tags: [settings, version]
+      summary: Get version cache status
+      description: Get cached version information and update status
+      responses:
+        '200':
+          description: Version cache information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionCacheResponse'
+
+  /settings/version-cache/refresh:
+    post:
+      tags: [settings, version]
+      summary: Refresh version cache
+      description: Force refresh of version information from GitHub (admin only)
+      responses:
+        '200':
+          description: Cache refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionCacheResponse'
+        '403':
+          description: Admin only
+        '503':
+          description: Failed to fetch version information
+
+  /settings/system/token-prefix:
+    get:
+      tags: [settings]
+      summary: Get client token prefix
+      description: Get the current client token prefix
+      responses:
+        '200':
+          description: Token prefix
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemSettingResponse'
+    
+    put:
+      tags: [settings]
+      summary: Update client token prefix
+      description: Update the client token prefix (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value:
+                  type: string
+                  description: New token prefix
+                  example: mnebula_
+      responses:
+        '200':
+          description: Token prefix updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemSettingResponse'
+        '400':
+          description: Invalid request
+        '403':
+          description: Admin only
+
+  /settings/github-webhook-secret:
+    get:
+      tags: [settings, github]
+      summary: Get GitHub webhook secret status
+      description: Check if GitHub webhook secret is configured
+      responses:
+        '200':
+          description: Webhook secret status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  configured:
+                    type: boolean
+                    description: Whether webhook secret is set
+    
+    put:
+      tags: [settings, github]
+      summary: Update GitHub webhook secret
+      description: Set or update GitHub webhook secret for secret scanning (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [secret]
+              properties:
+                secret:
+                  type: string
+                  description: GitHub webhook secret value
+      responses:
+        '200':
+          description: Webhook secret updated successfully
+        '403':
+          description: Admin only
+
+  # ==================== Nebula ====================
+  /nebula/versions:
+    get:
+      tags: [version]
+      summary: Get Nebula versions
+      description: Get available Nebula versions from GitHub releases
+      responses:
+        '200':
+          description: List of Nebula versions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NebulaVersionsResponse'
+
+  /nebula/installation-status:
+    get:
+      tags: [version]
+      summary: Get Nebula installation status
+      description: Check if Nebula binary is installed and get version
+      responses:
+        '200':
+          description: Installation status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NebulaInstallationStatusResponse'
+
+  /nebula/install:
+    post:
+      tags: [version]
+      summary: Install Nebula binary
+      description: Download and install a specific version of Nebula (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version:
+                  type: string
+                  description: Nebula version to install (e.g., v1.9.0)
+      responses:
+        '200':
+          description: Nebula installed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NebulaInstallationResponse'
+        '400':
+          description: Invalid version or installation failed
+        '403':
+          description: Admin only
+
+  # ==================== GitHub Secret Scanning ====================
+  /.well-known/secret-scanning.json:
+    get:
+      tags: [public, github]
+      summary: GitHub Secret Scanning metadata
+      description: Public endpoint for GitHub Secret Scanning Partner Program (no authentication)
+      security: []
+      responses:
+        '200':
+          description: Secret scanning patterns
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                      example: managed_nebula_client_token
+                    pattern:
+                      type: string
+                      example: mnebula_[a-z0-9]{32}
+                    description:
+                      type: string
+                      example: Managed Nebula Client Token
+
+  /api/v1/github/secret-scanning/verify:
+    post:
+      tags: [github]
+      summary: Verify leaked secrets
+      description: GitHub webhook endpoint to verify if tokens are valid (GitHub only)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  type:
+                    type: string
+                  token:
+                    type: string
+                  url:
+                    type: string
+      responses:
+        '200':
+          description: Verification results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    token:
+                      type: string
+                    type:
+                      type: string
+                    label:
+                      type: string
+                    url:
+                      type: string
+                    is_active:
+                      type: boolean
+        '400':
+          description: Invalid request
+        '401':
+          description: Invalid GitHub signature
+
+  /api/v1/github/secret-scanning/revoke:
+    post:
+      tags: [github]
+      summary: Revoke leaked secrets
+      description: GitHub webhook endpoint to auto-revoke leaked tokens (GitHub only)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  type:
+                    type: string
+                  token:
+                    type: string
+                  url:
+                    type: string
+      responses:
+        '200':
+          description: Revocation results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  revoked_count:
+                    type: integer
+        '400':
+          description: Invalid request
+        '401':
+          description: Invalid GitHub signature
+
+components:
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: session
+      description: Session-based authentication via login endpoint
+    
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: token
+      description: |
+        API key authentication using Bearer token format.
+        
+        **Setup in RapidAPI/Paw:**
+        1. Create environment variable: `apiKey` = `mnapi_your_api_key_here`
+        2. In Authorization, select "Bearer Token"
+        3. Set token to: `{{apiKey}}` or use the environment variable
+        
+        **Setup in Postman:**
+        1. Collection Variables → Add `apiKey` = `mnapi_your_api_key_here`
+        2. Authorization will automatically use: `Bearer {{apiKey}}`
+        
+        **Format**: `Bearer mnapi_<64-hex-chars>`
+        
+        **Example**: `Authorization: Bearer mnapi_1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef`
+        
+        To create an API key:
+        1. Login to the web UI at http://localhost:8080
+        2. Go to Profile → API Keys tab
+        3. Click "Create API Key"
+        4. Copy the key (shown only once!)
+        5. Use it as: `Authorization: Bearer mnapi_...`
+    
+    clientToken:
+      type: apiKey
+      in: header
+      name: X-Client-Token
+      description: Client token authentication for client agents
+
+  parameters:
+    ClientIdPath:
+      name: client_id
+      in: path
+      required: true
+      schema:
+        type: integer
+      description: Client ID
+
+  schemas:
+    # ==================== Auth Schemas ====================
+    MeResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+        is_active:
+          type: boolean
+        is_admin:
+          type: boolean
+
+    # ==================== Client Schemas ====================
+    ClientResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        ip_address:
+          type: string
+          nullable: true
+          description: Primary IP address (legacy field)
+        pool_id:
+          type: integer
+          nullable: true
+        ip_group_id:
+          type: integer
+          nullable: true
+        is_lighthouse:
+          type: boolean
+        public_ip:
+          type: string
+          nullable: true
+        is_blocked:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        config_last_changed_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_config_download_at:
+          type: string
+          format: date-time
+          nullable: true
+        client_version:
+          type: string
+          nullable: true
+        nebula_version:
+          type: string
+          nullable: true
+        last_version_report_at:
+          type: string
+          format: date-time
+          nullable: true
+        os_type:
+          type: string
+          enum: [docker, windows, macos]
+        ip_version:
+          type: string
+          enum: [ipv4_only, ipv6_only, dual_stack, multi_ipv4, multi_ipv6, multi_both]
+        owner:
+          $ref: '#/components/schemas/UserRef'
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupRef'
+        firewall_rulesets:
+          type: array
+          items:
+            $ref: '#/components/schemas/FirewallRulesetRef'
+        token:
+          type: string
+          nullable: true
+          description: Only visible to admins or owner
+        version_status:
+          $ref: '#/components/schemas/VersionStatus'
+        assigned_ips:
+          type: array
+          items:
+            $ref: '#/components/schemas/IPAssignmentResponse'
+        primary_ipv4:
+          type: string
+          nullable: true
+
+    ClientCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        is_lighthouse:
+          type: boolean
+          default: false
+        public_ip:
+          type: string
+          nullable: true
+        pool_id:
+          type: integer
+          nullable: true
+        ip_group_id:
+          type: integer
+          nullable: true
+        group_ids:
+          type: array
+          items:
+            type: integer
+        firewall_ruleset_ids:
+          type: array
+          items:
+            type: integer
+        os_type:
+          type: string
+          enum: [docker, windows, macos]
+          default: docker
+        ip_version:
+          type: string
+          enum: [ipv4_only, ipv6_only, dual_stack, multi_ipv4, multi_ipv6, multi_both]
+          default: ipv4_only
+
+    ClientUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        is_lighthouse:
+          type: boolean
+        public_ip:
+          type: string
+          nullable: true
+        is_blocked:
+          type: boolean
+        pool_id:
+          type: integer
+          nullable: true
+        ip_group_id:
+          type: integer
+          nullable: true
+        group_ids:
+          type: array
+          items:
+            type: integer
+        firewall_ruleset_ids:
+          type: array
+          items:
+            type: integer
+        os_type:
+          type: string
+          enum: [docker, windows, macos]
+        ip_version:
+          type: string
+          enum: [ipv4_only, ipv6_only, dual_stack, multi_ipv4, multi_ipv6, multi_both]
+
+    ClientCertificateResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        issued_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        is_active:
+          type: boolean
+        certificate_pem:
+          type: string
+        ca_id:
+          type: integer
+
+    IPAssignmentResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        ip_address:
+          type: string
+        is_primary:
+          type: boolean
+        pool_id:
+          type: integer
+        cidr:
+          type: string
+          nullable: true
+        assigned_at:
+          type: string
+          format: date-time
+
+    # ==================== Group Schemas ====================
+    GroupRef:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    GroupResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        client_count:
+          type: integer
+
+    GroupCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+
+    GroupUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+
+    # ==================== Firewall Ruleset Schemas ====================
+    FirewallRulesetRef:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    FirewallRulesetResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        rule_yaml:
+          type: string
+          description: YAML firewall rules
+        client_count:
+          type: integer
+
+    FirewallRulesetCreate:
+      type: object
+      required: [name, rule_yaml]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        rule_yaml:
+          type: string
+          description: Nebula firewall rules in YAML format
+
+    FirewallRulesetUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        rule_yaml:
+          type: string
+
+    # ==================== IP Pool Schemas ====================
+    IPPoolResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        cidr:
+          type: string
+        description:
+          type: string
+          nullable: true
+        allocated_count:
+          type: integer
+
+    IPPoolCreate:
+      type: object
+      required: [cidr]
+      properties:
+        cidr:
+          type: string
+          description: CIDR notation (e.g., 10.0.0.0/24)
+        description:
+          type: string
+          nullable: true
+
+    IPPoolUpdate:
+      type: object
+      properties:
+        cidr:
+          type: string
+          description: Cannot change if IPs already allocated
+        description:
+          type: string
+          nullable: true
+
+    AvailableIPResponse:
+      type: object
+      properties:
+        ip_address:
+          type: string
+
+    # ==================== IP Group Schemas ====================
+    IPGroupResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        cidrs:
+          type: array
+          items:
+            type: string
+          description: List of CIDR ranges
+        client_count:
+          type: integer
+
+    IPGroupCreate:
+      type: object
+      required: [name, cidrs]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        cidrs:
+          type: array
+          items:
+            type: string
+          description: List of CIDR ranges (e.g., ["10.0.0.0/24", "10.1.0.0/24"])
+
+    IPGroupUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        cidrs:
+          type: array
+          items:
+            type: string
+
+    # ==================== CA Schemas ====================
+    CAResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        is_signing:
+          type: boolean
+        is_previous:
+          type: boolean
+        include_in_config:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        certificate_pem:
+          type: string
+        status:
+          type: string
+          enum: [current, previous, expired, inactive]
+
+    CACreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        duration_months:
+          type: integer
+          default: 18
+          description: Certificate validity in months
+
+    CAImport:
+      type: object
+      required: [name, certificate_pem, private_key_pem]
+      properties:
+        name:
+          type: string
+        certificate_pem:
+          type: string
+        private_key_pem:
+          type: string
+
+    # ==================== User Schemas ====================
+    UserRef:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        user_groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserGroupRef'
+
+    UserCreate:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        is_active:
+          type: boolean
+          default: true
+        user_group_ids:
+          type: array
+          items:
+            type: integer
+
+    UserUpdate:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        is_active:
+          type: boolean
+        user_group_ids:
+          type: array
+          items:
+            type: integer
+
+    # ==================== User Group Schemas ====================
+    UserGroupRef:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+
+    UserGroupResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        is_admin:
+          type: boolean
+        member_count:
+          type: integer
+
+    UserGroupCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        is_admin:
+          type: boolean
+          default: false
+
+    UserGroupUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        is_admin:
+          type: boolean
+
+    # ==================== API Key Schemas ====================
+    APIKeyResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        preview:
+          type: string
+          description: First 12 characters of key for identification
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        usage_count:
+          type: integer
+        is_active:
+          type: boolean
+        allowed_group_ids:
+          type: array
+          items:
+            type: integer
+          nullable: true
+        allowed_ip_pool_ids:
+          type: array
+          items:
+            type: integer
+          nullable: true
+        restrict_to_created_clients:
+          type: boolean
+
+    APIKeyListResponse:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/APIKeyResponse'
+
+    APIKeyCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        allowed_group_ids:
+          type: array
+          items:
+            type: integer
+          nullable: true
+          description: Restrict to specific groups
+        allowed_ip_pool_ids:
+          type: array
+          items:
+            type: integer
+          nullable: true
+          description: Restrict to specific IP pools
+        restrict_to_created_clients:
+          type: boolean
+          default: false
+          description: Only access clients created by this key
+
+    APIKeyCreateResponse:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Full API key (only shown once)
+        details:
+          $ref: '#/components/schemas/APIKeyResponse'
+
+    APIKeyUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        allowed_group_ids:
+          type: array
+          items:
+            type: integer
+          nullable: true
+        allowed_ip_pool_ids:
+          type: array
+          items:
+            type: integer
+          nullable: true
+        restrict_to_created_clients:
+          type: boolean
+
+    # ==================== Permission Schemas ====================
+    PermissionResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+
+    ClientPermissionResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        permission:
+          $ref: '#/components/schemas/PermissionResponse'
+        user:
+          $ref: '#/components/schemas/UserRef'
+        user_group:
+          $ref: '#/components/schemas/UserGroupRef'
+        granted_at:
+          type: string
+          format: date-time
+
+    ClientPermissionGrant:
+      type: object
+      required: [permission_id]
+      properties:
+        permission_id:
+          type: integer
+        user_id:
+          type: integer
+          nullable: true
+          description: Grant to specific user
+        user_group_id:
+          type: integer
+          nullable: true
+          description: Grant to user group
+
+    GroupPermissionResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        permission:
+          $ref: '#/components/schemas/PermissionResponse'
+        user:
+          $ref: '#/components/schemas/UserRef'
+        user_group:
+          $ref: '#/components/schemas/UserGroupRef'
+        granted_at:
+          type: string
+          format: date-time
+
+    GroupPermissionGrant:
+      type: object
+      required: [permission_id]
+      properties:
+        permission_id:
+          type: integer
+        user_id:
+          type: integer
+          nullable: true
+        user_group_id:
+          type: integer
+          nullable: true
+
+    # ==================== Settings Schemas ====================
+    SettingsResponse:
+      type: object
+      properties:
+        punchy:
+          type: boolean
+        punch_back:
+          type: boolean
+        lighthouse_interval:
+          type: integer
+        default_nebula_version:
+          type: string
+
+    SettingsUpdate:
+      type: object
+      properties:
+        punchy:
+          type: boolean
+        punch_back:
+          type: boolean
+        lighthouse_interval:
+          type: integer
+        default_nebula_version:
+          type: string
+
+    DockerComposeTemplateResponse:
+      type: object
+      properties:
+        template:
+          type: string
+          description: Docker Compose YAML template
+
+    DockerComposeTemplateUpdate:
+      type: object
+      required: [template]
+      properties:
+        template:
+          type: string
+
+    PlaceholdersResponse:
+      type: object
+      properties:
+        placeholders:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+
+    SystemSettingResponse:
+      type: object
+      properties:
+        key:
+          type: string
+        value:
+          type: string
+
+    # ==================== Version Schemas ====================
+    VersionResponse:
+      type: object
+      properties:
+        server_version:
+          type: string
+        nebula_version:
+          type: string
+        frontend_version:
+          type: string
+
+    VersionStatusResponse:
+      type: object
+      properties:
+        server_status:
+          type: string
+          enum: [current, oudated, vulnerable, unknown]
+        nebula_status:
+          type: string
+          enum: [current, outdated, vulnerable, unknown]
+        server_advisories:
+          type: array
+          items:
+            $ref: '#/components/schemas/SecurityAdvisoryInfo'
+        nebula_advisories:
+          type: array
+          items:
+            $ref: '#/components/schemas/SecurityAdvisoryInfo'
+        latest_server_version:
+          type: string
+          nullable: true
+        latest_nebula_version:
+          type: string
+          nullable: true
+
+    VersionStatus:
+      type: object
+      properties:
+        client_version_status:
+          type: string
+          enum: [current, outdated, vulnerable, unknown]
+        nebula_version_status:
+          type: string
+          enum: [current, outdated, vulnerable, unknown]
+        client_advisories:
+          type: array
+          items:
+            $ref: '#/components/schemas/SecurityAdvisoryInfo'
+        nebula_advisories:
+          type: array
+          items:
+            $ref: '#/components/schemas/SecurityAdvisoryInfo'
+        days_behind:
+          type: integer
+          nullable: true
+        latest_client_version:
+          type: string
+          nullable: true
+        latest_nebula_version:
+          type: string
+          nullable: true
+        current_client_version:
+          type: string
+          nullable: true
+        current_nebula_version:
+          type: string
+          nullable: true
+
+    SecurityAdvisoryInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        severity:
+          type: string
+        summary:
+          type: string
+        affected_versions:
+          type: string
+        patched_version:
+          type: string
+          nullable: true
+        published_at:
+          type: string
+        url:
+          type: string
+        cve_id:
+          type: string
+          nullable: true
+
+    VersionCacheResponse:
+      type: object
+      properties:
+        last_updated:
+          type: string
+          format: date-time
+          nullable: true
+        server_versions:
+          type: array
+          items:
+            type: string
+        nebula_versions:
+          type: array
+          items:
+            type: string
+
+    NebulaVersionsResponse:
+      type: object
+      properties:
+        versions:
+          type: array
+          items:
+            type: string
+        latest:
+          type: string
+
+    NebulaInstallationStatusResponse:
+      type: object
+      properties:
+        installed:
+          type: boolean
+        version:
+          type: string
+          nullable: true
+        path:
+          type: string
+          nullable: true
+
+    NebulaInstallationResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        version:
+          type: string
+        message:
+          type: string
+
+# Collection-level configuration for API clients
+x-collection-variables:
+  - key: apiKey
+    value: mnapi_your_api_key_here
+    description: Your Managed Nebula API key. Get from Profile > API Keys in web UI.
+    type: string
+  - key: baseUrl
+    value: http://localhost:8080
+    description: Base URL of your Managed Nebula server
+    type: string
+
+# RapidAPI/Paw Desktop Environment Configuration
+# To use in RapidAPI/Paw:
+# 1. Preferences → Environments → Add new environment
+# 2. Add variable: apiKey = mnapi_your_api_key_here
+# 3. In each request, Authorization → Bearer Token → {{apiKey}}
+
+x-postman-info:
+  name: Managed Nebula API
+  description: Complete API collection for Managed Nebula mesh VPN platform
+  schema: https://schema.getpostman.com/json/collection/v2.1.0/collection.json
+
+x-readme:
+  samples-languages:
+    - curl
+    - node
+    - python
+    - javascript
+    - php
+  explorer-enabled: true
+  
+x-code-samples:
+  - lang: curl
+    label: cURL
+    source: |
+      curl -X GET "http://localhost:8080/clients" \
+           -H "Authorization: Bearer mnapi_your_api_key_here" \
+           -H "Content-Type: application/json"
+  
+  - lang: python
+    label: Python (requests)
+    source: |
+      import requests
+      
+      API_KEY = "mnapi_your_api_key_here"
+      BASE_URL = "http://localhost:8080"
+      
+      headers = {
+          "Authorization": f"Bearer {API_KEY}",
+          "Content-Type": "application/json"
+      }
+      
+      response = requests.get(f"{BASE_URL}/clients", headers=headers)
+      clients = response.json()
+  
+  - lang: javascript
+    label: JavaScript (fetch)
+    source: |
+      const API_KEY = 'mnapi_your_api_key_here';
+      const BASE_URL = 'http://localhost:8080';
+      
+      fetch(`${BASE_URL}/clients`, {
+        headers: {
+          'Authorization': `Bearer ${API_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      .then(res => res.json())
+      .then(clients => console.log(clients));
+  
+  - lang: node
+    label: Node.js (axios)
+    source: |
+      const axios = require('axios');
+      
+      const API_KEY = 'mnapi_your_api_key_here';
+      const BASE_URL = 'http://localhost:8080';
+      
+      const client = axios.create({
+        baseURL: BASE_URL,
+        headers: {
+          'Authorization': `Bearer ${API_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      client.get('/clients')
+        .then(response => console.log(response.data));
