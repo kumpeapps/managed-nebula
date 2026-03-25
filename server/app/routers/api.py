@@ -91,7 +91,7 @@ from ..models.schemas import (
 )
 from ..services.cert_manager import CertManager
 from ..services.config_builder import build_nebula_config
-from ..services.ip_allocator import ensure_default_pool, allocate_ip_from_pool
+from ..services.ip_allocator import ensure_default_pool, allocate_ip_from_pool, allocate_ip_from_group
 from ..services.token_manager import generate_client_token, get_token_prefix, get_token_preview
 from ..services import api_key_manager
 from ..core.auth import require_permission, get_current_user
@@ -1358,8 +1358,20 @@ async def create_client(
     else:
         # Auto-allocate IP
         try:
-            allocated_ip = await allocate_ip_from_pool(session, pool)
-        except ValueError as e:
+            if body.ip_group_id:
+                # Fetch IP group and allocate from its range
+                group_result = await session.execute(
+                    select(IPGroup).where(IPGroup.id == body.ip_group_id, IPGroup.pool_id == pool_id)
+                )
+                group = group_result.scalar_one_or_none()
+                if not group:
+                    raise HTTPException(
+                        status_code=404, detail="IP group not found or doesn't belong to selected pool")
+                allocated_ip = await allocate_ip_from_group(session, pool, group)
+            else:
+                # Allocate from entire pool
+                allocated_ip = await allocate_ip_from_pool(session, pool)
+        except (ValueError, RuntimeError) as e:
             raise HTTPException(status_code=409, detail=str(e))
 
     ip_assignment = IPAssignment(
