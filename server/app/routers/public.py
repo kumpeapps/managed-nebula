@@ -20,18 +20,23 @@ async def github_secret_scanning_metadata(
     This is a public endpoint that GitHub uses to discover secret patterns.
     No authentication required.
     """
-    # Get current token prefix
+    # Get current token prefix for client tokens
     prefix = await get_token_prefix(session)
     
-    # Generate pattern regex
-    pattern = get_github_pattern_regex(prefix)
+    # Generate pattern regex for client tokens
+    client_token_pattern = get_github_pattern_regex(prefix)
     
-    # Return pattern metadata
+    # Return pattern metadata for both client tokens and API keys
     patterns = [
         GitHubSecretScanningPattern(
             type="managed_nebula_client_token",
-            pattern=pattern,
+            pattern=client_token_pattern,
             description="Managed Nebula Client Token"
+        ),
+        GitHubSecretScanningPattern(
+            type="managed_nebula_api_key",
+            pattern="mnapi_[a-f0-9]{64}",
+            description="Managed Nebula API Key"
         )
     ]
     
