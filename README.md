@@ -638,6 +638,11 @@ The installer script:
 
 All API documentation is accessible through the frontend proxy with proper SSL termination and includes comprehensive endpoint documentation, request/response schemas, and interactive testing capabilities.
 
+**For API clients (Postman, Paw, Insomnia, etc.):**
+- Import the standalone [openapi-spec.yaml](openapi-spec.yaml) file
+- See [OPENAPI_USAGE.md](OPENAPI_USAGE.md) for setup instructions with `apiKey` variable
+- Includes all endpoints, schemas, and examples pre-configured for easy testing
+
 See [DOCS_ACCESS.md](DOCS_ACCESS.md) for detailed documentation access guide.
 
 ## �️ Management Commands
@@ -874,6 +879,7 @@ The agent is perfect for:
 
 - **[Quick Start Guide](QUICKSTART.md)** - Common commands and troubleshooting
 - **[API Docs Access Guide](DOCS_ACCESS.md)** - How to access Swagger UI, ReDoc, and OpenAPI schema
+- **[OpenAPI Spec Usage](OPENAPI_USAGE.md)** - Import OpenAPI spec into Postman, Paw, Insomnia, etc.
 - **[API Key Authentication Guide](API_KEY_GUIDE.md)** - Complete guide for programmatic access with API keys
 - **[Copilot Integration Agent](.github/agents/README.md)** - Reusable AI agent for helping integrate with Managed Nebula
 - [API Documentation](API_DOCUMENTATION.md) - Complete REST API reference
