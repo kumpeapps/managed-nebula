@@ -1079,29 +1079,34 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
 
     # Build lighthouse maps: static_host_map {nebula_ip: ["public_ip:port"]} and hosts list of nebula IPs
     # Only include lighthouses from the same IP pool as the client
+    # IMPORTANT: Check ALL IP assignments (including alternate IPs), not just the primary
     lighthouses = (
         await session.execute(select(Client).where(Client.is_lighthouse == True))
     ).scalars().all()
     static_map: dict[str, list[str]] = {}
     lh_hosts: list[str] = []
     for lh in lighthouses:
-        lh_ip_row = (await session.execute(
+        if not lh.public_ip:
+            continue
+        
+        # Get ALL IP assignments for this lighthouse (primary + alternates)
+        lh_ip_rows = (await session.execute(
             select(IPAssignment)
             .where(IPAssignment.client_id == lh.id)
             .order_by(IPAssignment.is_primary.desc(), IPAssignment.id)
-        )).scalars().first()
-        if not lh_ip_row:
+        )).scalars().all()
+        
+        if not lh_ip_rows:
             continue
-        if not lh.public_ip:
-            continue
-
-        # Only include lighthouse if it's in the same pool as the client (or both have no pool)
-        if lh_ip_row.pool_id != ip_assignment.pool_id:
-            continue
-
-        lh_hosts.append(lh_ip_row.ip_address)
-        static_map[lh_ip_row.ip_address] = [
-            f"{lh.public_ip}:{settings.lighthouse_port if settings else 4242}"]
+        
+        # Check if ANY of the lighthouse's IPs are in the same pool as the client
+        # If so, include ALL matching IPs from that lighthouse
+        for lh_ip_row in lh_ip_rows:
+            # Only include lighthouse IPs that are in the same pool as the client (or both have no pool)
+            if lh_ip_row.pool_id == ip_assignment.pool_id:
+                lh_hosts.append(lh_ip_row.ip_address)
+                static_map[lh_ip_row.ip_address] = [
+                    f"{lh.public_ip}:{settings.lighthouse_port if settings else 4242}"]
     
     # If current client is a lighthouse, exclude itself from static_host_map
     # Lighthouses should not have their own IP in the static map
@@ -2310,29 +2315,34 @@ async def download_client_config(
 
     # Build lighthouse maps: static_host_map {nebula_ip: ["public_ip:port"]} and hosts list of nebula IPs
     # Only include lighthouses from the same IP pool as the client
+    # IMPORTANT: Check ALL IP assignments (including alternate IPs), not just the primary
     lighthouses = (
         await session.execute(select(Client).where(Client.is_lighthouse == True))
     ).scalars().all()
     static_map: dict[str, list[str]] = {}
     lh_hosts: list[str] = []
     for lh in lighthouses:
-        ip_row = (await session.execute(
-            select(IPAssignment)
-            .where(IPAssignment.client_id == lh.id)
-            .order_by(IPAssignment.is_primary.desc(), IPAssignment.id)
-        )).scalars().first()
-        if not ip_row:
-            continue
         if not lh.public_ip:
             continue
         
-        # Only include lighthouse if it's in the same pool as the client (or both have no pool)
-        if ip_row.pool_id != ip_assignment.pool_id:
+        # Get ALL IP assignments for this lighthouse (primary + alternates)
+        ip_rows = (await session.execute(
+            select(IPAssignment)
+            .where(IPAssignment.client_id == lh.id)
+            .order_by(IPAssignment.is_primary.desc(), IPAssignment.id)
+        )).scalars().all()
+        
+        if not ip_rows:
             continue
         
-        lh_hosts.append(ip_row.ip_address)
-        static_map[ip_row.ip_address] = [
-            f"{lh.public_ip}:{settings.lighthouse_port if settings else 4242}"]
+        # Check if ANY of the lighthouse's IPs are in the same pool as the client
+        # If so, include ALL matching IPs from that lighthouse
+        for ip_row in ip_rows:
+            # Only include lighthouse IPs that are in the same pool as the client (or both have no pool)
+            if ip_row.pool_id == ip_assignment.pool_id:
+                lh_hosts.append(ip_row.ip_address)
+                static_map[ip_row.ip_address] = [
+                    f"{lh.public_ip}:{settings.lighthouse_port if settings else 4242}"]
     
     # If current client is a lighthouse, exclude itself from static_host_map
     # Lighthouses should not have their own IP in the static map
