@@ -88,6 +88,13 @@ async def async_client():
 
 
 @pytest.fixture
+async def async_session():
+    """Create an async database session for testing."""
+    async with AsyncSessionLocal() as session:
+        yield session
+
+
+@pytest.fixture
 async def admin_user():
     """Create or get admin user for testing with admin group membership."""
     async with AsyncSessionLocal() as session:

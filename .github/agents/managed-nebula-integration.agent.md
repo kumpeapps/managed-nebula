@@ -20,6 +20,7 @@ You are an expert assistant for integrating with and extending the **Managed Neb
 Managed Nebula is a centralized management platform for [Nebula](https://github.com/slackhq/nebula) mesh VPN networks. It provides:
 
 - **Certificate Authority Management**: Automated CA creation, rotation, and certificate lifecycle
+- **Certificate Revocation**: Persistent revocation list preventing reuse of revoked certificates
 - **Client Provisioning**: Token-based self-service client setup
 - **Web Management**: Angular SPA for network administration
 - **REST API**: Complete JSON API for automation
@@ -386,18 +387,161 @@ def setup_team_access(api_url, api_key, team_name, members):
     }
 ```
 
+### Pattern 5: Complete Client Lifecycle Management
+
+Full lifecycle including permissions and alternate IPs:
+
+```python
+def manage_client_lifecycle(api_url, api_key):
+    """Demonstrate complete client lifecycle."""
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    # 1. Create client
+    client = requests.post(
+        f"{api_url}/api/v1/clients",
+        headers=headers,
+        json={
+            "name": "production-app",
+            "group_ids": [1],
+            "pool_id": 1
+        }
+    ).json()
+    client_id = client['id']
+    print(f"Created client {client_id} with IP {client['ip_address']}")
+    
+    # 2. Add alternate IP
+    alt_ip = requests.post(
+        f"{api_url}/api/v1/clients/{client_id}/alternate-ips",
+        headers=headers,
+        json={"ip_address": "10.0.1.100/24"}
+    ).json()
+    print(f"Added alternate IP: {alt_ip['ip_address']}")
+    
+    # 3. Grant permission to another user
+    permission = requests.post(
+        f"{api_url}/api/v1/clients/{client_id}/permissions",
+        headers=headers,
+        json={
+            "user_id": 5,
+            "permission_type": "read"
+        }
+    ).json()
+    print(f"Granted permission {permission['id']}")
+    
+    # 4. Get client config
+    config = requests.get(
+        f"{api_url}/api/v1/clients/{client_id}/config",
+        headers=headers
+    ).json()
+    print(f"Config includes {len(config['ca_chain_pems'])} CA certs")
+    
+    # 5. Revoke certificate (with replacement)
+    revoke_result = requests.post(
+        f"{api_url}/api/v1/clients/{client_id}/certificates/1/revoke",
+        headers=headers,
+        json={
+            "reason": "Scheduled rotation",
+            "issue_new": True
+        }
+    ).json()
+    print(f"Certificate revoked, new cert issued")
+    
+    # 6. Change owner
+    requests.put(
+        f"{api_url}/api/v1/clients/{client_id}/owner",
+        headers=headers,
+        json={"owner_user_id": 3}
+    )
+    print("Owner changed to user 3")
+    
+    # 7. Delete client (revokes all certificates)
+    requests.delete(
+        f"{api_url}/api/v1/clients/{client_id}",
+        headers=headers
+    )
+    print(f"Client {client_id} deleted, certificates revoked")
+    
+    return client_id
+```
+
 ## Key API Endpoints
+
+All endpoints use `/api/v1` prefix unless otherwise noted. Most endpoints require authentication via session cookie (web UI) or Bearer token (API keys).
+
+**Quick Reference by Category:**
+- [Authentication](#authentication) - Login, logout, user profile
+- [System & Health](#system--health) - Health checks, version info
+- [Settings](#settings-admin-only) - System configuration (admin)
+- [Nebula Management](#nebula-management) - Nebula CLI installation
+- [Clients](#clients) - VPN client management
+- [Client Agent](#client-agent-endpoint-no-apiv1-prefix) - Config download for agents
+- [Groups](#groups) - Client group management
+- [IP Management](#ip-management-ip-pools) - IP pool allocation
+- [IP Groups](#ip-groups-group-ip-ranges) - Group CIDR ranges
+- [Firewall](#firewall) - Firewall ruleset management
+- [Users](#users-admin-only) - User account management (admin)
+- [User Groups](#user-groups-rbac---admin-only) - RBAC group management (admin)
+- [Permissions](#permissions) - Permission listing
+- [API Keys](#api-keys-new) - Programmatic access keys
+- [CA Management](#ca-management) - Certificate authority management
+- [Certificate Revocation](#certificate-revocation-new) - Certificate revocation system
+- [GitHub Secret Scanning](#github-secret-scanning-security) - Automatic token revocation
+
+### Authentication
+- `POST /api/v1/auth/login` - Login with email/password (returns session cookie)
+- `POST /api/v1/auth/logout` - Logout current session
+- `GET /api/v1/auth/me` - Get current user profile
+- `PUT /api/v1/auth/me` - Update current user profile (email, password)
+
+### System & Health
+- `GET /api/v1/healthz` - Health check endpoint
+- `GET /api/v1/warnings` - Get system warnings
+- `GET /api/v1/version` - Get server version info
+- `GET /api/v1/version-status` - Get version status (checks for updates)
+
+### Settings (Admin Only)
+- `GET /api/v1/settings` - Get system settings
+- `PUT /api/v1/settings` - Update system settings
+- `GET /api/v1/settings/docker-compose-template` - Get Docker Compose template
+- `PUT /api/v1/settings/docker-compose-template` - Update Docker Compose template
+- `GET /api/v1/settings/placeholders` - Get available template placeholders
+- `GET /api/v1/settings/version-cache` - Get cached version information
+- `POST /api/v1/settings/version-cache/refresh` - Refresh version cache
+- `GET /api/v1/settings/token-prefix` - Get client token prefix setting
+- `PUT /api/v1/settings/token-prefix` - Update client token prefix (affects new tokens only)
+- `GET /api/v1/settings/github-webhook-secret` - Get GitHub webhook secret (masked)
+- `PUT /api/v1/settings/github-webhook-secret` - Update GitHub webhook secret
+
+### Nebula Management
+- `GET /api/v1/nebula/versions` - Get available Nebula versions
+- `GET /api/v1/nebula/installation-status` - Check if Nebula CLI is installed
+- `POST /api/v1/nebula/install` - Install Nebula CLI on server
 
 ### Clients
 - `GET /api/v1/clients` - List clients (filtered by permissions)
 - `POST /api/v1/clients` - Create client (auto-allocates IP, generates token)
 - `GET /api/v1/clients/{id}` - Get client details
 - `PUT /api/v1/clients/{id}` - Update client (groups, firewall, blocking)
-- `DELETE /api/v1/clients/{id}` - Delete client (cascades)
-- `GET /api/v1/clients/{id}/config` - Download Nebula config YAML
+- `DELETE /api/v1/clients/{id}` - Delete client (automatically revokes all certificates permanently)
+- `GET /api/v1/clients/{id}/config` - Download Nebula config YAML (includes revocation list)
 - `GET /api/v1/clients/{id}/docker-compose` - Generate Docker Compose file
 - `POST /api/v1/clients/{id}/certificates/reissue` - Force certificate rotation
-- `POST /api/v1/clients/{id}/token/reissue` - Rotate client token
+- `POST /api/v1/clients/{id}/certificates/{cert_id}/revoke` - **NEW**: Revoke specific certificate with optional replacement
+- `GET /api/v1/clients/{id}/certificates` - **NEW**: List all certificates including revocation status
+- `POST /api/v1/clients/{id}/token/reissue` - Rotate client token (auto-detects active token)
+- `POST /api/v1/clients/{id}/tokens/{token_id}/reissue` - Rotate specific client token
+- `POST /api/v1/clients/{id}/alternate-ips` - Add alternate IP address to client
+- `DELETE /api/v1/clients/{id}/alternate-ips/{ip_assignment_id}` - Remove alternate IP
+- `PUT /api/v1/clients/{id}/owner` - Change client ownership (admin only)
+- `GET /api/v1/clients/{id}/permissions` - List client-specific permissions
+- `POST /api/v1/clients/{id}/permissions` - Grant permission to user/group for client
+- `DELETE /api/v1/clients/{id}/permissions/{permission_id}` - Revoke client permission
+
+### Client Agent Endpoint (No /api/v1 prefix)
+- `POST /client/config` - Client agent config download (token-based auth)
 
 ### API Keys (NEW)
 - `GET /api/v1/api-keys` - List user's API keys
@@ -420,25 +564,220 @@ def setup_team_access(api_url, api_key, team_name, members):
 ### Groups
 - `GET /api/v1/groups` - List groups
 - `POST /api/v1/groups` - Create group (supports hierarchical names like "parent:child")
+- `GET /api/v1/groups/{id}` - Get group details
 - `PUT /api/v1/groups/{id}` - Update group
 - `DELETE /api/v1/groups/{id}` - Delete group (409 if clients assigned)
+- `GET /api/v1/groups/{id}/permissions` - List group-specific permissions
+- `POST /api/v1/groups/{id}/permissions` - Grant permission to user/group for this group
+- `DELETE /api/v1/groups/{id}/permissions/{permission_id}` - Revoke group permission
 
-### IP Management
+### IP Management (IP Pools)
 - `GET /api/v1/ip-pools` - List IP pools
 - `POST /api/v1/ip-pools` - Create IP pool (CIDR)
-- `GET /api/v1/ip-pools/{id}/available` - Check available IPs
-- `POST /api/v1/clients/{id}/alternate-ips` - Add additional IP to client
+- `GET /api/v1/ip-pools/{id}` - Get IP pool details
+- `PUT /api/v1/ip-pools/{id}` - Update IP pool
+- `DELETE /api/v1/ip-pools/{id}` - Delete IP pool (409 if IPs allocated)
+- `GET /api/v1/ip-pools/{id}/clients` - List clients using this IP pool
+- `GET /api/v1/ip-pools/{id}/available-ips` - Check available IPs in pool
+
+### IP Groups (Group IP Ranges)
+- `GET /api/v1/ip-groups` - List IP groups (CIDR ranges for groups)
+- `POST /api/v1/ip-groups` - Create IP group with CIDR
+- `GET /api/v1/ip-groups/{id}` - Get IP group details
+- `PUT /api/v1/ip-groups/{id}` - Update IP group
+- `DELETE /api/v1/ip-groups/{id}` - Delete IP group
+- `GET /api/v1/ip-groups/{id}/clients` - List clients with IPs in this group
 
 ### Firewall
 - `GET /api/v1/firewall-rulesets` - List rulesets
 - `POST /api/v1/firewall-rulesets` - Create ruleset
-- `GET /api/v1/firewall-rules` - List individual rules
-- `POST /api/v1/firewall-rules` - Create rule (structured fields, not just YAML)
+- `GET /api/v1/firewall-rulesets/{id}` - Get ruleset details
+- `PUT /api/v1/firewall-rulesets/{id}` - Update ruleset
+- `DELETE /api/v1/firewall-rulesets/{id}` - Delete ruleset (409 if clients use it)
+
+### Users (Admin Only)
+- `GET /api/v1/users` - List users
+- `POST /api/v1/users` - Create user
+- `GET /api/v1/users/{id}` - Get user details
+- `PUT /api/v1/users/{id}` - Update user (email, password, role)
+- `DELETE /api/v1/users/{id}` - Delete user (cannot self-delete)
+
+### User Groups (RBAC - Admin Only)
+- `GET /api/v1/user-groups` - List user groups
+- `POST /api/v1/user-groups` - Create user group
+- `GET /api/v1/user-groups/{id}` - Get user group details
+- `PUT /api/v1/user-groups/{id}` - Update user group
+- `DELETE /api/v1/user-groups/{id}` - Delete user group
+- `GET /api/v1/user-groups/{id}/members` - List group members
+- `POST /api/v1/user-groups/{id}/members` - Add user to group
+- `DELETE /api/v1/user-groups/{id}/members/{user_id}` - Remove user from group
+- `GET /api/v1/user-groups/{id}/permissions` - List group permissions
+- `POST /api/v1/user-groups/{id}/permissions` - Grant permission to group
+- `DELETE /api/v1/user-groups/{id}/permissions/{permission_id}` - Revoke group permission
+
+### Permissions
+- `GET /api/v1/permissions` - List all available permissions
 
 ### CA Management
 - `GET /api/v1/ca` - List CAs (current, previous, expired)
-- `POST /api/v1/ca` - Create new CA (auto-rotates at 12 months with 3-month overlap)
+- `POST /api/v1/ca/create` - Create new CA (auto-rotates at 12 months with 3-month overlap)
 - `POST /api/v1/ca/import` - Import existing CA
+- `POST /api/v1/ca/{id}/set-signing` - Set CA as signing CA
+- `DELETE /api/v1/ca/{id}` - Delete CA (409 if active)
+
+### Certificate Revocation (NEW)
+
+**Persistent Certificate Revocation**: Managed Nebula now maintains a permanent revocation list to prevent reuse of revoked certificates, even after client deletion.
+
+#### Key Features
+
+1. **Persistent Storage**: Revoked certificates stored in `RevokedCertificate` table, survives client deletion
+2. **Automatic Revocation**: All active certificates automatically revoked when client is deleted
+3. **Grace Period**: Revoked certificates remain in revocation list for 30 days after expiration (accounts for time sync issues)
+4. **Fingerprint-Based**: Uses Nebula certificate fingerprints for revocation tracking
+5. **Audit Trail**: Tracks who revoked the certificate, when, and why
+
+#### API Endpoints
+
+- `POST /api/v1/clients/{id}/certificates/revoke` - Manually revoke a client's current certificate
+  - Request body: `{"reason": "compromised", "issue_new": true}`
+  - `issue_new=true`: Automatically issues new certificate after revocation
+  - `issue_new=false`: Only revokes, no replacement (client will lose connectivity)
+- `GET /api/v1/clients/{id}/certificates` - List all certificates for a client (including revoked)
+- **Automatic on DELETE**: Deleting a client (`DELETE /api/v1/clients/{id}`) automatically adds all its certificates to revocation list
+
+#### Revocation Behavior
+
+**When a certificate is revoked:**
+1. Certificate fingerprint added to `RevokedCertificate` table with metadata
+2. All client configs regenerated to include updated revocation list
+3. Certificate remains in revocation list even if client is deleted
+4. Revoked certificates included in all Nebula configs via `pki.blocklist` section
+
+**Grace Period Logic:**
+```python
+# Certificates remain in revocation list for 30 days after expiration
+grace_cutoff = utcnow() - timedelta(days=30)
+# Only certificates expired more than 30 days ago are dropped from list
+```
+
+**Why 30 days?** Accounts for time synchronization issues across the mesh network. Ensures revoked certificates can't be reused due to clock drift.
+
+#### Integration Examples
+
+**Manual Revocation with Replacement:**
+```python
+def revoke_and_reissue(api_url, api_key, client_id):
+    """Revoke current certificate and issue a new one."""
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    response = requests.post(
+        f"{api_url}/api/v1/clients/{client_id}/certificates/revoke",
+        headers=headers,
+        json={
+            "reason": "Scheduled rotation",
+            "issue_new": True
+        }
+    )
+    response.raise_for_status()
+    
+    # New certificate automatically issued and included in response
+    return response.json()
+```
+
+**Check Revocation Status:**
+```python
+def check_certificate_status(api_url, api_key, client_id):
+    """Get all certificates for a client including revocation status."""
+    headers = {"Authorization": f"Bearer {api_key}"}
+    
+    response = requests.get(
+        f"{api_url}/api/v1/clients/{client_id}/certificates",
+        headers=headers
+    )
+    response.raise_for_status()
+    
+    certs = response.json()
+    for cert in certs:
+        print(f"Fingerprint: {cert['fingerprint']}")
+        print(f"Status: {'REVOKED' if cert['revoked_at'] else 'ACTIVE'}")
+        print(f"Expires: {cert['not_after']}")
+        if cert['revoked_at']:
+            print(f"Revoked: {cert['revoked_at']}")
+            print(f"Reason: {cert.get('revocation_reason', 'N/A')}")
+        print("---")
+```
+
+**Safe Client Deletion (Prevents Certificate Reuse):**
+```python
+def safely_delete_client(api_url, api_key, client_id):
+    """
+    Delete client with automatic certificate revocation.
+    All certificates are added to permanent revocation list.
+    """
+    headers = {"Authorization": f"Bearer {api_key}"}
+    
+    # First, get client certificates for audit log
+    certs_response = requests.get(
+        f"{api_url}/api/v1/clients/{client_id}/certificates",
+        headers=headers
+    )
+    certs = certs_response.json()
+    fingerprints = [cert['fingerprint'] for cert in certs if not cert['revoked_at']]
+    
+    # Delete client (automatically revokes all certificates)
+    response = requests.delete(
+        f"{api_url}/api/v1/clients/{client_id}",
+        headers=headers
+    )
+    response.raise_for_status()
+    
+    print(f"Deleted client {client_id}")
+    print(f"Revoked {len(fingerprints)} certificates:")
+    for fp in fingerprints:
+        print(f"  - {fp}")
+    
+    return response.json()
+```
+
+#### Important Notes
+
+1. **Race Condition Protection**: Uses database unique constraints to prevent duplicate revocations
+2. **Batch Optimization**: Revocation list queries optimized with batch loading (avoids N+1 queries)
+3. **Timestamp Consistency**: Single timestamp used for both client certificate and revocation record
+4. **Idempotent**: Revoking an already-revoked certificate is safe (returns success with existing record)
+5. **Config Regeneration**: All client configs automatically include the current revocation list
+
+#### Database Schema
+
+```sql
+CREATE TABLE revoked_certificates (
+    id INTEGER PRIMARY KEY,
+    fingerprint VARCHAR(64) NOT NULL UNIQUE,  -- Nebula cert fingerprint
+    client_name VARCHAR(255),                  -- Client name at time of revocation
+    client_ip VARCHAR(45),                     -- Client IP at time of revocation
+    revoked_at TIMESTAMP NOT NULL,             -- When certificate was revoked
+    revoked_by_user_id INTEGER,                -- User who revoked it
+    revocation_reason VARCHAR(255),            -- Why it was revoked
+    cert_not_after TIMESTAMP,                  -- Original expiration date
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX ix_revoked_certificates_fingerprint 
+ON revoked_certificates(fingerprint);
+```
+
+#### Migration
+
+Run database migration to add revocation table:
+```bash
+docker exec -it nebula-server bash -lc "alembic upgrade head"
+```
+
+Migration automatically imports existing revoked certificates from `client_certificates` table using their revocation timestamps.
 
 ## Best Practices
 
@@ -453,7 +792,11 @@ def setup_team_access(api_url, api_key, team_name, members):
 4. **Create Separate Keys**: Use different keys for different purposes/environments
 5. **Store Keys Securely**: Use environment variables or secret managers
 6. **Monitor Key Usage**: Check last_used_at and usage_count regularly
-7. **GitHub Secret Scanning**: Managed Nebula supports automatic token revocation if keys are leaked to public GitHub repos
+7. **Revoke Compromised Certificates**: Use certificate revocation API to immediately block compromised certificates:
+   - Manual revocation: `POST /api/v1/clients/{id}/certificates/revoke` with `issue_new: true`
+   - Automatic revocation: Deleting a client automatically revokes all its certificates
+   - Persistent blocklist: Revoked certificates remain blocked even after client deletion
+8. **GitHub Secret Scanning**: Managed Nebula supports automatic token revocation if keys are leaked to public GitHub repos
    - Client tokens and API keys are automatically detected
    - Leaked tokens are auto-revoked via GitHub webhook
    - Configure webhook secret at Profile → Settings → GitHub Webhook Secret
@@ -627,8 +970,104 @@ class ManagedNebulaConfig:
 ### Issue: Certificate expired or rotation not happening
 **Solution**: Server has automatic rotation (12-month CA, 3-month client). Ensure scheduler is running and clients are polling (default: every 24 hours).
 
+### Issue: Revoked certificate still working/Need to revoke a certificate
+**Solution**: 
+- **Manual Revocation**: Use `POST /api/v1/clients/{id}/certificates/revoke` with `issue_new: true` to revoke and replace
+- **Automatic Revocation**: Client deletion automatically revokes all certificates permanently
+- **Grace Period**: Revoked certs stay in blocklist for 30 days after expiration for time-sync tolerance
+- **Reuse Prevention**: Revoked certificates persist in database even after client deletion
+
 ### Issue: Firewall rules not applying
 **Solution**: Rules must be in a ruleset, and ruleset must be assigned to client via `firewall_ruleset_ids` field.
+
+### Issue: Need to discover all available endpoints
+**Solution**: Visit the auto-generated API documentation:
+- **Swagger UI**: `https://your-server/api/v1/docs` - Interactive API explorer
+- **ReDoc**: `https://your-server/api/v1/redoc` - Clean API documentation
+- **OpenAPI JSON**: `https://your-server/api/v1/openapi.json` - Machine-readable schema
+- **OpenAPI YAML**: See `openapi-spec.yaml` in repository root
+
+## API Endpoint Discovery
+
+Managed Nebula provides multiple ways to discover and explore endpoints:
+
+### 1. Interactive API Documentation
+
+Visit your server's built-in documentation:
+
+```bash
+# Swagger UI (interactive)
+https://nebula.example.com/api/v1/docs
+
+# ReDoc (clean documentation)
+https://nebula.example.com/api/v1/redoc
+
+# OpenAPI JSON schema
+https://nebula.example.com/api/v1/openapi.json
+```
+
+### 2. Programmatic Discovery
+
+```python
+import requests
+
+def discover_api_endpoints(api_url, api_key):
+    """Fetch OpenAPI spec and list all endpoints."""
+    response = requests.get(f"{api_url}/api/v1/openapi.json")
+    spec = response.json()
+    
+    endpoints = []
+    for path, methods in spec['paths'].items():
+        for method, details in methods.items():
+            if method.upper() in ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']:
+                endpoints.append({
+                    'method': method.upper(),
+                    'path': path,
+                    'summary': details.get('summary', ''),
+                    'tags': details.get('tags', [])
+                })
+    
+    # Group by tag
+    by_category = {}
+    for endpoint in endpoints:
+        category = endpoint['tags'][0] if endpoint['tags'] else 'uncategorized'
+        if category not in by_category:
+            by_category[category] = []
+        by_category[category].append(endpoint)
+    
+    # Print organized list
+    for category, eps in sorted(by_category.items()):
+        print(f"\n{category.upper()}:")
+        for ep in eps:
+            print(f"  {ep['method']:6} {ep['path']:50} - {ep['summary']}")
+    
+    return by_category
+
+# Usage
+endpoints = discover_api_endpoints(
+    "https://nebula.example.com",
+    "mnapi_your_key_here"
+)
+```
+
+### 3. Endpoint Categories Summary
+
+**99+ Total Endpoints** organized into:
+- **Authentication** (4 endpoints) - Login, logout, profile
+- **Clients** (18 endpoints) - Full client lifecycle management
+- **Groups** (8 endpoints) - Client group organization
+- **Users** (5 endpoints) - User account management
+- **User Groups** (11 endpoints) - RBAC group management
+- **API Keys** (6 endpoints) - Programmatic access
+- **IP Pools** (7 endpoints) - IP allocation management
+- **IP Groups** (6 endpoints) - Group CIDR management
+- **Firewall** (5 endpoints) - Ruleset management
+- **CA Management** (5 endpoints) - Certificate authority
+- **Permissions** (1 endpoint) - Permission listing
+- **Settings** (11 endpoints) - System configuration
+- **Nebula** (3 endpoints) - Nebula CLI management
+- **System** (4 endpoints) - Health & version checks
+- **GitHub Secret Scanning** (3 endpoints) - Auto-revocation
 
 ## Testing Your Integration
 
@@ -684,8 +1123,14 @@ class TestNebulaIntegration:
 
 - **GitHub Repository**: https://github.com/kumpeapps/managed-nebula
 - **API Key Guide**: See `API_KEY_GUIDE.md` in repository
+- **OpenAPI Specification**: See `openapi-spec.yaml` in repository root for complete API schema
 - **Nebula Documentation**: https://github.com/slackhq/nebula
 - **Docker Images**: `ghcr.io/kumpeapps/managed-nebula/{server,frontend,client}:latest`
+
+**API Documentation:**
+- Interactive API docs available at `/docs` endpoint (Swagger UI)
+- Alternative docs at `/redoc` endpoint (ReDoc)
+- Complete endpoint reference with 99+ endpoints covering all operations
 
 ## Quick Start Integration Template
 

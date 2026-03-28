@@ -142,10 +142,12 @@ async def test_delete_client_cascades_tokens():
         await session.refresh(test_client)
         client_id = test_client.id
         
-        # Create a token for the client
+        # Create a token for the client (test fixture - not a real secret)
+        # gitleaks:allow
+        # nosec B105
         token = ClientToken(
             client_id=client_id,
-            token="test_token_12345",
+            token="test_token_12345",  # pragma: allowlist secret
             is_active=True
         )
         session.add(token)
@@ -281,10 +283,12 @@ async def test_delete_client_with_all_relations():
         )
         session.add(cert)
         
-        # Add token
+        # Add token (test fixture - not a real secret)
+        # gitleaks:allow
+        # nosec B105
         token = ClientToken(
             client_id=client_id,
-            token="full_test_token_xyz",
+            token="full_test_token_xyz",  # pragma: allowlist secret
             is_active=True
         )
         session.add(token)

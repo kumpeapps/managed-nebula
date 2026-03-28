@@ -148,6 +148,26 @@ class ClientCertificate(Base):
     client: Mapped[Client] = relationship("Client")
 
 
+class RevokedCertificate(Base):
+    """Persistent storage of revoked certificate fingerprints.
+    
+    This table maintains revocation information even after client deletion,
+    ensuring revoked certificates remain in the blocklist for a grace period
+    after expiration to handle time-sync issues and replay attacks.
+    """
+    __tablename__ = "revoked_certificates"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fingerprint: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    # Original certificate metadata
+    client_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # No FK - allow orphaned records
+    client_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    not_after: Mapped[datetime] = mapped_column(DateTime)
+    # Revocation metadata
+    revoked_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, server_default=func.now())
+    revoked_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # e.g., "client_deletion", "manual_revocation", "compromised"
+    revoked_by_user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+
 class IPPool(Base):
     __tablename__ = "ip_pools"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
