@@ -529,7 +529,8 @@ All endpoints use `/api/v1` prefix unless otherwise noted. Most endpoints requir
 - `GET /api/v1/clients/{id}/config` - Download Nebula config YAML (includes revocation list)
 - `GET /api/v1/clients/{id}/docker-compose` - Generate Docker Compose file
 - `POST /api/v1/clients/{id}/certificates/reissue` - Force certificate rotation
-- `POST /api/v1/clients/{id}/certificates/{cert_id}/revoke` - **NEW**: Revoke specific certificate with optional replacement
+- `POST /api/v1/clients/{id}/certificates/revoke` - **NEW**: Revoke ALL active certificates with optional replacement
+- `POST /api/v1/clients/{id}/certificates/{cert_id}/revoke` - **NEW**: Revoke specific certificate by ID
 - `GET /api/v1/clients/{id}/certificates` - **NEW**: List all certificates including revocation status
 - `POST /api/v1/clients/{id}/token/reissue` - Rotate client token (auto-detects active token)
 - `POST /api/v1/clients/{id}/tokens/{token_id}/reissue` - Rotate specific client token
@@ -639,10 +640,13 @@ All endpoints use `/api/v1` prefix unless otherwise noted. Most endpoints requir
 
 #### API Endpoints
 
-- `POST /api/v1/clients/{id}/certificates/revoke` - Manually revoke a client's current certificate
+- `POST /api/v1/clients/{id}/certificates/revoke` - Revoke ALL active certificates for a client
   - Request body: `{"reason": "compromised", "issue_new": true}`
   - `issue_new=true`: Automatically issues new certificate after revocation
   - `issue_new=false`: Only revokes, no replacement (client will lose connectivity)
+  - Returns count of revoked certificates and their fingerprints
+- `POST /api/v1/clients/{id}/certificates/{cert_id}/revoke` - Revoke a specific certificate by ID
+  - For targeted revocation of a single certificate
 - `GET /api/v1/clients/{id}/certificates` - List all certificates for a client (including revoked)
 - **Automatic on DELETE**: Deleting a client (`DELETE /api/v1/clients/{id}`) automatically adds all its certificates to revocation list
 
@@ -665,10 +669,10 @@ grace_cutoff = utcnow() - timedelta(days=30)
 
 #### Integration Examples
 
-**Manual Revocation with Replacement:**
+**Manual Bulk Revocation with Replacement:**
 ```python
-def revoke_and_reissue(api_url, api_key, client_id):
-    """Revoke current certificate and issue a new one."""
+def revoke_all_and_reissue(api_url, api_key, client_id):
+    """Revoke ALL active certificates and issue a new one."""
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
@@ -684,7 +688,27 @@ def revoke_and_reissue(api_url, api_key, client_id):
     )
     response.raise_for_status()
     
-    # New certificate automatically issued and included in response
+    result = response.json()
+    # Response includes count and fingerprints of revoked certificates
+    print(f"Revoked {result['revoked_count']} certificates")
+    print(f"New certificate issued: {result['new_certificate_issued']}")
+    return result
+```
+
+**Revoke Specific Certificate:**
+```python
+def revoke_specific_cert(api_url, api_key, client_id, cert_id):
+    """Revoke a specific certificate by ID."""
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    response = requests.post(
+        f"{api_url}/api/v1/clients/{client_id}/certificates/{cert_id}/revoke",
+        headers=headers
+    )
+    response.raise_for_status()
     return response.json()
 ```
 
@@ -793,7 +817,8 @@ Migration automatically imports existing revoked certificates from `client_certi
 5. **Store Keys Securely**: Use environment variables or secret managers
 6. **Monitor Key Usage**: Check last_used_at and usage_count regularly
 7. **Revoke Compromised Certificates**: Use certificate revocation API to immediately block compromised certificates:
-   - Manual revocation: `POST /api/v1/clients/{id}/certificates/revoke` with `issue_new: true`
+   - Manual bulk revocation: `POST /api/v1/clients/{id}/certificates/revoke` with `issue_new: true` (revokes ALL active certs)
+   - Specific certificate revocation: `POST /api/v1/clients/{id}/certificates/{cert_id}/revoke`
    - Automatic revocation: Deleting a client automatically revokes all its certificates
    - Persistent blocklist: Revoked certificates remain blocked even after client deletion
 8. **GitHub Secret Scanning**: Managed Nebula supports automatic token revocation if keys are leaked to public GitHub repos
@@ -972,7 +997,8 @@ class ManagedNebulaConfig:
 
 ### Issue: Revoked certificate still working/Need to revoke a certificate
 **Solution**: 
-- **Manual Revocation**: Use `POST /api/v1/clients/{id}/certificates/revoke` with `issue_new: true` to revoke and replace
+- **Manual Bulk Revocation**: Use `POST /api/v1/clients/{id}/certificates/revoke` with `issue_new: true` to revoke ALL active certificates and replace
+- **Specific Certificate Revocation**: Use `POST /api/v1/clients/{id}/certificates/{cert_id}/revoke` to revoke a single certificate
 - **Automatic Revocation**: Client deletion automatically revokes all certificates permanently
 - **Grace Period**: Revoked certs stay in blocklist for 30 days after expiration for time-sync tolerance
 - **Reuse Prevention**: Revoked certificates persist in database even after client deletion
