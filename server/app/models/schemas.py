@@ -478,6 +478,21 @@ class ClientConfigDownloadResponse(BaseModel):
     ca_chain_pems: List[str]
 
 
+class ClientCertificateRevokeRequest(BaseModel):
+    """Request model for revoking client certificates."""
+    reason: Optional[str] = "manual_revocation"
+    issue_new: bool = False  # Whether to issue a new certificate after revocation
+
+
+class ClientCertificateRevokeResponse(BaseModel):
+    """Response model for certificate revocation."""
+    status: str
+    revoked_count: int
+    revoked_fingerprints: List[str]
+    message: str
+    new_certificate_issued: bool = False
+
+
 # ============ Client Agent Schema ============
 
 class ClientConfigRequest(BaseModel):

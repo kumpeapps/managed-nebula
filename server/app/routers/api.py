@@ -88,6 +88,8 @@ from ..models.schemas import (
     APIKeyCreateResponse,
     APIKeyUpdate,
     APIKeyListResponse,
+    ClientCertificateRevokeRequest,
+    ClientCertificateRevokeResponse,
 )
 from ..services.cert_manager import CertManager
 from ..services.config_builder import build_nebula_config
@@ -2253,6 +2255,271 @@ async def reissue_client_certificate(
         "status": "reissued",
         "message": "Certificate reissued successfully. Client must download new config."
     }
+
+
+@router.post("/clients/{client_id}/certificates/revoke")
+async def revoke_all_client_certificates(
+    client_id: int,
+    body: ClientCertificateRevokeRequest,
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(require_permission("clients", "update"))
+):
+    """Revoke all active certificates for a client (admin-only).
+    
+    Marks all active (non-revoked) certificates as revoked and adds them to the persistent revocation list.
+    Optionally issues a new certificate after revocation.
+    
+    Args:
+        client_id: Client ID
+        body: Request body with reason and issue_new flag
+        
+    Returns:
+        Status with count of revoked certificates and optional new certificate info
+    """
+    from ..models.schemas import ClientCertificateRevokeResponse
+    
+    # Fetch client
+    client_result = await session.execute(
+        select(Client).where(Client.id == client_id)
+    )
+    client = client_result.scalar_one_or_none()
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    # Fetch all active (non-revoked) certificates for this client
+    cert_result = await session.execute(
+        select(ClientCertificate).where(
+            ClientCertificate.client_id == client_id,
+            ClientCertificate.revoked == False
+        )
+    )
+    active_certs = cert_result.scalars().all()
+    
+    if not active_certs:
+        raise HTTPException(
+            status_code=400, 
+            detail="No active certificates to revoke for this client"
+        )
+    
+    # Use single timestamp for all revocations
+    revoked_at = datetime.utcnow()
+    revoked_fingerprints = []
+    
+    # Revoke all active certificates
+    for cert in active_certs:
+        # Mark as revoked in ClientCertificate table
+        cert.revoked = True
+        cert.revoked_at = revoked_at
+        
+        # Add to persistent RevokedCertificate table if fingerprint exists
+        if cert.fingerprint:
+            # Check if already in revoked_certificates table
+            existing = await session.execute(
+                select(RevokedCertificate).where(RevokedCertificate.fingerprint == cert.fingerprint)
+            )
+            if not existing.scalar_one_or_none():
+                revoked_cert = RevokedCertificate(
+                    fingerprint=cert.fingerprint,
+                    client_id=client_id,
+                    client_name=client.name,
+                    not_after=cert.not_after,
+                    revoked_at=revoked_at,
+                    revoked_reason=body.reason or "manual_revocation",
+                    revoked_by_user_id=user.id
+                )
+                session.add(revoked_cert)
+                revoked_fingerprints.append(cert.fingerprint)
+                logger.info(
+                    f"Adding certificate {cert.fingerprint[:12]}... to persistent revocation list "
+                    f"(bulk revocation by {user.email}, reason: {body.reason})"
+                )
+        else:
+            logger.warning(
+                f"Certificate ID {cert.id} for client {client_id} ({client.name}) "
+                f"revoked locally but CANNOT be added to distributed revocation list (missing fingerprint)."
+            )
+    
+    try:
+        await session.commit()
+    except IntegrityError:
+        # Handle race condition: another process may have inserted one of these fingerprints
+        await session.rollback()
+        logger.warning(
+            f"One or more certificates from client {client_id} already in revocation list (race condition), "
+            f"retrying with idempotent insert"
+        )
+        
+        # Re-apply revoked flags and add only missing fingerprints
+        # Reset revoked_fingerprints to rebuild it from actual insertions
+        revoked_fingerprints = []
+        for cert in active_certs:
+            cert.revoked = True
+            cert.revoked_at = revoked_at
+            
+            if cert.fingerprint:
+                existing = await session.execute(
+                    select(RevokedCertificate).where(RevokedCertificate.fingerprint == cert.fingerprint)
+                )
+                if not existing.scalar_one_or_none():
+                    revoked_cert = RevokedCertificate(
+                        fingerprint=cert.fingerprint,
+                        client_id=client_id,
+                        client_name=client.name,
+                        not_after=cert.not_after,
+                        revoked_at=revoked_at,
+                        revoked_reason=body.reason or "manual_revocation",
+                        revoked_by_user_id=user.id
+                    )
+                    session.add(revoked_cert)
+                    revoked_fingerprints.append(cert.fingerprint)
+        await session.commit()
+    
+    # Update client config timestamp to trigger re-download
+    client.config_last_changed_at = revoked_at
+    await session.commit()
+    
+    new_certificate_issued = False
+    
+    # Optionally issue new certificate
+    if body.issue_new:
+        # Get IP assignment
+        ip_result = await session.execute(
+            select(IPAssignment).where(
+                IPAssignment.client_id == client_id,
+                IPAssignment.is_primary == True
+            ).order_by(IPAssignment.id)
+        )
+        ip_assignment = ip_result.scalar_one_or_none()
+        
+        if not ip_assignment:
+            # Try to get any IP assignment
+            ip_result = await session.execute(
+                select(IPAssignment).where(IPAssignment.client_id == client_id).order_by(IPAssignment.id)
+            )
+            ip_assignment = ip_result.scalar_one_or_none()
+        
+        if ip_assignment:
+            # Get active CA
+            now_ts = datetime.utcnow()
+            ca_result = await session.execute(
+                select(CACertificate).where(
+                    CACertificate.is_active == True,
+                    CACertificate.can_sign == True,
+                    CACertificate.not_after > now_ts
+                )
+            )
+            active_ca = ca_result.scalar_one_or_none()
+            
+            if active_ca:
+                # Determine CIDR from pool
+                cidr = "10.100.0.0/16"  # default
+                if ip_assignment.pool_id:
+                    pool_result = await session.execute(
+                        select(IPPool).where(IPPool.id == ip_assignment.pool_id)
+                    )
+                    pool = pool_result.scalar_one_or_none()
+                    if pool:
+                        cidr = pool.cidr
+                
+                import ipaddress
+                try:
+                    prefix = ipaddress.ip_network(cidr, strict=False).prefixlen
+                except Exception:
+                    prefix = 24
+                
+                # Determine cert version
+                settings_result = await session.execute(select(GlobalSettings))
+                settings_row = settings_result.scalars().first()
+                cert_version = getattr(settings_row, 'cert_version', 'v1') if settings_row else 'v1'
+                client_ip_version = getattr(client, 'ip_version', 'ipv4_only')
+                
+                requires_v2_features = client_ip_version in ['multi_ipv4', 'multi_ipv6', 'multi_both', 'dual_stack', 'ipv6_only']
+                if requires_v2_features and cert_version == 'v1':
+                    cert_version = 'v2'
+                
+                # For v2 or hybrid certs, gather all IPs
+                all_ips = []
+                if cert_version in ['v2', 'hybrid']:
+                    all_ip_rows = (await session.execute(
+                        select(IPAssignment)
+                        .where(IPAssignment.client_id == client.id)
+                        .order_by(IPAssignment.is_primary.desc(), IPAssignment.id)
+                    )).scalars().all()
+                    all_ips = [row.ip_address for row in all_ip_rows]
+                
+                # Generate new keypair and issue certificate
+                import subprocess
+                import tempfile
+                import os
+                
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    key_path = os.path.join(tmpdir, "host.key")
+                    pub_path = os.path.join(tmpdir, "host.pub")
+                    
+                    try:
+                        result = subprocess.run(
+                            ["nebula-cert", "keygen", "-out-key", key_path, "-out-pub", pub_path],
+                            check=True,
+                            capture_output=True,
+                            text=True,
+                            timeout=30
+                        )
+                    except subprocess.TimeoutExpired as exc:
+                        logger.error(
+                            "nebula-cert keygen timed out after 30 seconds",
+                            extra={
+                                "client_id": client_id,
+                                "timeout": 30,
+                            },
+                        )
+                        raise HTTPException(
+                            status_code=500,
+                            detail="Failed to generate nebula host keypair (timeout)",
+                        ) from exc
+                    except subprocess.CalledProcessError as exc:
+                        logger.error(
+                            "nebula-cert keygen failed",
+                            extra={
+                                "client_id": client_id,
+                                "returncode": exc.returncode,
+                                "stderr": exc.stderr,
+                                "stdout": exc.stdout,
+                            },
+                        )
+                        raise HTTPException(
+                            status_code=500,
+                            detail="Failed to generate nebula host keypair",
+                        ) from exc
+                    
+                    with open(pub_path, "r") as f:
+                        public_key_pem = f.read()
+                    
+                    cert_manager = CertManager(session)
+                    await cert_manager.issue_or_rotate_client_cert(
+                        client=client,
+                        public_key_str=public_key_pem,
+                        client_ip=ip_assignment.ip_address,
+                        cidr_prefix=prefix,
+                        cert_version=cert_version,
+                        all_ips=all_ips or None
+                    )
+                
+                await session.commit()
+                new_certificate_issued = True
+                logger.info(f"Issued new certificate for client {client_id} after bulk revocation")
+            else:
+                logger.warning(f"Cannot issue new certificate for client {client_id}: No active CA available")
+        else:
+            logger.warning(f"Cannot issue new certificate for client {client_id}: No IP assignment")
+    
+    return ClientCertificateRevokeResponse(
+        status="revoked",
+        revoked_count=len(active_certs),
+        revoked_fingerprints=[fp[:12] + "..." for fp in revoked_fingerprints],
+        message=f"Revoked {len(active_certs)} certificate(s)" + 
+                (f" and issued new certificate" if new_certificate_issued else ""),
+        new_certificate_issued=new_certificate_issued
+    )
 
 
 @router.post("/clients/{client_id}/certificates/{cert_id}/revoke")
