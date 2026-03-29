@@ -83,7 +83,9 @@ def test_is_token_valid_format():
 
 def test_get_token_preview():
     """Test token preview generation."""
-    token = "mnebula_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+    # gitleaks:allow
+    # nosec B105
+    token = "mnebula_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"  # pragma: allowlist secret - test fixture
     preview = get_token_preview(token, 12)
     assert preview == "mnebula_a1b2"
     assert len(preview) == 12

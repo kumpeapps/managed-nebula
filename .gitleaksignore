@@ -1,0 +1,9 @@
+# GitLeaks ignore file
+# This file contains paths and patterns to ignore during secret scanning
+# These are test fixtures and not real secrets
+
+# Test files with fixture tokens and credentials
+server/tests/test_certificate_revocation_persistence.py:152
+server/tests/test_client_deletion.py:148
+server/tests/test_client_deletion.py:287
+server/tests/test_token_management.py:86
