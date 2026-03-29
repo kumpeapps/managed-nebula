@@ -39,13 +39,15 @@ def _models_to_clear_for_test_cleanup():
     corresponding model classes to this list instead of updating fixtures in
     multiple places.
     """
-    from app.models.client import Client, Group, FirewallRuleset, IPPool, ClientToken
+    from app.models.client import Client, Group, FirewallRuleset, IPPool, ClientToken, ClientCertificate, RevokedCertificate
     from app.models.ca import CACertificate
     from app.models.api_key import UserAPIKey
 
     return [
         ClientToken,
         UserAPIKey,
+        ClientCertificate,
+        RevokedCertificate,
         Client,
         Group,
         FirewallRuleset,
@@ -85,6 +87,13 @@ async def async_client():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
+
+
+@pytest.fixture
+async def async_session():
+    """Create an async database session for testing."""
+    async with AsyncSessionLocal() as session:
+        yield session
 
 
 @pytest.fixture

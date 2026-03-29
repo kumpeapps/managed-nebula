@@ -1,0 +1,19 @@
+# Codacy configuration file
+# https://docs.codacy.com/repositories-configure/codacy-configuration-file/
+
+engines:
+  shellcheck:
+    exclude_paths:
+      - "scripts/**"
+  
+  # Secret detection exclusions
+  secretScan:
+    exclude_paths:
+      - "server/tests/**"
+      - "**/test_*.py"
+    
+exclude_paths:
+  # Test files are allowed to have test fixtures that look like secrets
+  - "server/tests/**"
+  - "**/test_*.py"
+  - "**/*_test.py"

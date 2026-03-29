@@ -36,8 +36,11 @@ import tempfile
 import subprocess
 import os
 
-from ..models import CACertificate, Client, ClientCertificate
+from ..models import CACertificate, Client, ClientCertificate, RevokedCertificate
 from ..core.config import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class CertManager:
@@ -433,8 +436,13 @@ class CertManager:
                     ], cwd=td)
                     import json as _json
                     info = _json.loads(out.decode())
-                    fingerprint = info.get("fingerprint") or info.get("Fingerprint")
-                except Exception:
+                    # nebula-cert print -json returns an array, not an object
+                    if isinstance(info, list) and len(info) > 0:
+                        fingerprint = info[0].get("fingerprint") or info[0].get("Fingerprint")
+                    else:
+                        fingerprint = info.get("fingerprint") or info.get("Fingerprint")
+                except Exception as e:
+                    logger.error(f"Failed to extract fingerprint for hybrid cert (client: {client.name}): {e}")
                     fingerprint = None
             else:
                 # Standard single certificate
@@ -445,13 +453,79 @@ class CertManager:
                 try:
                     out = subprocess.check_output([
                         "nebula-cert", "print", "-json", "-path", out_crt
-                    ], cwd=td)
+                    ], cwd=td, stderr=subprocess.STDOUT)
                     import json as _json
                     info = _json.loads(out.decode())
-                    fingerprint = info.get("fingerprint") or info.get("Fingerprint")
-                except Exception:
-                    # nebula-cert print may fail; fingerprint is optional
+                    # nebula-cert print -json returns an array, not an object
+                    if isinstance(info, list) and len(info) > 0:
+                        fingerprint = info[0].get("fingerprint") or info[0].get("Fingerprint")
+                    else:
+                        fingerprint = info.get("fingerprint") or info.get("Fingerprint")
+                    if not fingerprint:
+                        logger.warning(f"nebula-cert print returned no fingerprint for client {client.name}. Output keys: {list(info.keys()) if isinstance(info, dict) else 'array'}")
+                except subprocess.CalledProcessError as e:
+                    logger.error(f"nebula-cert print failed for client {client.name}: {e.output.decode() if e.output else str(e)}")
                     fingerprint = None
+                except Exception as e:
+                    logger.error(f"Failed to extract fingerprint for client {client.name}: {type(e).__name__}: {e}")
+                    fingerprint = None
+
+        # CRITICAL: Revoke all existing non-revoked certificates for this client before issuing new one
+        # This ensures old certificates are added to the revocation list and distributed to all clients
+        existing_certs_result = await self.session.execute(
+            select(ClientCertificate).where(
+                ClientCertificate.client_id == client.id,
+                ClientCertificate.revoked == False
+            )
+        )
+        existing_certs = existing_certs_result.scalars().all()
+        
+        if existing_certs:
+            revocation_timestamp = datetime.utcnow()
+            # Collect fingerprints to check for existing revocations
+            fingerprints_to_revoke = [cert.fingerprint for cert in existing_certs if cert.fingerprint]
+            
+            # Query existing revocations to avoid duplicates
+            existing_revocations = set()
+            if fingerprints_to_revoke:
+                existing_rev_result = await self.session.execute(
+                    select(RevokedCertificate.fingerprint).where(
+                        RevokedCertificate.fingerprint.in_(fingerprints_to_revoke)
+                    )
+                )
+                existing_revocations = set(existing_rev_result.scalars().all())
+            
+            # Revoke each certificate
+            for cert in existing_certs:
+                # Mark as revoked in ClientCertificate table
+                cert.revoked = True
+                cert.revoked_at = revocation_timestamp
+                
+                # Add to RevokedCertificate table if has fingerprint and not already there
+                if cert.fingerprint and cert.fingerprint not in existing_revocations:
+                    revoked_cert = RevokedCertificate(
+                        fingerprint=cert.fingerprint,
+                        client_id=client.id,
+                        client_name=client.name,
+                        not_after=cert.not_after,
+                        revoked_at=revocation_timestamp,
+                        revoked_reason="certificate_rotation",
+                        revoked_by_user_id=None  # Automated rotation, no specific user
+                    )
+                    self.session.add(revoked_cert)
+                    logger.info(f"Revoked certificate {cert.fingerprint[:12]}... for client {client.name} (id: {client.id}) during rotation")
+        
+        # Warn if certificate has no fingerprint (won't be added to revocation list)
+        if not fingerprint:
+            logger.warning(
+                f"Certificate issued for client {client.name} (id: {client.id}) has no fingerprint. "
+                f"This certificate CANNOT be revoked via the revocation list if compromised. "
+                f"Fingerprint extraction may have failed - check nebula-cert availability."
+            )
+        
+            
+            # Flush to persist revocations before creating new certificate
+            await self.session.flush()
 
         not_after = now + timedelta(days=settings.client_cert_validity_days)
         cc = ClientCertificate(
@@ -581,3 +655,107 @@ class CertManager:
         self.session.add(ca)
         await self.session.commit()
         return ca
+
+    async def backfill_missing_fingerprints(self) -> dict:
+        """Backfill fingerprints for existing certificates that are missing them.
+        
+        Reads certificates from database and extracts fingerprints using nebula-cert print.
+        This is needed for legacy certificates created before fingerprint extraction was fixed.
+        
+        Returns:
+            dict: Statistics about the backfill operation
+        """
+        import tempfile
+        import subprocess
+        import json as _json
+        
+        logger.info("Starting fingerprint backfill for certificates with missing fingerprints")
+        
+        # Find all certificates without fingerprints
+        result = await self.session.execute(
+            select(ClientCertificate).where(
+                (ClientCertificate.fingerprint == None) | (ClientCertificate.fingerprint == "")
+            )
+        )
+        certs_without_fingerprints = result.scalars().all()
+        
+        if not certs_without_fingerprints:
+            logger.info("No certificates found with missing fingerprints")
+            return {
+                "total_certificates": 0,
+                "successfully_updated": 0,
+                "failed": 0,
+                "errors": []
+            }
+        
+        logger.info(f"Found {len(certs_without_fingerprints)} certificates with missing fingerprints")
+        
+        stats = {
+            "total_certificates": len(certs_without_fingerprints),
+            "successfully_updated": 0,
+            "failed": 0,
+            "errors": []
+        }
+        
+        for cert in certs_without_fingerprints:
+            try:
+                # Create temporary file with the certificate
+                with tempfile.TemporaryDirectory() as td:
+                    cert_path = os.path.join(td, "temp_cert.crt")
+                    
+                    # Write certificate PEM to temp file
+                    with open(cert_path, "w") as f:
+                        f.write(cert.pem_cert)
+                    
+                    # Extract fingerprint using nebula-cert print -json
+                    try:
+                        out = subprocess.check_output([
+                            "nebula-cert", "print", "-json", "-path", cert_path
+                        ], cwd=td, stderr=subprocess.STDOUT)
+                        
+                        info = _json.loads(out.decode())
+                        
+                        # nebula-cert print -json returns an array, not an object
+                        fingerprint = None
+                        if isinstance(info, list) and len(info) > 0:
+                            fingerprint = info[0].get("fingerprint") or info[0].get("Fingerprint")
+                        else:
+                            fingerprint = info.get("fingerprint") or info.get("Fingerprint")
+                        
+                        if fingerprint:
+                            # Update the certificate with the extracted fingerprint
+                            cert.fingerprint = fingerprint
+                            stats["successfully_updated"] += 1
+                            logger.info(f"Updated certificate ID {cert.id} (client_id: {cert.client_id}) with fingerprint: {fingerprint[:12]}...")
+                        else:
+                            error_msg = f"Certificate ID {cert.id}: No fingerprint in nebula-cert output"
+                            logger.warning(error_msg)
+                            stats["failed"] += 1
+                            stats["errors"].append(error_msg)
+                    
+                    except subprocess.CalledProcessError as e:
+                        error_msg = f"Certificate ID {cert.id}: nebula-cert print failed: {e.output.decode() if e.output else str(e)}"
+                        logger.error(error_msg)
+                        stats["failed"] += 1
+                        stats["errors"].append(error_msg)
+                    
+                    except Exception as e:
+                        error_msg = f"Certificate ID {cert.id}: Failed to extract fingerprint: {type(e).__name__}: {e}"
+                        logger.error(error_msg)
+                        stats["failed"] += 1
+                        stats["errors"].append(error_msg)
+            
+            except Exception as e:
+                error_msg = f"Certificate ID {cert.id}: Unexpected error: {type(e).__name__}: {e}"
+                logger.error(error_msg)
+                stats["failed"] += 1
+                stats["errors"].append(error_msg)
+        
+        # Commit all updates
+        if stats["successfully_updated"] > 0:
+            await self.session.commit()
+            logger.info(f"Fingerprint backfill complete: {stats['successfully_updated']} updated, {stats['failed']} failed")
+        else:
+            logger.warning(f"Fingerprint backfill complete: No certificates were successfully updated")
+        
+        return stats

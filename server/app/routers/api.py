@@ -3,12 +3,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, delete
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 from ..db import get_session
 from ..models import ClientToken, Client, IPAssignment, GlobalSettings, CACertificate, IPPool, Permission
-from ..models.client import ClientCertificate, IPGroup
+from ..models.client import ClientCertificate, RevokedCertificate, IPGroup
 from ..models.system_settings import SystemSettings, GitHubSecretScanningLog
 logger = logging.getLogger(__name__)
 
@@ -110,6 +110,47 @@ router = APIRouter(prefix="/v1", tags=["api"])
 
 
 # ============ Helper Functions ============
+
+async def get_revoked_fingerprints(session: AsyncSession, now: datetime) -> list[str]:
+    """
+    Compute the list of revoked certificate fingerprints to distribute to clients.
+
+    This includes:
+      - Certificates marked as revoked in the ClientCertificate table.
+      - Certificates in the RevokedCertificate table that are within a grace period
+        after expiration (to tolerate client/server time drift and replay attacks).
+    
+    Args:
+        session: Database session
+        now: Current datetime for grace period calculation
+    
+    Returns:
+        List of fingerprints to include in the blocklist
+    """
+    grace_period_days = 30
+    grace_cutoff = now - timedelta(days=grace_period_days)
+
+    # Active revocations from the live certificates table
+    active_cert_revocations_result = await session.execute(
+        select(ClientCertificate.fingerprint).where(
+            ClientCertificate.revoked == True,
+            ClientCertificate.not_after > grace_cutoff,  # Keep for 30 days after expiration
+            ClientCertificate.fingerprint.isnot(None)
+        )
+    )
+    active_cert_revocations = set(active_cert_revocations_result.scalars().all())
+
+    # Historical revocations that are still within the grace period
+    revoked_cert_result = await session.execute(
+        select(RevokedCertificate.fingerprint).where(
+            RevokedCertificate.not_after > grace_cutoff  # Keep for 30 days after expiration
+        )
+    )
+    grace_period_revocations = set(revoked_cert_result.scalars().all())
+
+    # Combine and return as list, filtering out any None values
+    return list(active_cert_revocations | grace_period_revocations)
+
 
 async def build_client_response(client: Client, session: AsyncSession, user: User, include_token: bool = False) -> ClientResponse:
     """Build ClientResponse with owner, IP, groups, rulesets, and optional token."""
@@ -1116,18 +1157,9 @@ async def get_client_config(body: ClientConfigRequest, session: AsyncSession = D
     # Build inline CA bundle (concatenated PEMs)
     ca_bundle = "".join([(c.pem_cert.decode().rstrip() + "\n") for c in cas])
 
-    # Collect revoked fingerprints to distribute (skip expired to reduce bloat)
+    # Collect revoked fingerprints to distribute (shared helper)
     now = datetime.utcnow()
-    revoked_rows = (
-        await session.execute(
-            select(ClientCertificate.fingerprint).where(
-                ClientCertificate.revoked == True,
-                ClientCertificate.not_after > now,
-                ClientCertificate.fingerprint.isnot(None)
-            )
-        )
-    ).scalars().all()
-    revoked_fps = [fp for fp in revoked_rows if fp]
+    revoked_fps = await get_revoked_fingerprints(session, now)
 
     # Determine OS-specific paths based on os_type from request or client record
     os_type = body.os_type or client.os_type or "docker"
@@ -1640,6 +1672,47 @@ async def delete_client(
         logger.info(
             f"Deleting client {client_id} (name: {client.name}) by user {user.email} (id: {user.id})"
         )
+
+        # CRITICAL: Revoke all active certificates before deletion to persist in blocklist
+        # Query all certificates for this client
+        cert_result = await session.execute(
+            select(ClientCertificate).where(ClientCertificate.client_id == client_id)
+        )
+        client_certs = cert_result.scalars().all()
+        
+        # Collect all non-null fingerprints for this client's certificates
+        fingerprints = [cert.fingerprint for cert in client_certs if cert.fingerprint]
+        
+        if fingerprints:
+            # Load all existing revocations for these fingerprints in a single query (avoids N+1)
+            existing_revocations_result = await session.execute(
+                select(RevokedCertificate.fingerprint).where(
+                    RevokedCertificate.fingerprint.in_(fingerprints)
+                )
+            )
+            existing_fingerprints = set(existing_revocations_result.scalars().all())
+            
+            # For each certificate with a fingerprint not already revoked, add to persistent revocation table
+            revocation_timestamp = datetime.utcnow()
+            for cert in client_certs:
+                if cert.fingerprint and cert.fingerprint not in existing_fingerprints:
+                    revoked_cert = RevokedCertificate(
+                        fingerprint=cert.fingerprint,
+                        client_id=client_id,
+                        client_name=client.name,
+                        not_after=cert.not_after,
+                        revoked_at=revocation_timestamp,
+                        revoked_reason="client_deletion",
+                        revoked_by_user_id=user.id
+                    )
+                    try:
+                        session.add(revoked_cert)
+                        logger.info(f"Added certificate {cert.fingerprint[:12]}... to revocation list (client deletion)")
+                    except IntegrityError:
+                        # Handle race condition: another process may have inserted this fingerprint
+                        logger.warning(f"Certificate {cert.fingerprint[:12]}... already in revocation list (race condition)")
+                        await session.rollback()
+                        continue
 
         # Manual cleanup only for tables lacking DB-level CASCADE
         await session.execute(delete(ClientCertificate).where(ClientCertificate.client_id == client_id))
@@ -2189,15 +2262,19 @@ async def revoke_client_certificate(
     session: AsyncSession = Depends(get_session),
     user: User = Depends(require_permission("clients", "update"))
 ):
-    """Revoke a client certificate (admin-only)."""
-    # Fetch certificate
-    result = await session.execute(
+    """Revoke a client certificate (admin-only).
+    
+    Marks the certificate as revoked and adds it to the persistent revocation list.
+    Revoked certificates remain in the blocklist even after client deletion.
+    """
+    # Fetch certificate with client info
+    cert_result = await session.execute(
         select(ClientCertificate).where(
             ClientCertificate.id == cert_id,
             ClientCertificate.client_id == client_id
         )
     )
-    cert = result.scalar_one_or_none()
+    cert = cert_result.scalar_one_or_none()
 
     if not cert:
         raise HTTPException(status_code=404, detail="Certificate not found")
@@ -2205,16 +2282,63 @@ async def revoke_client_certificate(
     if cert.revoked:
         raise HTTPException(
             status_code=400, detail="Certificate already revoked")
+    
+    # Fetch client for name
+    client_result = await session.execute(
+        select(Client).where(Client.id == client_id)
+    )
+    client = client_result.scalar_one_or_none()
 
-    # Mark as revoked
+    # Use single timestamp for both records to avoid drift
+    revoked_at = datetime.utcnow()
+    
+    # Mark as revoked in ClientCertificate table
     cert.revoked = True
-    cert.revoked_at = datetime.utcnow()
-    await session.commit()
+    cert.revoked_at = revoked_at
+    
+    # Add to persistent RevokedCertificate table if fingerprint exists
+    if cert.fingerprint:
+        # Check if already in revoked_certificates table
+        existing = await session.execute(
+            select(RevokedCertificate).where(RevokedCertificate.fingerprint == cert.fingerprint)
+        )
+        if not existing.scalar_one_or_none():
+            revoked_cert = RevokedCertificate(
+                fingerprint=cert.fingerprint,
+                client_id=client_id,
+                client_name=client.name if client else None,
+                not_after=cert.not_after,
+                revoked_at=revoked_at,
+                revoked_reason="manual_revocation",
+                revoked_by_user_id=user.id
+            )
+            session.add(revoked_cert)
+            logger.info(f"Adding certificate {cert.fingerprint[:12]}... to persistent revocation list (manual revocation by {user.email})")
+    else:
+        logger.warning(
+            f"Certificate ID {cert_id} for client {client_id} ({client.name if client else 'unknown'}) "
+            f"revoked locally but CANNOT be added to distributed revocation list (missing fingerprint). "
+            f"This is a legacy certificate created before fingerprint extraction was fixed. "
+            f"The certificate will expire on {cert.not_after} and should be rotated to a new certificate with proper fingerprint."
+        )
+    
+    try:
+        await session.commit()
+    except IntegrityError:
+        # Handle race condition: another process may have inserted this fingerprint between check and commit
+        # Rollback and retry without the RevokedCertificate insert
+        await session.rollback()
+        logger.warning(f"Certificate {cert.fingerprint[:12] if cert.fingerprint else 'unknown'}... already in revocation list (race condition), retrying revoked flag update")
+        # Re-apply the revoked flag change after rollback
+        cert.revoked = True
+        cert.revoked_at = revoked_at
+        await session.commit()
 
     return {
         "status": "revoked",
         "certificate_id": cert_id,
-        "revoked_at": cert.revoked_at
+        "revoked_at": cert.revoked_at,
+        "fingerprint": cert.fingerprint[:12] + "..." if cert.fingerprint else None
     }
 
 
@@ -2352,18 +2476,9 @@ async def download_client_config(
     # Build inline CA bundle (concatenated PEMs)
     ca_bundle = "".join([(c.pem_cert.decode().rstrip() + "\n") for c in cas])
 
-    # Collect revoked fingerprints to distribute
+    # Collect revoked fingerprints to distribute (shared helper)
     now = datetime.utcnow()
-    revoked_rows = (
-        await session.execute(
-            select(ClientCertificate.fingerprint).where(
-                ClientCertificate.revoked == True,
-                ClientCertificate.not_after > now,
-                ClientCertificate.fingerprint.isnot(None)
-            )
-        )
-    ).scalars().all()
-    revoked_fps = [fp for fp in revoked_rows if fp]
+    revoked_fps = await get_revoked_fingerprints(session, now)
 
     # Decode cert PEM
     cert_pem = cert.pem_cert.decode(
