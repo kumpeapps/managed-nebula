@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 import time
 import signal
 import hashlib
@@ -12,6 +13,11 @@ import httpx
 import subprocess
 
 __version__ = "1.0.0"
+
+# Sentinel values returned by /api/v1/version that are not real Nebula releases
+_NON_DOWNLOADABLE_VERSIONS = frozenset({
+    "", "unknown", "error", "timeout", "not_installed", "unavailable",
+})
 
 STATE_DIR = Path(os.getenv("NEBULA_STATE_DIR", "/var/lib/nebula"))
 CONFIG_PATH = Path("/etc/nebula/config.yml")
@@ -127,16 +133,37 @@ def get_nebula_version() -> str:
             text=True,
             timeout=5
         )
-        # Parse output like "Version: 1.9.7"
-        for line in result.stdout.splitlines():
-            if line.startswith("Version:"):
-                return line.split(":", 1)[1].strip()
+        # Parse formats like "Version: 1.9.7" or "Nebula version v1.11.0"
+        match = re.search(
+            r'(?i)\bversion[:\s]+v?([0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?)',
+            result.stdout or "",
+        )
+        if match:
+            return match.group(1)
         return "unknown"
     except Exception:
         return "unknown"
 
 
 # Helper functions for check_and_update_nebula
+
+def normalize_api_base(server_url: str) -> str:
+    """Return API base ending with /api (accepts URLs with or without /api)."""
+    base = (server_url or "").rstrip("/")
+    if base.endswith("/api"):
+        return base
+    return f"{base}/api"
+
+
+def _is_downloadable_version(version: str) -> bool:
+    """True if version looks like a real Nebula release tag body (e.g. 1.11.0)."""
+    if not version:
+        return False
+    normalized = version.lstrip("v").strip()
+    if normalized.lower() in _NON_DOWNLOADABLE_VERSIONS:
+        return False
+    return bool(re.match(r'^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$', normalized))
+
 
 def _resolve_arch() -> Optional[str]:
     """Resolve system architecture for Nebula downloads"""
@@ -146,8 +173,9 @@ def _resolve_arch() -> Optional[str]:
         return 'amd64'
     if machine in ['aarch64', 'arm64']:
         return 'arm64'
+    # Upstream ships arm-5 / arm-6 / arm-7; prefer arm-7 for typical armv7/armhf hosts
     if machine.startswith('arm'):
-        return 'arm'
+        return 'arm-7'
     return None
 
 
@@ -251,8 +279,9 @@ def check_and_update_nebula(server_url: str) -> bool:
     verify_ssl = os.getenv("ALLOW_SELF_SIGNED_CERT", "false").lower() != "true"
     
     try:
-        # Get server version (public endpoint, no auth required)
-        version_url = server_url.rstrip("/") + "/api/v1/version"
+        # Get server version (public endpoint, no auth required).
+        # SERVER_URL may be base host or already include /api — normalize either form.
+        version_url = normalize_api_base(server_url) + "/v1/version"
         with httpx.Client(timeout=10, verify=verify_ssl) as client:
             r = client.get(version_url)
             r.raise_for_status()
@@ -270,6 +299,13 @@ def check_and_update_nebula(server_url: str) -> bool:
         
         if local_version == server_version:
             print("[agent] Nebula version matches server, no update needed")
+            return False
+
+        if not _is_downloadable_version(server_version):
+            print(
+                f"[agent] Server reported non-downloadable Nebula version "
+                f"'{server_version}'; skipping auto-update"
+            )
             return False
         
         # Versions differ - download and install matching version
@@ -311,7 +347,10 @@ def check_and_update_nebula(server_url: str) -> bool:
         return False
         
     except httpx.HTTPStatusError as e:
-        print(f"[agent] Failed to check version or download: HTTP {e.response.status_code}")
+        print(
+            f"[agent] Failed to check version or download: HTTP {e.response.status_code} "
+            f"({e.request.url})"
+        )
         return False
     except Exception as e:
         print(f"[agent] Failed to update Nebula: {e}")
@@ -342,7 +381,7 @@ def fetch_config_with_retry(token: str, server_url: str, public_key: str) -> Opt
     """Fetch config with exponential backoff retry logic"""
     global metrics
     
-    url = server_url.rstrip("/") + "/v1/client/config"
+    url = normalize_api_base(server_url) + "/v1/client/config"
     payload = {
         "token": token,
         "public_key": public_key,

@@ -401,8 +401,9 @@ class NebulaManager {
         print("[NebulaManager] Checking for Nebula version updates...")
         
         do {
-            // Get server version (public endpoint, no auth required)
-            let versionURL = URL(string: "\(serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")))/api/v1/version")!
+            // Get server version (public endpoint, no auth required).
+            // SERVER_URL may be base host or already include /api.
+            let versionURL = URL(string: "\(APIClient.normalizeAPIBase(serverURL))/v1/version")!
             
             let (data, response) = try await URLSession.shared.data(from: versionURL)
             
@@ -427,28 +428,29 @@ class NebulaManager {
                 print("[NebulaManager] Nebula version matches server, no update needed")
                 return false
             }
+
+            // Avoid downloading sentinel values like "not_installed" / "unknown"
+            let versionPattern = #"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"#
+            guard serverVersion.range(of: versionPattern, options: .regularExpression) != nil else {
+                print("[NebulaManager] Server reported non-downloadable Nebula version '\(serverVersion)'; skipping auto-update")
+                return false
+            }
             
             // Versions differ - download and install matching version
             print("[NebulaManager] Nebula version mismatch detected. Upgrading from \(localVersion) to \(serverVersion)")
             
-            // Detect architecture
-            var arch = "amd64"
-            #if arch(arm64)
-            arch = "arm64"
-            #endif
-            
-            // Download Nebula binaries from GitHub
-            let downloadURL = URL(string: "https://github.com/slackhq/nebula/releases/download/v\(serverVersion)/nebula-darwin-\(arch).tar.gz")!
+            // Upstream ships a universal nebula-darwin.zip (not arch-specific tar.gz)
+            let downloadURL = URL(string: "https://github.com/slackhq/nebula/releases/download/v\(serverVersion)/nebula-darwin.zip")!
             print("[NebulaManager] Downloading Nebula \(serverVersion) from \(downloadURL)")
             
-            let (tarData, downloadResponse) = try await URLSession.shared.data(from: downloadURL)
+            let (zipData, downloadResponse) = try await URLSession.shared.data(from: downloadURL)
             
             guard let httpDownloadResponse = downloadResponse as? HTTPURLResponse, httpDownloadResponse.statusCode == 200 else {
                 print("[NebulaManager] Failed to download Nebula binary")
                 return false
             }
             
-            print("[NebulaManager] Downloaded \(tarData.count) bytes")
+            print("[NebulaManager] Downloaded \(zipData.count) bytes")
             
             // Create temporary directory
             let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -457,17 +459,17 @@ class NebulaManager {
                 try? FileManager.default.removeItem(at: tempDir)
             }
             
-            // Write tar.gz file
-            let tarPath = tempDir.appendingPathComponent("nebula.tar.gz")
-            try tarData.write(to: tarPath)
+            // Write zip file
+            let zipPath = tempDir.appendingPathComponent("nebula-darwin.zip")
+            try zipData.write(to: zipPath)
             
-            // Extract tar.gz
+            // Extract zip
             let extractDir = tempDir.appendingPathComponent("extract")
             try FileManager.default.createDirectory(at: extractDir, withIntermediateDirectories: true)
             
             let extractProcess = Process()
-            extractProcess.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
-            extractProcess.arguments = ["-xzf", tarPath.path, "-C", extractDir.path]
+            extractProcess.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+            extractProcess.arguments = ["-o", zipPath.path, "-d", extractDir.path]
             try extractProcess.run()
             extractProcess.waitUntilExit()
             

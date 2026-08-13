@@ -102,8 +102,9 @@ class NebulaInstaller:
             'amd64': 'amd64',
             'aarch64': 'arm64',
             'arm64': 'arm64',
-            'armv7l': 'arm',
-            'armhf': 'arm',
+            # Upstream release assets are arm-5 / arm-6 / arm-7 (no plain "arm")
+            'armv7l': 'arm-7',
+            'armhf': 'arm-7',
         }
         
         nebula_arch = arch_map.get(machine)

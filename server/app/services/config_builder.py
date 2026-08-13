@@ -154,7 +154,7 @@ def build_nebula_config(
         },
         "tun": {
             "disabled": False,
-            # Do not specify a device name; Nebula will pick an appropriate one.
+            # Do not specify a device name by default; platform overrides below.
             # On Darwin, a fixed utunX can conflict if already in use.
             "drop_local_broadcast": False,
             "drop_multicast": False,
@@ -176,6 +176,11 @@ def build_nebula_config(
         # Keep name short and ASCII to avoid Windows adapter name issues
         # Nebula/Wintun will create a Wintun adapter with this friendly name
         cfg["tun"]["dev"] = "Nebula"
+    elif os_type in (None, "", "linux", "docker"):
+        # Explicit Linux/docker device name (Nebula example default). Leaving this
+        # empty can fail to create an interface on some hosts after upgrades.
+        # Note: default os_type for build_nebula_config is "docker".
+        cfg["tun"]["dev"] = "nebula1"
 
     # macOS-specific: use system route table for proper TUN interface operation
     # Required for macOS 14+ (Sonoma, Sequoia, Tahoe) to properly create utun interfaces
