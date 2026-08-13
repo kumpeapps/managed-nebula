@@ -264,6 +264,33 @@ def test_tun_broadcast_and_multicast_settings():
     assert config["tun"]["drop_multicast"] is False
     assert config["tun"]["tx_queue"] == 500
     assert config["tun"]["mtu"] == 1300
+    # Linux/default clients get an explicit device name so the interface is created reliably
+    assert config["tun"]["dev"] == "nebula1"
+
+
+def test_windows_tun_dev_name():
+    """Windows clients should get an explicit Wintun adapter name."""
+    client = Mock()
+    client.name = "windows-client"
+    client.is_lighthouse = False
+    client.is_blocked = False
+    client.firewall_rulesets = []
+
+    settings = Mock()
+    settings.punchy_enabled = False
+    settings.lighthouse_port = 4242
+    settings.lighthouse_hosts = "[]"
+
+    config_yaml = build_nebula_config(
+        client=client,
+        client_ip_cidr="10.100.0.2/16",
+        settings=settings,
+        static_host_map={},
+        lighthouse_host_ips=[],
+        os_type="windows",
+    )
+    config = yaml.safe_load(config_yaml)
+    assert config["tun"]["dev"] == "Nebula"
 
 
 def test_no_yaml_aliases_in_config():
@@ -331,6 +358,8 @@ def test_macos_uses_system_route_table():
     # Verify tun settings include use_system_route_table for macOS
     assert "tun" in config
     assert config["tun"]["use_system_route_table"] is True
+    # macOS should not force a fixed utun device name
+    assert "dev" not in config["tun"]
 
 
 def test_darwin_uses_system_route_table():

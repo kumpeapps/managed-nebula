@@ -862,7 +862,7 @@ export class SettingsComponent implements OnInit {
     docker_compose_template: '',
     externally_managed_users: false,
     cert_version: 'v1',
-    nebula_version: '1.10.3',
+    nebula_version: '1.11.0',
     v2_support_available: false
   };
   isAdmin = this.authService.isAdmin();

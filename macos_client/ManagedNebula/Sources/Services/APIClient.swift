@@ -11,10 +11,22 @@ class APIClient {
         config.timeoutIntervalForRequest = 30
         self.session = URLSession(configuration: config)
     }
+
+    /// Return API base ending with /api (accepts URLs with or without /api).
+    static func normalizeAPIBase(_ serverURL: String) -> String {
+        var base = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        while base.hasSuffix("/") {
+            base = String(base.dropLast())
+        }
+        if base.hasSuffix("/api") {
+            return base
+        }
+        return "\(base)/api"
+    }
     
     /// Fetch configuration from server
     func fetchConfig(token: String, publicKey: String, clientVersion: String? = nil, nebulaVersion: String? = nil) async throws -> ClientConfigResponse {
-        let url = URL(string: "\(serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")))/v1/client/config")!
+        let url = URL(string: "\(APIClient.normalizeAPIBase(serverURL))/v1/client/config")!
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"

@@ -71,7 +71,7 @@ jobs:
     - name: Download Nebula binaries
       shell: pwsh
       run: |
-        $nebulaVersion = "1.10.3"
+        $nebulaVersion = "1.11.0"
         $nebulaUrl = "https://github.com/slackhq/nebula/releases/download/v$nebulaVersion/nebula-windows-amd64.zip"
         $nebulaTmp = "windows_client\nebula-tmp"
         

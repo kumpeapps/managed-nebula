@@ -333,49 +333,37 @@ async def get_warnings(
 
 
 @router.get("/version", response_model=VersionResponse)
-async def get_version():
+async def get_version(session: AsyncSession = Depends(get_session)):
     """Get server and Nebula versions.
     
     Returns version information for both the Managed Nebula server
-    and the installed Nebula binary.
+    and the Nebula binary version clients should run.
+
+    Prefer GlobalSettings.nebula_version (configured target) so clients
+    auto-update to the admin-selected release. Fall back to the installed
+    binary version, then a safe default.
     """
-    import asyncio
     from .. import __version__ as server_version
-    
-    # Get Nebula version
-    nebula_version = "unknown"
+    from ..services.nebula_installer import NebulaInstaller
+
+    configured_version = None
     try:
-        # Run subprocess asynchronously to avoid blocking the event loop
-        process = await asyncio.create_subprocess_exec(
-            "nebula", "-version",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        
-        stdout, stderr = await asyncio.wait_for(
-            process.communicate(),
-            timeout=5.0
-        )
-        
-        if process.returncode == 0:
-            # Parse version from output like "Version: 1.9.7"
-            output = stdout.decode('utf-8')
-            for line in output.split("\n"):
-                if line.startswith("Version:"):
-                    nebula_version = line.replace("Version:", "").strip()
-                    break
-        else:
-            nebula_version = "error"
-    except asyncio.TimeoutError:
-        logger.warning("Timeout getting Nebula version")
-        nebula_version = "timeout"
-    except FileNotFoundError:
-        logger.warning("Nebula binary not found")
-        nebula_version = "not_installed"
+        row = (await session.execute(select(GlobalSettings))).scalars().first()
+        if row and getattr(row, "nebula_version", None):
+            configured_version = str(row.nebula_version).lstrip("v").strip()
     except Exception as e:
-        logger.warning(f"Failed to get Nebula version: {e}")
-        nebula_version = "unavailable"
-    
+        logger.warning(f"Failed to load configured Nebula version: {e}")
+
+    installer = NebulaInstaller()
+    installed_version = installer.get_installed_version()
+
+    # Clients use nebula_version as the download/upgrade target
+    nebula_version = (
+        configured_version
+        or installed_version
+        or DEFAULT_NEBULA_VERSION
+    )
+
     return VersionResponse(
         managed_nebula_version=server_version,
         nebula_version=nebula_version

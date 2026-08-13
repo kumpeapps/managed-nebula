@@ -389,6 +389,11 @@ def set_key_permissions(key_path: Path) -> None:
         logger.warning("Failed to set key permissions: %s", e)
 
 
+_NON_DOWNLOADABLE_VERSIONS = frozenset({
+    "", "unknown", "error", "timeout", "not_installed", "unavailable",
+})
+
+
 def get_nebula_version() -> str:
     """Get nebula binary version"""
     nebula = find_nebula_binary()
@@ -402,10 +407,14 @@ def get_nebula_version() -> str:
             text=True,
             timeout=5
         )
-        # Parse output like "Version: 1.9.7"
-        for line in result.stdout.splitlines():
-            if line.startswith("Version:"):
-                return line.split(":", 1)[1].strip()
+        # Parse formats like "Version: 1.9.7" or "Nebula version v1.11.0"
+        import re
+        match = re.search(
+            r'(?i)\bversion[:\s]+v?([0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?)',
+            result.stdout or "",
+        )
+        if match:
+            return match.group(1)
         return "unknown"
     except subprocess.TimeoutExpired:
         return "timeout"
@@ -416,6 +425,25 @@ def get_nebula_version() -> str:
 
 # Helper functions for check_and_update_nebula
 
+def normalize_api_base(server_url: str) -> str:
+    """Return API base ending with /api (accepts URLs with or without /api)."""
+    base = (server_url or "").rstrip("/")
+    if base.endswith("/api"):
+        return base
+    return f"{base}/api"
+
+
+def _is_downloadable_version(version: str) -> bool:
+    """True if version looks like a real Nebula release tag body (e.g. 1.11.0)."""
+    import re
+    if not version:
+        return False
+    normalized = version.lstrip("v").strip()
+    if normalized.lower() in _NON_DOWNLOADABLE_VERSIONS:
+        return False
+    return bool(re.match(r'^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$', normalized))
+
+
 def _resolve_verify_ssl(config: dict = None) -> bool:
     """Resolve SSL verification setting from config or environment"""
     if config and "allow_self_signed_cert" in config:
@@ -425,7 +453,7 @@ def _resolve_verify_ssl(config: dict = None) -> bool:
 
 def _fetch_server_nebula_version(server_url: str, verify_ssl: bool) -> str:
     """Fetch Nebula version from server"""
-    version_url = server_url.rstrip("/") + "/api/v1/version"
+    version_url = normalize_api_base(server_url) + "/v1/version"
     with httpx.Client(timeout=10, verify=verify_ssl) as client:
         r = client.get(version_url)
         r.raise_for_status()
@@ -631,6 +659,13 @@ def check_and_update_nebula(server_url: str, config: dict = None) -> bool:
         if local_version == server_version:
             logger.info("Nebula version matches server, no update needed")
             return False
+
+        if not _is_downloadable_version(server_version):
+            logger.warning(
+                "Server reported non-downloadable Nebula version %r; skipping auto-update",
+                server_version,
+            )
+            return False
         
         logger.warning(
             f"Nebula version mismatch detected. Upgrading from {local_version} to {server_version}"
@@ -638,7 +673,11 @@ def check_and_update_nebula(server_url: str, config: dict = None) -> bool:
         return _download_and_install_nebula(server_version, local_version, verify_ssl)
         
     except httpx.HTTPStatusError as e:
-        logger.warning(f"Failed to check server version: HTTP {e.response.status_code}")
+        logger.warning(
+            "Failed to check server version: HTTP %s (%s)",
+            e.response.status_code,
+            e.request.url,
+        )
         return False
     except Exception as e:
         logger.error(f"Failed to auto-update Nebula: {e}", exc_info=True)
@@ -669,7 +708,7 @@ def fetch_config_with_retry(token: str, server_url: str, public_key: str, config
     """Fetch config with exponential backoff retry logic"""
     global metrics
     
-    url = server_url.rstrip("/") + "/v1/client/config"
+    url = normalize_api_base(server_url) + "/v1/client/config"
     
     payload = {
         "token": token,

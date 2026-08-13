@@ -20,10 +20,16 @@ if [[ "${ALLOW_SELF_SIGNED_CERT:-false}" == "true" ]]; then
   CURL_OPTS="-ksfL"
 fi
 
+# Normalize API base: accept SERVER_URL with or without trailing /api
+API_BASE="${SERVER_URL%/}"
+if [[ "${API_BASE}" != */api ]]; then
+  API_BASE="${API_BASE}/api"
+fi
+
 if [[ -f /etc/nebula/config.yml ]]; then
   echo "Existing config found, will attempt quick server check..."
   for i in {1..5}; do
-    if curl $CURL_OPTS "${SERVER_URL%/}/v1/healthz" >/dev/null 2>&1; then
+    if curl $CURL_OPTS "${API_BASE}/v1/healthz" >/dev/null 2>&1; then
       SERVER_REACHABLE=true
       echo "Server is reachable"
       break
@@ -37,7 +43,7 @@ if [[ -f /etc/nebula/config.yml ]]; then
 else
   echo "No existing config found, waiting for server at ${SERVER_URL}..."
   for i in {1..60}; do
-    if curl $CURL_OPTS "${SERVER_URL%/}/v1/healthz" >/dev/null 2>&1; then
+    if curl $CURL_OPTS "${API_BASE}/v1/healthz" >/dev/null 2>&1; then
       SERVER_REACHABLE=true
       echo "Server is reachable"
       break

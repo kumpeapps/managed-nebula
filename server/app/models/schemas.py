@@ -513,7 +513,7 @@ class SettingsResponse(BaseModel):
     docker_compose_template: str
     externally_managed_users: bool
     cert_version: str = "v1"  # v1, v2, or hybrid
-    nebula_version: str = "1.10.3"  # Nebula binary version
+    nebula_version: str = "1.11.0"  # Nebula binary version
     v2_support_available: bool = False  # Computed: True if nebula_version >= 1.10.0
 
 class SettingsUpdate(BaseModel):

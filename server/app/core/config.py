@@ -29,6 +29,6 @@ class Settings(BaseModel):
 
 
 # Default Nebula version used across the application
-DEFAULT_NEBULA_VERSION = "1.10.3"
+DEFAULT_NEBULA_VERSION = "1.11.0"
 
 settings = Settings()
